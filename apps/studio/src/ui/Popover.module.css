@@ -1,0 +1,33 @@
+.root {
+  position: relative;
+  display: inline-flex;
+}
+.trigger[data-active='true'] {
+  background: var(--rl-accent-soft);
+  color: var(--rl-accent-text);
+}
+.panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--rl-z-overlay);
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--rl-space-2);
+  border-radius: var(--rl-radius-card);
+  background: var(--rl-surface);
+  box-shadow: var(--rl-shadow-pop), 0 0 0 1px var(--rl-line);
+  animation: pop var(--rl-dur-standard) var(--rl-ease-out);
+}
+.panel[data-align='end'] {
+  left: auto;
+  right: 0;
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

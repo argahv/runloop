@@ -1,0 +1,32 @@
+.snippet {
+  display: flex;
+  align-items: center;
+  gap: var(--rl-space-2);
+  width: 100%;
+  min-width: 0;
+  padding: 4px 4px 4px var(--rl-space-3);
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-canvas);
+  box-shadow: inset 0 0 0 1px var(--rl-line);
+  text-align: left;
+}
+.label {
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  white-space: nowrap;
+}
+.code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  color: var(--rl-text);
+  font-size: var(--rl-text-xs);
+  line-height: 28px;
+  scrollbar-width: none;
+}
+.prompt {
+  margin-right: 8px;
+  color: var(--rl-text-faint);
+  user-select: none;
+}

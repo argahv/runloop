@@ -1,0 +1,27 @@
+.center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0 var(--rl-space-4) var(--rl-space-4);
+  border-radius: var(--rl-radius-hero);
+  background: var(--rl-surface);
+}
+.hint {
+  margin-top: var(--rl-space-2);
+  font-size: var(--rl-text-xs);
+}
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--rl-space-2);
+  padding: var(--rl-space-2) var(--rl-space-3);
+  border-radius: var(--rl-radius-control);
+  background: color-mix(in srgb, var(--rl-failure) 12%, transparent);
+  color: var(--rl-text);
+  font-size: var(--rl-text-xs);
+}
+.banner svg {
+  flex: none;
+  color: var(--rl-failure);
+}

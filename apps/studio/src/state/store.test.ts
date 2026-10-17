@@ -108,25 +108,67 @@ describe('studio store: cursor', () => {
     for (const n of [40, 5, 58, 1, 23]) {
       store.getState().seekToSeq(n);
       const s = store.getState();
-      expect(s.playheadSeq).toBeGreaterThanOrEqual(n);
-      expect(s.timeOfSeq(s.playheadSeq)).toBe(s.timeOfSeq(n)); // same instant
-      expect(s.stateAt(s.playheadSeq).exec).toEqual(foldExecution(events.slice(0, s.playheadSeq)));
+      expect(s.playheadSeq).toBe(n);
+      expect(s.stateAt(s.playheadSeq).exec).toEqual(foldExecution(events.slice(0, n)));
     }
   });
 
-  it('prev/next jump between event times and clamp at the ends', () => {
+  it('stops on any event, also one that shares its millisecond with later ones', () => {
+    const { store, events } = openFixture();
+    // Five events in the same millisecond, like a Claude Code hook burst.
+    const t = events[19]!.timestamp;
+    const burst = events.map((e, i) => (i >= 19 && i <= 23 ? { ...e, timestamp: t } : e));
+    store.getState().ingest(burst.map(wire), 'backlog');
+    for (const n of [20, 21, 22, 23, 24]) {
+      store.getState().seekToSeq(n);
+      expect(store.getState().playheadSeq).toBe(n);
+    }
+    // Stepping visits each of them in turn.
+    store.getState().seekToSeq(19);
+    const seen: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      store.getState().stepNext();
+      seen.push(store.getState().playheadSeq);
+    }
+    expect(seen).toEqual([20, 21, 22, 23, 24, 25]);
+    store.getState().stepPrev();
+    store.getState().stepPrev();
+    expect(store.getState().playheadSeq).toBe(23);
+  });
+
+  it('prev/next move one event at a time and clamp at the ends', () => {
     const { store, events } = openFixture();
     store.getState().ingest(events.map(wire), 'backlog');
     store.getState().seek(0);
     expect(store.getState().playheadSeq).toBe(1);
     store.getState().stepPrev();
-    expect(store.getState().cursor).toMatchObject({ tMs: 0 });
+    expect(store.getState().cursor).toMatchObject({ tMs: 0, seq: 0 });
+    store.getState().stepPrev();
+    expect(store.getState().playheadSeq).toBe(0);
+    store.getState().stepNext();
+    expect(store.getState().playheadSeq).toBe(1);
     store.getState().stepNext();
     expect(store.getState().playheadSeq).toBe(2);
     expect(store.getState().cursor).toMatchObject({ tMs: store.getState().timeOfSeq(2) });
     store.getState().seekToSeq(events.length);
     store.getState().stepNext(); // nothing after the last event
     expect(store.getState().playheadSeq).toBe(events.length);
+  });
+
+  it('late live events never change a paused replay, even when their source time is earlier', () => {
+    const { store, events } = openFixture();
+    store.getState().ingest(events.slice(0, 15).map(wire), 'live');
+    store.getState().pause();
+    const before = store.getState();
+    expect(before.playheadSeq).toBe(15);
+    // Delivered after the pause, observed before it (an async hook or a spool flush).
+    const late = events.slice(15, 17).map((e) => ({ ...e, timestamp: events[14]!.timestamp }));
+    store.getState().ingest(late.map(wire), 'live');
+    const after = store.getState();
+    expect(after.cursor).toEqual(before.cursor);
+    expect(after.playheadSeq).toBe(15);
+    expect(after.newSinceReplay).toBe(2);
+    expect(after.stateAt(after.playheadSeq).exec.lastSequence).toBe(15);
   });
 
   it('getFrame is memoized per sequence', () => {
@@ -157,11 +199,12 @@ describe('studio store: live playhead', () => {
     expect(store.getState().playheadMs()).toBeGreaterThanOrEqual(store.getState().durationMs);
   });
 
-  it('never trails the last event and stops once a finished run has settled', () => {
+  it('a run watched live until it ends settles over time in the world, never trailing the last event', () => {
     const { events } = openFixture();
     const clock = fakeNow(0); // client clock far behind the server
     const { store } = openFixture({ now: clock.now });
-    store.getState().ingest(events.map(wire), 'backlog');
+    store.getState().mountWorld();
+    store.getState().ingest(events.map(wire), 'live');
     const s = store.getState();
     expect(s.ended).toBe(true);
     expect(s.settleMs).toBeGreaterThanOrEqual(s.durationMs);
@@ -169,6 +212,19 @@ describe('studio store: live playhead', () => {
     clock.set(Number.MAX_SAFE_INTEGER / 2);
     expect(store.getState().playheadMs()).toBe(s.settleMs);
     expect(store.getState().getFrame().advancing).toBe(false);
+  });
+
+  it('a run that was over when opened (or with no world shown) is at its end at once', () => {
+    const { events } = openFixture();
+    const { store } = openFixture({ now: fakeNow(0).now });
+    const unmount = store.getState().mountWorld();
+    store.getState().ingest(events.map(wire), 'backlog');
+    expect(store.getState().playheadMs()).toBe(store.getState().settleMs);
+    expect(store.getState().getFrame().advancing).toBe(false);
+    unmount();
+    const { store: live } = openFixture({ now: fakeNow(0).now });
+    live.getState().ingest(events.map(wire), 'live'); // no world mounted
+    expect(live.getState().playheadMs()).toBe(live.getState().settleMs);
   });
 });
 
@@ -200,7 +256,7 @@ describe('studio store: playback', () => {
     expect(s.settleMs).toBeGreaterThan(s.playheadMs()); // characters are still walking
     expect(s.endMs()).toBe(s.playheadMs());
     s.seek(1e9);
-    expect(store.getState().cursor).toMatchObject({ mode: 'replay', tMs: s.durationMs });
+    expect(store.getState().cursor).toMatchObject({ mode: 'replay', tMs: s.durationMs, seq: 21 });
     expect(store.getState().playheadSeq).toBe(21);
   });
 

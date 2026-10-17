@@ -1,0 +1,64 @@
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.fields[data-depth]:not([data-depth='0']) {
+  padding-left: var(--rl-space-3);
+  box-shadow: inset 1px 0 0 var(--rl-line-strong);
+}
+.field {
+  display: grid;
+  grid-template-columns: minmax(88px, 34%) minmax(0, 1fr);
+  gap: var(--rl-space-3);
+  min-width: 0;
+  font-size: var(--rl-text-xs);
+}
+.field dt {
+  color: var(--rl-text-muted);
+}
+.field dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--rl-text);
+}
+.none {
+  color: var(--rl-text-faint);
+  font-style: italic;
+}
+.raw {
+  color: var(--rl-text-faint);
+}
+.code {
+  font-size: var(--rl-text-2xs);
+  color: var(--rl-text);
+  overflow-wrap: anywhere;
+}
+.block {
+  margin: 0;
+  padding: var(--rl-space-2);
+  max-height: 220px;
+  overflow: auto;
+  border-radius: var(--rl-radius-sm);
+  background: var(--rl-canvas);
+  font-size: var(--rl-text-2xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.item {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--rl-surface-2);
+  font-size: var(--rl-text-2xs);
+}
+.nested {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

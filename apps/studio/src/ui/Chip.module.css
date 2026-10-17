@@ -1,0 +1,66 @@
+.chip,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--rl-radius-sm);
+  font-size: var(--rl-text-2xs);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--rl-text-muted);
+  background: var(--rl-surface-2);
+}
+.mono {
+  font-family: var(--rl-font-mono);
+  font-size: var(--rl-text-2xs);
+}
+
+.badge {
+  font-weight: 600;
+  border-radius: var(--rl-radius-pill);
+  padding: 0 8px 0 6px;
+  background: color-mix(in srgb, currentColor 12%, var(--rl-surface));
+}
+.badgeIcon {
+  flex: none;
+}
+
+.chip[data-tone='ok'],
+.badge[data-tone='ok'] {
+  color: var(--rl-success);
+}
+.chip[data-tone='err'],
+.badge[data-tone='err'] {
+  color: var(--rl-failure);
+}
+.chip[data-tone='warn'],
+.badge[data-tone='warn'] {
+  color: var(--rl-warning);
+}
+.chip[data-tone='live'],
+.badge[data-tone='live'],
+.chip[data-tone='accent'],
+.badge[data-tone='accent'] {
+  color: var(--rl-accent-text);
+}
+.chip[data-tone='info'],
+.badge[data-tone='info'] {
+  color: var(--rl-info);
+}
+.badge[data-tone='muted'] {
+  color: var(--rl-text-muted);
+}
+/* Opaque base under the tint: a chip never stacks its tint on a tinted row (AA on any background). */
+.chip[data-tone] {
+  background: color-mix(in srgb, currentColor 12%, var(--rl-surface));
+}
+
+.dot {
+  display: inline-block;
+  flex: none;
+  border-radius: 50%;
+  background: var(--dot);
+}

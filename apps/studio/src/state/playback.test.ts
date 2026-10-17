@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { advancePlayback, MAX_FRAME_MS, nextEventTime, prevEventTime, type TimeIndex } from './playback';
+import { advancePlayback, MAX_FRAME_MS } from './playback';
 
-const replay = (tMs: number, speed: 0.5 | 1 | 2 | 4 = 1) => ({ mode: 'replay' as const, tMs, playing: true, speed });
-
-function indexOf(times: number[]): TimeIndex {
-  return {
-    lastSequence: times.length,
-    timeOfSeq: (seq) => (seq <= 0 ? 0 : times[Math.min(seq, times.length) - 1]!),
-    seqAtTime: (ms) => times.filter((t) => t <= ms).length,
-  };
-}
+const replay = (tMs: number, speed: 0.5 | 1 | 2 | 4 = 1) => ({ mode: 'replay' as const, tMs, seq: 3, playing: true, speed });
 
 describe('playback pacing', () => {
   it('scales wall-clock time by speed', () => {
@@ -25,20 +17,8 @@ describe('playback pacing', () => {
 
   it('stops at the end', () => {
     const c = advancePlayback(replay(9950, 4), 100, 10_000);
-    expect(c).toEqual({ mode: 'replay', tMs: 10_000, playing: false, speed: 4 });
+    expect(c).toEqual({ mode: 'replay', tMs: 10_000, seq: 3, playing: false, speed: 4 });
     const paused = { ...replay(10), playing: false };
     expect(advancePlayback(paused, 100, 1000)).toBe(paused);
-  });
-
-  it('finds neighbouring event times', () => {
-    const idx = indexOf([0, 0, 300, 300, 1200]);
-    expect(nextEventTime(idx, 0)).toBe(300);
-    expect(nextEventTime(idx, 150)).toBe(300);
-    expect(nextEventTime(idx, 300)).toBe(1200);
-    expect(nextEventTime(idx, 1200)).toBeNull();
-    expect(prevEventTime(idx, 1200)).toBe(300);
-    expect(prevEventTime(idx, 301)).toBe(300);
-    expect(prevEventTime(idx, 300)).toBe(0);
-    expect(prevEventTime(idx, 0)).toBe(0);
   });
 });

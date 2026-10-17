@@ -1,0 +1,106 @@
+.shell {
+  --sidebar-w: 232px;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  background: var(--rl-canvas);
+}
+.shell[data-rail] {
+  --sidebar-w: 64px;
+}
+.shell[data-mobile] {
+  grid-template-columns: minmax(0, 1fr);
+  height: auto;
+  min-height: 100dvh;
+}
+
+.skip {
+  position: absolute;
+  left: var(--rl-space-3);
+  top: -60px;
+  z-index: var(--rl-z-toast);
+  padding: var(--rl-space-2) var(--rl-space-3);
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-accent-fill);
+  color: var(--rl-on-accent);
+  font-weight: 600;
+}
+.skip:focus {
+  top: var(--rl-space-3);
+}
+
+.sidebar {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--rl-space-3);
+  height: 52px;
+  flex: none;
+  padding: 0 var(--rl-space-5) 0 var(--rl-space-4);
+}
+.shell[data-mobile] .topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--rl-z-overlay);
+  padding: 0 var(--rl-space-3);
+  background: var(--rl-canvas);
+}
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: var(--rl-space-2);
+  margin-left: auto;
+  flex: none;
+}
+.search {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rl-space-2);
+  height: 30px;
+  padding: 0 6px 0 10px;
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-surface);
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  transition: background-color var(--rl-dur-instant) var(--rl-ease-out);
+}
+.search:hover {
+  background: var(--rl-surface-2);
+  color: var(--rl-text);
+}
+.shell[data-mobile] .search {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+.searchText {
+  min-width: 96px;
+  text-align: left;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+.drawer {
+  width: min(300px, 86vw);
+  height: 100%;
+  max-height: none;
+  border-radius: 0 var(--rl-radius-card) var(--rl-radius-card) 0;
+}

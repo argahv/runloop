@@ -1,97 +1,150 @@
 'use client';
-import { useRef, type KeyboardEvent } from 'react';
-import { useStudio } from '../state/context';
-import type { ConnStatus, Tab } from '../state/store';
-import { runStatusView, type StatusView } from '../state/view';
+import { useMemo, useState } from 'react';
+import { stopRun } from '../lib/api';
+import { useStudio, useStudioStore } from '../state/context';
+import { ROUTES } from '../state/deeplink';
+import { formatWhen, runNumber } from '../state/format';
+import { selectRun, useTicker } from '../state/hooks';
+import { runProvenance } from '../state/provenance';
+import { activityText, isTracedRun, runSubtitle } from '../state/runs';
+import { runStatusView } from '../state/view';
+import { Button, ButtonLink } from '../ui/Button';
+import { Chip, StatusBadge } from '../ui/Chip';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { GlyphIcon, Icon } from '../ui/Icon';
+import { Popover } from '../ui/Popover';
+import { toast } from '../ui/Toast';
 import styles from './RunHeader.module.css';
-import StatusBadge from './StatusBadge';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'logs', label: 'Logs' },
-  { id: 'state', label: 'State' },
-  { id: 'metadata', label: 'Metadata' },
-];
-
-const CONN: Record<ConnStatus, StatusView | null> = {
-  idle: null,
-  loading: { icon: '…', text: 'loading', tone: 'muted' },
-  streaming: { icon: '●', text: 'streaming', tone: 'live' },
-  reconnecting: { icon: '↻', text: 'reconnecting', tone: 'warn' },
-  complete: null,
-  error: { icon: '✗', text: 'disconnected', tone: 'err' },
-};
-
-export default function RunHeader() {
+/** Run title, status, provenance and the run's actions; `page` decides the cross-link. */
+export default function RunHeader({ page }: { page: 'world' | 'traces' }) {
+  const store = useStudioStore();
   const run = useStudio((s) => s.run);
   const runs = useStudio((s) => s.runs);
   const runId = useStudio((s) => s.runId);
-  const tab = useStudio((s) => s.tab);
-  const setTab = useStudio((s) => s.setTab);
-  const conn = useStudio((s) => s.conn);
-  const loadError = useStudio((s) => s.loadError);
+  const activeRunId = useStudio((s) => s.runtime.activeRunId);
   const warnings = useStudio((s) => s.warnings);
   const gap = useStudio((s) => s.gap);
-  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const lastSequence = useStudio((s) => s.lastSequence);
+  const exec = useMemo(() => store.getState().stateAt(lastSequence).exec, [store, lastSequence]);
+  const [confirmStop, setConfirmStop] = useState(false);
+  const [stopping, setStopping] = useState(false);
 
-  const index = runs.findIndex((r) => r.runId === runId);
-  const number = index >= 0 ? runs.length - index : null;
-  const connView = CONN[conn];
+  const n = runNumber(runs, runId);
+  const prov = runProvenance(run, exec);
+  const traced = isTracedRun(run) || prov.kind === 'traced';
+  const canStop = run !== null && run.status === 'running' && activeRunId === run.runId;
+  const live = run?.status === 'running';
+  useTicker(live && traced, 15_000);
+  const subtitle = run ? runSubtitle(run) : null;
+  const activity = run && live && traced ? activityText(run, Date.now()) : null;
 
-  const onTabKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    const i = TABS.findIndex((t) => t.id === tab);
-    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-    if (!d) return;
-    e.preventDefault();
-    const next = (i + d + TABS.length) % TABS.length;
-    setTab(TABS[next]!.id);
-    tabRefs.current[next]?.focus();
+  const onStop = async () => {
+    if (!run) return;
+    setStopping(true);
+    try {
+      await stopRun(run.runId);
+      toast({ tone: 'ok', title: 'Run stopped', description: 'Everything recorded so far is kept and can be replayed.' });
+    } catch (err) {
+      toast({ tone: 'err', title: 'Could not stop the run', description: `${err instanceof Error ? err.message : String(err)}. The run keeps going; try again.` });
+    } finally {
+      setStopping(false);
+      setConfirmStop(false);
+    }
   };
 
   return (
     <header className={styles.header}>
       <div className={styles.title}>
-        {run ? (
-          <>
-            <span className={styles.no}>Run {number !== null ? `#${number}` : ''}</span>
-            <StatusBadge view={runStatusView(run.status, run.paused)} />
-            <h1 className={styles.h1} title={run.title}>
-              {run.title}
-            </h1>
-          </>
-        ) : (
-          <h1 className={styles.h1}>{!runId ? 'No run selected' : loadError ? 'Run unavailable' : 'Loading run…'}</h1>
-        )}
-        <span className={styles.flags}>
-          {connView && <StatusBadge view={connView} />}
-          {gap && <StatusBadge view={{ icon: '⋯', text: `waiting for #${gap.from}${gap.to > gap.from ? `–${gap.to}` : ''}`, tone: 'warn' }} />}
-          {warnings.length > 0 && (
-            <span title={warnings.join('\n')}>
-              <StatusBadge view={{ icon: '⚠', text: `${warnings.length} warning${warnings.length > 1 ? 's' : ''}`, tone: 'warn' }} />
-            </span>
+        <span className={styles.number}>{n !== null ? `#${n}` : '#'}</span>
+        <div className={styles.titleText}>
+          <h1 className={styles.h1} title={run?.title}>
+            {run?.title ?? 'Loading run…'}
+          </h1>
+          {(subtitle || activity) && (
+            <p className={styles.subtitle}>
+              {subtitle}
+              {activity && <span className={styles.activity}> · {activity}</span>}
+            </p>
           )}
-        </span>
+        </div>
+        {run && <StatusBadge view={runStatusView(run.status, run.paused, traced)} />}
+        {run && (
+          <Chip tone={prov.tone} icon={prov.icon} title={prov.detail}>
+            {prov.label}
+          </Chip>
+        )}
+        {gap && (
+          <Chip tone="warn" icon="ellipsis" title="Waiting for missing events; they are fetched again automatically">
+            waiting for #{gap.from}
+            {gap.to > gap.from ? `–${gap.to}` : ''}
+          </Chip>
+        )}
+        {warnings.length > 0 && (
+          <Chip tone="warn" icon="alert" title={warnings.join('\n')}>
+            {warnings.length} warning{warnings.length > 1 ? 's' : ''}
+          </Chip>
+        )}
       </div>
-      <div className={styles.tabs} role="tablist" aria-label="Run views" onKeyDown={onTabKey}>
-        {TABS.map((t, i) => (
-          <button
-            key={t.id}
-            ref={(el) => {
-              tabRefs.current[i] = el;
-            }}
-            id={`tab-${t.id}`}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            aria-controls="studio-tabpanel"
-            tabIndex={tab === t.id ? 0 : -1}
-            className={styles.tab}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className={styles.actions}>
+        {runs.length > 1 && (
+          <Popover label="Switch run" icon="traces" align="end">
+            <ul className={styles.runList} aria-label="Runs">
+              {runs.slice(0, 20).map((r, i) => {
+                const rTraced = isTracedRun(r);
+                const view = runStatusView(r.status, r.paused, rTraced);
+                const sub = runSubtitle(r);
+                return (
+                  <li key={r.runId}>
+                    <button type="button" className={styles.runItem} aria-current={r.runId === runId ? 'true' : undefined} onClick={() => selectRun(store, r.runId)}>
+                      <span className={styles.runIcon} data-tone={view.tone} title={view.text}>
+                        <GlyphIcon glyph={view.icon} size={12} />
+                        <span className="sr-only">{view.text}</span>
+                      </span>
+                      <span className={styles.runName}>
+                        #{runs.length - i} · {r.title}
+                        {sub && <span className={styles.runSub}>{sub}</span>}
+                      </span>
+                      <span className={styles.runWhen}>
+                        <Icon name={rTraced ? 'eye' : 'terminal'} size={11} label={rTraced ? 'Traced · Claude Code' : 'Executed'} />
+                        {formatWhen(r.createdAt)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </Popover>
+        )}
+        {page === 'world' ? (
+          <ButtonLink href={ROUTES.traces} size="sm" icon="traces">
+            Investigate in Traces
+          </ButtonLink>
+        ) : (
+          <ButtonLink href={ROUTES.world} size="sm" icon="world">
+            Open Live World
+          </ButtonLink>
+        )}
+        {canStop && (
+          <Button size="sm" variant="danger" icon="stop" onClick={() => setConfirmStop(true)}>
+            Stop run
+          </Button>
+        )}
       </div>
+      <ConfirmDialog
+        open={confirmStop}
+        title="Stop this run?"
+        confirmLabel="Stop run"
+        busy={stopping}
+        onCancel={() => setConfirmStop(false)}
+        onConfirm={() => void onStop()}
+        impact={
+          <>
+            <p>The demo mission stops at its next step and ends as “stopped”. A stopped run cannot be resumed.</p>
+            <p>Every event recorded so far is kept and can still be replayed.</p>
+          </>
+        }
+      />
     </header>
   );
 }

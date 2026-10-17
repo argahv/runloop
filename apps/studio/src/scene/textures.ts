@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, CanvasTexture, RepeatWrapping, SRGBColorSpace, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, CanvasTexture, Vector3 } from 'three';
 
 /** Procedural textures and geometry (no external assets). Created lazily, shared, never disposed. */
 
@@ -17,30 +17,6 @@ export function blobShadowTexture(): CanvasTexture {
   g.fillRect(0, 0, 64, 64);
   blob = new CanvasTexture(c);
   return blob;
-}
-
-let chevron: CanvasTexture | null = null;
-/** Chevrons pointing along +u; scroll `offset.x` to make conveyor lines flow. */
-export function chevronTexture(): CanvasTexture {
-  if (chevron) return chevron;
-  const c = document.createElement('canvas');
-  c.width = 64;
-  c.height = 32;
-  const g = c.getContext('2d')!;
-  g.clearRect(0, 0, 64, 32);
-  g.strokeStyle = '#ffffff';
-  g.lineWidth = 7;
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-  g.beginPath();
-  g.moveTo(22, 6);
-  g.lineTo(40, 16);
-  g.lineTo(22, 26);
-  g.stroke();
-  chevron = new CanvasTexture(c);
-  chevron.wrapS = RepeatWrapping;
-  chevron.colorSpace = SRGBColorSpace;
-  return chevron;
 }
 
 /**
@@ -126,21 +102,4 @@ export function pointAlong(points: readonly (readonly [number, number, number])[
   }
   const last = points[points.length - 1]!;
   return out.set(last[0], last[1], last[2]);
-}
-
-let glowTex: CanvasTexture | null = null;
-/** White radial falloff; tint it with a material colour for soft light pools. */
-export function glowTexture(): CanvasTexture {
-  if (glowTex) return glowTex;
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d')!;
-  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  grad.addColorStop(0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.4, 'rgba(255,255,255,0.45)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 128, 128);
-  glowTex = new CanvasTexture(c);
-  return glowTex;
 }

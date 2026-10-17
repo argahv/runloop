@@ -1,0 +1,211 @@
+/*
+ * Runloop Signature design tokens (docs/design/design-system.md).
+ * This file is the only colour source for the Studio interface. Components
+ * use the semantic aliases (--rl-canvas, --rl-text, --rl-accent-…); the
+ * named spec tokens (--rl-obsidian, --rl-lime, …) are redefined per theme.
+ *
+ * Theme: <html data-theme="dark|light"> is set before first paint by the
+ * inline script in layout.tsx. Without JS, prefers-color-scheme decides.
+ * Contrast (WCAG AA) is checked for every text/surface pair in both themes
+ * (docs/design/design-system.md). Identity hues --rl-id-1…8 never signal state.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Signature palette (dark, default) ─────────────────────────── */
+  --rl-obsidian: #101114;
+  --rl-graphite: #1b1d22;
+  --rl-slate: #292c33;
+  --rl-slate-hi: #33363e;
+  --rl-line: rgba(232, 235, 240, 0.08);
+  --rl-line-strong: rgba(232, 235, 240, 0.14);
+  --rl-lime: #b8f36a;
+  --rl-ice: #e8ebf0;
+  --rl-muted: #9297a2;
+  /* Tertiary text: AA on canvas and surface only; never use it for text on slate. */
+  --rl-faint: #878c97;
+  --rl-success: #48c78e;
+  --rl-warning: #f5b84b;
+  --rl-failure: #ff6b76;
+
+  /* Agent identity hues (never state; lime is never an identity hue). */
+  --rl-id-1: #5aa9f5;
+  --rl-id-2: #e0946a;
+  --rl-id-3: #43c6d9;
+  --rl-id-4: #a08cf9;
+  --rl-id-5: #e67ccb;
+  --rl-id-6: #8fa4bf;
+  --rl-id-7: #c38bd9;
+  --rl-id-8: #cdb592;
+  --rl-id-neutral: #9297a2;
+
+  /* ── Semantic aliases (what components use) ────────────────────── */
+  --rl-canvas: var(--rl-obsidian);
+  --rl-surface: var(--rl-graphite);
+  --rl-surface-2: var(--rl-slate);
+  --rl-surface-3: var(--rl-slate-hi);
+  --rl-text: var(--rl-ice);
+  --rl-text-muted: var(--rl-muted);
+  --rl-text-faint: var(--rl-faint);
+  /* Lime as text/icon on surfaces, as a fill, and the text on that fill. */
+  --rl-accent-text: var(--rl-lime);
+  --rl-accent-fill: var(--rl-lime);
+  --rl-accent-fill-hover: #c8f88a;
+  --rl-on-accent: #101114;
+  --rl-accent-soft: rgba(184, 243, 106, 0.12);
+  --rl-info: var(--rl-ice);
+  --rl-scrim: rgba(6, 7, 9, 0.62);
+  /* Glass: reserved for floating controls over the 3D world. */
+  --rl-glass: rgba(27, 29, 34, 0.74);
+  --rl-glass-line: rgba(232, 235, 240, 0.1);
+  --rl-world-bg: #0c0d10;
+  --rl-shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --rl-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --rl-focus: var(--rl-lime);
+  --rl-focus-ring: 0 0 0 2px var(--rl-canvas), 0 0 0 4px var(--rl-focus);
+  --rl-selection: rgba(184, 243, 106, 0.24);
+
+  /* ── Type ──────────────────────────────────────────────────────── */
+  --rl-font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --rl-font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* The smallest size the spec allows (UI small and mono: 12 px and up). */
+  --rl-text-2xs: 12px;
+  --rl-text-xs: 12px;
+  --rl-text-sm: 13px;
+  --rl-text-md: 14px;
+  --rl-text-lg: 16px;
+  --rl-text-h3: 20px;
+  --rl-text-h2: 24px;
+  --rl-text-h1: 28px;
+  --rl-text-display: 44px;
+  --rl-tracking-tight: -0.02em;
+
+  /* ── Shape and spacing ─────────────────────────────────────────── */
+  --rl-radius-sm: 6px;
+  --rl-radius-control: 8px;
+  --rl-radius-card: 12px;
+  --rl-radius-hero: 18px;
+  --rl-radius-pill: 999px;
+  --rl-space-1: 4px;
+  --rl-space-2: 8px;
+  --rl-space-3: 12px;
+  --rl-space-4: 16px;
+  --rl-space-5: 20px;
+  --rl-space-6: 24px;
+  --rl-space-8: 32px;
+  --rl-control-h: 32px;
+  --rl-control-h-sm: 28px;
+
+  /* ── Motion ────────────────────────────────────────────────────── */
+  --rl-dur-instant: 120ms;
+  --rl-dur-standard: 200ms;
+  --rl-dur-emphasis: 320ms;
+  --rl-dur-camera: 550ms;
+  --rl-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* ── Layers ────────────────────────────────────────────────────── */
+  --rl-z-overlay: 40;
+  --rl-z-dialog: 50;
+  --rl-z-toast: 60;
+}
+
+/* Light theme: same roles, re-derived for a light canvas (AA checked). */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --rl-obsidian: #f4f5f7;
+  --rl-graphite: #ffffff;
+  --rl-slate: #ebedf1;
+  --rl-slate-hi: #e1e4ea;
+  --rl-line: rgba(16, 17, 20, 0.09);
+  --rl-line-strong: rgba(16, 17, 20, 0.16);
+  --rl-lime: #48700f;
+  --rl-ice: #16181d;
+  --rl-muted: #585e69;
+  --rl-faint: #676d77;
+  --rl-success: #1a7a4e;
+  --rl-warning: #8f5c00;
+  --rl-failure: #c42b3a;
+
+  --rl-id-1: #1f6fcf;
+  --rl-id-2: #b3582a;
+  --rl-id-3: #0b7f91;
+  --rl-id-4: #6a52e0;
+  --rl-id-5: #b03c93;
+  --rl-id-6: #4f6582;
+  --rl-id-7: #8a4ca6;
+  --rl-id-8: #8a6b2e;
+  --rl-id-neutral: #6b717c;
+
+  /* The bright lime survives only as a fill behind dark text. */
+  --rl-accent-fill: #b8f36a;
+  --rl-accent-fill-hover: #a9e957;
+  --rl-on-accent: #101114;
+  --rl-accent-soft: rgba(72, 112, 15, 0.1);
+  --rl-scrim: rgba(22, 24, 29, 0.36);
+  --rl-glass: rgba(255, 255, 255, 0.8);
+  --rl-glass-line: rgba(16, 17, 20, 0.1);
+  --rl-world-bg: #e9ebef;
+  --rl-shadow-pop: 0 12px 32px rgba(22, 24, 29, 0.14), 0 2px 6px rgba(22, 24, 29, 0.08);
+  --rl-shadow-card: 0 1px 2px rgba(22, 24, 29, 0.06);
+  --rl-selection: rgba(184, 243, 106, 0.5);
+}
+
+/* No JS (or before the script ran): follow the system preference. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --rl-obsidian: #f4f5f7;
+    --rl-graphite: #ffffff;
+    --rl-slate: #ebedf1;
+    --rl-slate-hi: #e1e4ea;
+    --rl-line: rgba(16, 17, 20, 0.09);
+    --rl-line-strong: rgba(16, 17, 20, 0.16);
+    --rl-lime: #48700f;
+    --rl-ice: #16181d;
+    --rl-muted: #585e69;
+    --rl-faint: #676d77;
+    --rl-success: #1a7a4e;
+    --rl-warning: #8f5c00;
+    --rl-failure: #c42b3a;
+
+    --rl-id-1: #1f6fcf;
+    --rl-id-2: #b3582a;
+    --rl-id-3: #0b7f91;
+    --rl-id-4: #6a52e0;
+    --rl-id-5: #b03c93;
+    --rl-id-6: #4f6582;
+    --rl-id-7: #8a4ca6;
+    --rl-id-8: #8a6b2e;
+    --rl-id-neutral: #6b717c;
+
+    /* The bright lime survives only as a fill behind dark text. */
+    --rl-accent-fill: #b8f36a;
+    --rl-accent-fill-hover: #a9e957;
+    --rl-on-accent: #101114;
+    --rl-accent-soft: rgba(72, 112, 15, 0.1);
+    --rl-scrim: rgba(22, 24, 29, 0.36);
+    --rl-glass: rgba(255, 255, 255, 0.8);
+    --rl-glass-line: rgba(16, 17, 20, 0.1);
+    --rl-world-bg: #e9ebef;
+    --rl-shadow-pop: 0 12px 32px rgba(22, 24, 29, 0.14), 0 2px 6px rgba(22, 24, 29, 0.08);
+    --rl-shadow-card: 0 1px 2px rgba(22, 24, 29, 0.06);
+    --rl-selection: rgba(184, 243, 106, 0.5);
+  }
+}
+
+/* Reduced motion: system preference unless the viewer forced full motion, or forced by the viewer. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) {
+    --rl-dur-instant: 0ms;
+    --rl-dur-standard: 0ms;
+    --rl-dur-emphasis: 0ms;
+    --rl-dur-camera: 0ms;
+  }
+}
+:root[data-motion='reduce'] {
+  --rl-dur-instant: 0ms;
+  --rl-dur-standard: 0ms;
+  --rl-dur-emphasis: 0ms;
+  --rl-dur-camera: 0ms;
+}

@@ -3,6 +3,8 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   output: 'export',
+  // Emit overview/index.html (not overview.html) so every static file server resolves the routes.
+  trailingSlash: true,
   reactStrictMode: true,
   // Don't (re)generate an AGENTS.md file on `next dev`.
   agentRules: false,

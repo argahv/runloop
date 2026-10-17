@@ -44,4 +44,18 @@ export interface SceneProps {
   reducedMotion: boolean;
   /** Set data-world-ready="true" on the canvas wrapper once the first frame rendered. */
   onReady?: () => void;
+  /** Selected event (its incident marker is highlighted). */
+  selectedSeq?: number | null;
+  /** Select an event (incident markers, "next error"); `seek` also moves the playhead there. */
+  onSelectEvent?: (seq: number, opts: { seek: boolean }) => void;
+  /** What the Studio is showing (the header's connection state), repeated on the provenance chip. */
+  status?: SceneStatus;
+}
+
+/** The connection state as the world overlay shows it (same words as the header). */
+export interface SceneStatus {
+  text: string;
+  /** Events are arriving now (the dot pulses). */
+  live: boolean;
+  detail: string;
 }

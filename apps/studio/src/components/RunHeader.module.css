@@ -1,70 +1,123 @@
 .header {
-  grid-column: 2 / -1;
-  grid-row: 1;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 16px 0;
-  border-bottom: 1px solid var(--border);
-  background: rgba(10, 16, 32, 0.85);
-  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--rl-space-2) var(--rl-space-4);
+  padding: 0 var(--rl-space-1);
 }
-
 .title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--rl-space-2);
   min-width: 0;
+  flex: 1 1 360px;
 }
-.no {
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--text-strong);
-  white-space: nowrap;
+.number {
+  flex: none;
+  color: var(--rl-text-faint);
+  font-family: var(--rl-font-mono);
+  font-size: var(--rl-text-sm);
 }
-.h1 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--text);
-  white-space: nowrap;
+.titleText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.subtitle {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rl-text-muted);
+  font-family: var(--rl-font-mono);
+  font-size: var(--rl-text-2xs);
+}
+.activity {
+  font-family: var(--rl-font-sans);
+}
+.h1 {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--rl-text-h3);
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
-.flags {
+.actions {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: var(--rl-space-2);
   margin-left: auto;
-  flex: none;
 }
-
-.tabs {
+.runList {
   display: flex;
-  gap: 2px;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 300px;
 }
-.tab {
-  position: relative;
-  padding: 7px 12px 9px;
-  border: none;
-  background: none;
-  color: var(--muted);
-  font-weight: 500;
+.runItem {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--rl-space-2);
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: var(--rl-radius-sm);
+  text-align: left;
+  font-size: var(--rl-text-xs);
 }
-.tab:hover {
-  color: var(--text);
+.runItem:hover {
+  background: var(--rl-surface-2);
 }
-.tab[aria-selected='true'] {
-  color: var(--text-strong);
+.runItem[aria-current='true'] {
+  background: var(--rl-accent-soft);
 }
-.tab[aria-selected='true']::after {
-  content: '';
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--cyan);
-  box-shadow: 0 0 8px var(--cyan);
+.runIcon {
+  display: grid;
+  place-items: center;
+  color: var(--rl-text-muted);
+}
+.runIcon[data-tone='ok'] {
+  color: var(--rl-success);
+}
+.runIcon[data-tone='err'] {
+  color: var(--rl-failure);
+}
+.runIcon[data-tone='live'] {
+  color: var(--rl-accent-text);
+}
+.runIcon[data-tone='warn'] {
+  color: var(--rl-warning);
+}
+.runName {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 0;
+}
+.runSub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--rl-text-muted);
+  font-family: var(--rl-font-mono);
+  font-size: var(--rl-text-2xs);
+}
+.runWhen {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+}
+@media (max-width: 760px) {
+  .h1 {
+    font-size: var(--rl-text-lg);
+  }
+  .actions {
+    margin-left: 0;
+  }
 }

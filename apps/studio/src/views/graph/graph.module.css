@@ -1,0 +1,333 @@
+/* Network view (D6). Colours from tokens.css only; identity hue via --agent. */
+
+.view {
+  position: absolute;
+  inset: 0;
+  background: var(--rl-surface);
+}
+.toolbar {
+  position: absolute;
+  top: var(--rl-space-3);
+  right: var(--rl-space-3);
+  z-index: 2;
+}
+.notice {
+  position: absolute;
+  top: 52px;
+  left: var(--rl-space-4);
+  right: var(--rl-space-4);
+  z-index: 2;
+  padding: var(--rl-space-2) var(--rl-space-3);
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-surface-2);
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+}
+.body {
+  position: absolute;
+  inset: 0;
+}
+.view[data-mode='graph'] .body {
+  top: 48px;
+}
+.notice ~ .body {
+  top: 92px;
+}
+
+/* The legend sits under the graph (never over a card); the graph area scrolls when it does not fit. */
+.frame {
+  position: absolute;
+  inset: 0;
+}
+.wrap {
+  position: absolute;
+  inset: 0 0 34px 0;
+  overflow: hidden;
+}
+.wrap[data-scrolls] {
+  overflow: auto;
+}
+.content {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* ── Edges ─────────────────────────────────────────────────────── */
+
+.edges {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.delegation {
+  fill: none;
+  stroke: var(--rl-text-faint);
+  stroke-width: 1.5;
+  transition: opacity var(--rl-dur-standard) var(--rl-ease-out);
+}
+.delegation[data-tone='active'] {
+  stroke: var(--rl-accent-text);
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+  animation: flow calc(var(--rl-dur-emphasis) * 4) linear infinite;
+}
+.delegation[data-tone='failed'] {
+  stroke: var(--rl-failure);
+}
+.message {
+  fill: none;
+  stroke: var(--rl-text-muted);
+  stroke-width: 1.25;
+  stroke-dasharray: 2 4;
+  stroke-linecap: round;
+  animation: pulse calc(var(--rl-dur-emphasis) * 3) var(--rl-ease-out) 1;
+  transition: opacity var(--rl-dur-standard) var(--rl-ease-out);
+}
+.delegation[data-dim],
+.message[data-dim] {
+  opacity: 0.28;
+}
+.arrow_base {
+  fill: var(--rl-text-faint);
+}
+.arrow_active {
+  fill: var(--rl-accent-text);
+}
+.arrow_failed {
+  fill: var(--rl-failure);
+}
+.arrow_message {
+  fill: var(--rl-text-muted);
+}
+
+@keyframes flow {
+  to {
+    stroke-dashoffset: -22;
+  }
+}
+/* A new message: the thread brightens once (restrained; zero-length under reduced motion). */
+@keyframes pulse {
+  from {
+    stroke: var(--rl-text);
+    stroke-width: 2.5;
+  }
+}
+
+.edgeLabel,
+.messageChip {
+  position: absolute;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--rl-radius-pill);
+  background: var(--rl-surface);
+  box-shadow: 0 0 0 1px var(--rl-line-strong);
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: opacity var(--rl-dur-standard) var(--rl-ease-out);
+}
+.edgeLabel[data-tone='active'] {
+  color: var(--rl-accent-text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rl-accent-text) 45%, transparent);
+}
+.edgeLabel[data-tone='failed'] {
+  color: var(--rl-failure);
+}
+.messageChip {
+  font-family: var(--rl-font-mono);
+  cursor: pointer;
+}
+.messageChip:hover {
+  color: var(--rl-text);
+  box-shadow: 0 0 0 1px var(--rl-text-muted);
+}
+.messageChip[aria-pressed='true'] {
+  color: var(--rl-text);
+  box-shadow: 0 0 0 1.5px var(--rl-accent-text);
+}
+.messageChip:focus-visible {
+  outline: none;
+  box-shadow: var(--rl-focus-ring);
+}
+.edgeLabel[data-dim],
+.messageChip[data-dim] {
+  opacity: 0.4;
+}
+
+/* ── Nodes ─────────────────────────────────────────────────────── */
+
+.node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 12px 9px 14px;
+  border-radius: var(--rl-radius-card);
+  background: var(--rl-surface-2);
+  box-shadow: inset 3px 0 0 var(--agent), 0 0 0 1px var(--rl-line);
+  color: var(--rl-text);
+  text-align: left;
+  overflow: hidden;
+  cursor: pointer;
+  animation: arrive var(--rl-dur-emphasis) var(--rl-ease-out);
+  transition: box-shadow var(--rl-dur-instant) var(--rl-ease-out), background-color var(--rl-dur-instant) var(--rl-ease-out);
+}
+.node[data-compact] {
+  gap: 3px;
+  padding: 6px 12px 6px 14px;
+}
+.node:hover {
+  background: var(--rl-surface-3);
+}
+.node[data-running] {
+  box-shadow: inset 3px 0 0 var(--agent), 0 0 0 1px color-mix(in srgb, var(--rl-accent-text) 50%, transparent);
+}
+.node[data-selected] {
+  box-shadow: inset 3px 0 0 var(--agent), 0 0 0 2px var(--rl-accent-text);
+}
+.node:focus-visible {
+  outline: none;
+  box-shadow: inset 3px 0 0 var(--agent), var(--rl-focus-ring);
+}
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.nodeHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+/* On a narrow card the name keeps its room; the role gives way first. */
+.nodeName {
+  flex: none;
+  max-width: calc(100% - 16px);
+  font-size: var(--rl-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nodeRole {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--rl-text-muted);
+  font-family: var(--rl-font-mono);
+  font-size: var(--rl-text-2xs);
+  white-space: nowrap;
+}
+.nodeState {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.nodeTool {
+  color: var(--rl-accent-text);
+  font-family: var(--rl-font-mono);
+  font-size: var(--rl-text-2xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nodeTask {
+  color: var(--rl-text);
+  font-size: var(--rl-text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nodeTask[data-empty] {
+  color: var(--rl-text-muted);
+}
+.nodeMeta {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+}
+.nodeWhere {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nodeUsage {
+  min-width: 0;
+  margin-left: auto;
+  font-family: var(--rl-font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.incident {
+  position: absolute;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--rl-radius-pill);
+  background: var(--rl-surface);
+  box-shadow: 0 0 0 1px var(--rl-failure);
+  color: var(--rl-failure);
+  font-size: var(--rl-text-2xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.incident:focus-visible {
+  outline: none;
+  box-shadow: var(--rl-focus-ring);
+}
+
+.legend {
+  position: absolute;
+  left: var(--rl-space-4);
+  bottom: var(--rl-space-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rl-text-faint);
+  font-size: var(--rl-text-2xs);
+  pointer-events: none;
+}
+.legendLine {
+  width: 18px;
+  height: 0;
+  margin-left: 8px;
+  border-top: 1.5px solid var(--rl-text-faint);
+}
+.legendLine:first-child {
+  margin-left: 0;
+}
+.legendLine[data-kind='message'] {
+  border-top: 1.5px dotted var(--rl-text-muted);
+}
+.legendLine[data-kind='active'] {
+  border-top: 2px dashed var(--rl-accent-text);
+}

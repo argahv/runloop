@@ -1,0 +1,56 @@
+.region {
+  position: fixed;
+  right: var(--rl-space-4);
+  bottom: var(--rl-space-4);
+  z-index: var(--rl-z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl-space-2);
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+/* Floating over the world: glass is allowed here. */
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--rl-space-3);
+  padding: var(--rl-space-3) var(--rl-space-2) var(--rl-space-3) var(--rl-space-3);
+  border-radius: var(--rl-radius-card);
+  background: var(--rl-glass);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: var(--rl-shadow-pop), 0 0 0 1px var(--rl-glass-line);
+  animation: slide var(--rl-dur-standard) var(--rl-ease-out);
+}
+.icon {
+  margin-top: 1px;
+  color: var(--rl-text-muted);
+}
+.toast[data-tone='ok'] .icon {
+  color: var(--rl-success);
+}
+.toast[data-tone='err'] .icon {
+  color: var(--rl-failure);
+}
+.toast[data-tone='warn'] .icon {
+  color: var(--rl-warning);
+}
+.text {
+  flex: 1;
+  min-width: 0;
+}
+.title {
+  font-weight: 600;
+}
+.description {
+  margin-top: 2px;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  overflow-wrap: anywhere;
+}
+@keyframes slide {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}

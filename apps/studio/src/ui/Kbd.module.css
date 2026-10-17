@@ -1,0 +1,21 @@
+.kbd {
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: middle;
+}
+.kbd kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--rl-surface-2);
+  box-shadow: inset 0 -1px 0 var(--rl-line-strong);
+  color: var(--rl-text-muted);
+  font-family: var(--rl-font-sans);
+  font-size: var(--rl-text-2xs);
+  font-weight: 500;
+  line-height: 1;
+}

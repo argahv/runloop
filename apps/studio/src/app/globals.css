@@ -1,46 +1,4 @@
-/* Design tokens: dark slate panels, cyan/purple/amber accents. System fonts only (no web-font fetches). */
-:root {
-  color-scheme: dark;
-
-  --bg: #060a13;
-  --bg-elev: #0a1020;
-  --panel: #0e1526;
-  --panel-2: #121b30;
-  --panel-3: #18233c;
-  --border: #1d2840;
-  --border-strong: #2a3854;
-
-  --text: #e2e8f0;
-  --text-strong: #f8fafc;
-  --muted: #94a3b8;
-  --faint: #64748b;
-
-  --cyan: #22d3ee;
-  --purple: #a78bfa;
-  --amber: #f59e0b;
-  --accent: var(--cyan);
-
-  --ok: #34d399;
-  --err: #f87171;
-  --warn: #fbbf24;
-  --info: #60a5fa;
-  --live: #22d3ee;
-
-  /* Role colours (characters get theirs from the world's presets; these are fallbacks). */
-  --role-research: #38bdf8;
-  --role-build: #f59e0b;
-  --role-test: #34d399;
-  --role-ops: #c084fc;
-  --role-system: #94a3b8;
-
-  --radius: 8px;
-  --radius-sm: 5px;
-  --gap: 12px;
-
-  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--cyan);
-}
+/* Base styles. Colours, type, radii and motion come from tokens.css only. */
 
 *,
 *::before,
@@ -52,54 +10,91 @@ html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  font-size: 13px;
-  line-height: 1.45;
+}
+
+body {
+  background: var(--rl-canvas);
+  color: var(--rl-text);
+  font-family: var(--rl-font-sans);
+  font-size: var(--rl-text-sm);
+  line-height: 1.5;
+  /* Tabular numerals everywhere: timestamps, sequences, durations and counts line up. */
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--rl-selection);
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ol,
+ul,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+ol,
+ul {
+  padding: 0;
+  list-style: none;
 }
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
+  letter-spacing: inherit;
 }
 
 button {
   cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
 }
 
 :focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring);
-  border-radius: var(--radius-sm);
+  box-shadow: var(--rl-focus-ring);
 }
 
 code,
 pre,
-.mono {
-  font-family: var(--mono);
-  font-size: 12px;
+kbd,
+samp {
+  font-family: var(--rl-font-mono);
+  /* Slightly smaller than the surrounding text, never below the 12 px floor. */
+  font-size: max(0.92em, var(--rl-text-2xs));
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+pre {
+  margin: 0;
 }
-::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 10px;
-  border: 2px solid var(--panel);
-}
-::-webkit-scrollbar-track {
-  background: transparent;
+
+/* Thin, quiet scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rl-line-strong) transparent;
 }
 
 .sr-only {
@@ -114,119 +109,26 @@ pre,
   border: 0;
 }
 
-/* ── Shared primitives ─────────────────────────────────────────── */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--panel-2);
-  color: var(--text);
-  font-weight: 500;
-  white-space: nowrap;
-  transition: background 120ms, border-color 120ms;
-}
-.btn:hover:not(:disabled) {
-  background: var(--panel-3);
-  border-color: #3a4a6a;
-}
-.btn[aria-pressed='true'] {
-  border-color: var(--cyan);
-  color: var(--text-strong);
-  background: rgba(34, 211, 238, 0.12);
-}
-.btn-primary {
-  background: linear-gradient(180deg, #0e7490, #0b5c74);
-  border-color: #22d3ee80;
-  color: #ecfeff;
-}
-.btn-primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #0891b2, #0e7490);
-  border-color: var(--cyan);
-}
-.btn-ghost {
-  background: transparent;
-  border-color: transparent;
-}
-.btn-ghost:hover:not(:disabled) {
-  background: var(--panel-3);
-  border-color: var(--border);
-}
-.btn-icon {
-  width: 30px;
-  padding: 0;
+.mono {
+  font-family: var(--rl-font-mono);
 }
 
-/* Status badge: always icon + text; tone only adds colour. */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-  white-space: nowrap;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-}
-.badge[data-tone='ok'] { color: var(--ok); }
-.badge[data-tone='err'] { color: var(--err); }
-.badge[data-tone='warn'] { color: var(--warn); }
-.badge[data-tone='info'] { color: var(--info); }
-.badge[data-tone='live'] { color: var(--live); }
-.badge[data-tone='muted'] { color: var(--muted); }
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--panel-3);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 18px;
-  white-space: nowrap;
-}
-
-.link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--cyan);
-  text-decoration: underline;
-  text-decoration-color: #22d3ee66;
-  text-underline-offset: 2px;
-}
-.link:hover {
-  text-decoration-color: var(--cyan);
-}
-
-.dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--role, var(--role-system));
-  box-shadow: 0 0 6px var(--role, transparent);
-  flex: none;
-}
-
+/* Reduced motion keeps every state change, only without the travel. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  :root:not([data-motion='full']) *,
+  :root:not([data-motion='full']) *::before,
+  :root:not([data-motion='full']) *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+:root[data-motion='reduce'] *,
+:root[data-motion='reduce'] *::before,
+:root[data-motion='reduce'] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
 }
