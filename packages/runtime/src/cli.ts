@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { serve } from '@hono/node-server';
 import { DEFAULT_RUNTIME_HOST, DEFAULT_RUNTIME_PORT } from '@runloop-world/events';
 import { findRepoRoot, resolveDataDir } from './config';
+import { isLoopbackAddress } from './http/app';
 import { createRuntime, type Runtime } from './runtime';
 import { TracePrinter } from './trace-printer';
 
@@ -44,15 +45,26 @@ function acquireLock(dataDir: string): () => void {
   return () => rmSync(file, { force: true });
 }
 
+/** Grace period for open responses (SSE streams sending their `end`) when the server closes. */
+const CLOSE_GRACE_MS = 2000;
+
 function listen(rt: Runtime, host: string, port: number): Promise<{ close(): Promise<void>; url: string }> {
   return new Promise((resolve, reject) => {
     const server = serve({ fetch: rt.app.fetch, hostname: host, port }, (info) => {
       resolve({
         url: `http://${host}:${info.port}`,
+        // Graceful: stop accepting, let open responses finish (an SSE stream ends by
+        // itself once its run is terminal), and only then cut what is left.
         close: () =>
           new Promise<void>((r) => {
-            if ('closeAllConnections' in server) server.closeAllConnections();
-            server.close(() => r());
+            const force = setTimeout(() => {
+              if ('closeAllConnections' in server) server.closeAllConnections();
+            }, CLOSE_GRACE_MS);
+            force.unref();
+            server.close(() => {
+              clearTimeout(force);
+              r();
+            });
           }),
       });
     });
@@ -88,6 +100,10 @@ export async function main(argv: string[]): Promise<number> {
   });
   const port = parsePort(values.port);
   const host = values.host ?? DEFAULT_RUNTIME_HOST;
+  if (host !== 'localhost' && !isLoopbackAddress(host)) {
+    console.error(`[runtime] --host ${host} refused: the API has no authentication, so it only listens on loopback (127.0.0.1, ::1 or localhost).`);
+    return 1;
+  }
 
   const repoRoot = findRepoRoot();
   const dataDir = resolveDataDir(process.env, repoRoot);
@@ -101,8 +117,11 @@ export async function main(argv: string[]): Promise<number> {
   const shutdown = async (code: number) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    await rt.close();
+    // Order matters: record run.completed{stopped}, let SSE clients receive it and
+    // their `end`, close the server, and only then close the database.
+    await rt.manager.shutdown();
     await server?.close();
+    await rt.close();
     releaseLock();
     process.exit(code);
   };

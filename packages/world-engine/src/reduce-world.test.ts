@@ -284,7 +284,8 @@ describe('reduceWorld — intents', () => {
     steps = foldSteps(b.events, world);
     w = steps.at(-1)!.world;
     expect(w.paused).toBe(false);
-    expect(w.characters.r).toMatchObject({ activity: 'succeeded', target: { kind: 'home' } });
+    // The completion happened during the pause, so there is no success reaction now: just idle.
+    expect(w.characters.r).toMatchObject({ activity: 'idle', target: { kind: 'home' } });
     expect(w.characters.r!.motion.path.at(-1)).toEqual(w.characters.r!.home);
     expect(w.stations.archive!.slots).toEqual([null]);
     expectContinuous(steps, world, ['r']);
@@ -301,6 +302,74 @@ describe('reduceWorld — intents', () => {
     expect(c.motion.path.at(-1)).toEqual([3, 4] satisfies Cell);
     expect(presentationAt(c, arrivalTick(c.motion, TPC), world).state).toBe('working');
     expectContinuous(steps, world, ['r']);
+  });
+});
+
+describe('reduceWorld — ended runs and success reactions', () => {
+  /** Tester working on T1 at the probe, mid tool call. */
+  function testerAtWork() {
+    const b = startRun([{ id: 't', preset: 'tester' }]);
+    b.wait(100).add('task.created', { taskId: 'T1', title: '', kind: 'test', dependsOn: [] });
+    b.wait(100).add('task.started', { taskId: 'T1', agentId: 't' });
+    b.wait(3000).add('tool.call_started', { callId: 'c1', agentId: 't', taskId: 'T1', tool: 'run_command', inputSummary: 'node --test' });
+    return b;
+  }
+
+  function expectSentHome(steps: Step[]) {
+    const w = steps.at(-1)!.world;
+    const c = w.characters.t!;
+    expect(steps.at(-1)!.exec.tasks.T1!.status).toBe('in_progress'); // Layer 1 still records the unfinished task
+    expect(c).toMatchObject({ activity: 'idle', taskId: null, stationId: null, target: { kind: 'home' } });
+    expect(w.stations.probe!.slots).toEqual([null]);
+    expect(c.motion.path.at(-1)).toEqual(c.home);
+    expect(presentationAt(c, w.tick + 600, world).state).toBe('idle');
+    expectContinuous(steps, world, ['t']);
+  }
+
+  it('a stopped run sends a working character home idle and frees its slot', () => {
+    const b = testerAtWork();
+    expect(finalWorld(b.events, world).characters.t).toMatchObject({ activity: 'working', stationId: 'probe' });
+    b.wait(250).add('tool.call_failed', { callId: 'c1', errorType: 'aborted', message: 'stopped', durationMs: 250 });
+    b.wait(10).add('run.completed', { outcome: 'stopped', summary: 'Stopped by user' });
+    expectSentHome(foldSteps(b.events, world));
+  });
+
+  it('an interrupted run (boot recovery) does the same', () => {
+    const b = testerAtWork();
+    b.wait(1).add('tool.call_failed', { callId: 'c1', errorType: 'runtime_restarted', message: 'restarted', durationMs: 0 });
+    b.add('run.completed', { outcome: 'interrupted', summary: 'The runtime restarted' });
+    expectSentHome(foldSteps(b.events, world));
+  });
+
+  it('shows succeeded only on the completing event, never for an old completion', () => {
+    const b = startRun([{ id: 'a', preset: 'builder' }, { id: 'b', preset: 'researcher' }]);
+    b.wait(100).add('task.created', { taskId: 'T1', title: '', kind: 'code', dependsOn: [] });
+    b.wait(100).add('task.started', { taskId: 'T1', agentId: 'a' });
+    b.wait(3000).add('task.completed', { taskId: 'T1', summary: '', artifactIds: [] });
+    let w = finalWorld(b.events, world);
+    expect(w.characters.a).toMatchObject({ activity: 'succeeded', taskId: 'T1', sinceTick: w.tick });
+    expect(presentationAt(w.characters.a!, w.tick + 1, world).state).toBe('succeeded');
+
+    // A later unrelated event keeps the reaction (and its start tick) until presentation fades it.
+    b.wait(500).add('agent.state_changed', { agentId: 'b', state: 'idle' });
+    const kept = finalWorld(b.events, world).characters.a!;
+    expect(kept).toMatchObject({ activity: 'succeeded', sinceTick: w.tick });
+
+    // 10 s later a new task is assigned, then reassigned away: back to idle, not a fresh ✓.
+    b.wait(10_000).add('task.created', { taskId: 'T2', title: '', kind: 'code', dependsOn: [] });
+    b.wait(100).add('task.assigned', { taskId: 'T2', agentId: 'a' });
+    expect(finalWorld(b.events, world).characters.a!.activity).toBe('working');
+    b.wait(2000).add('task.assigned', { taskId: 'T2', agentId: 'b' });
+    w = finalWorld(b.events, world);
+    expect(w.characters.a).toMatchObject({ activity: 'idle', taskId: null });
+    expect(presentationAt(w.characters.a!, w.tick + 1, world).state).not.toBe('succeeded');
+
+    // A denied permission long after a completion is not a success either.
+    b.wait(100).add('tool.permission_requested', { permissionId: 'p1', agentId: 'a', action: 'deploy', scope: 'prod' });
+    expect(finalWorld(b.events, world).characters.a!.activity).toBe('awaiting_approval');
+    b.wait(60_000).add('tool.permission_resolved', { permissionId: 'p1', decision: 'denied', by: 'user' });
+    w = finalWorld(b.events, world);
+    expect(w.characters.a).toMatchObject({ activity: 'idle', taskId: null });
   });
 });
 

@@ -56,6 +56,16 @@ export class RunClosedError extends Error {
 /** The draft did not produce a valid known event. No sequence number was consumed. */
 export class EventValidationError extends Error {}
 
+/** Stored artifact bytes no longer match the sha256 recorded in their artifact.created event. */
+export class ArtifactIntegrityError extends Error {
+  constructor(
+    readonly runId: string,
+    readonly artifactId: string,
+  ) {
+    super(`Artifact ${artifactId} was modified after it was recorded (sha256 mismatch); refusing to serve it`);
+  }
+}
+
 interface RunRow {
   run_id: string;
   mission_id: string;
@@ -145,10 +155,14 @@ export class Recorder {
 
   append<T extends RunEvent['type']>(runId: string, draft: EventDraft<T>): EventOf<T>;
   append(runId: string, draft: EventDraft): RunEvent {
+    return this.write(runId, draft, this.now());
+  }
+
+  private write(runId: string, draft: EventDraft, at: Date): RunEvent {
     if (draft.type === 'run.started') throw new EventValidationError('run.started is only emitted by createRun()');
     const state = this.state(runId);
     if (state.status !== 'running') throw new RunClosedError(runId, state.status);
-    const event = this.build(runId, state.lastSequence + 1, draft);
+    const event = this.build(runId, state.lastSequence + 1, draft, at);
     tx(this.db, () => this.persist(event));
     state.lastSequence = event.sequence;
     if (event.type === 'run.completed') state.status = event.payload.outcome;
@@ -202,6 +216,16 @@ export class Recorder {
     return { bytes: buf.byteLength, sha256: createHash('sha256').update(buf).digest('hex') };
   }
 
+  /** Whether `artifact.created` for this artifact id was recorded in the run. */
+  hasArtifact(runId: string, artifactId: string): boolean {
+    return this.db.prepare('SELECT 1 FROM artifacts WHERE run_id = ? AND artifact_id = ?').get(runId, artifactId) !== undefined;
+  }
+
+  /**
+   * The artifact's metadata and bytes, or null if unknown. Throws
+   * ArtifactIntegrityError if the bytes on disk no longer match the recorded
+   * sha256 (they were changed after the fact).
+   */
   getArtifact(runId: string, artifactId: string): StoredArtifact | null {
     if (!SAFE_ID.test(artifactId)) return null;
     const row = this.db
@@ -215,6 +239,9 @@ export class Recorder {
       content = readFileSync(this.artifactPath(runId, artifactId));
     } catch {
       return null;
+    }
+    if (createHash('sha256').update(content).digest('hex') !== row.sha256) {
+      throw new ArtifactIntegrityError(runId, artifactId);
     }
     return {
       runId,
@@ -233,51 +260,71 @@ export class Recorder {
    * died. Each tool call without a terminal event gets
    * `tool.call_failed{runtime_restarted}`, then the run gets
    * `run.completed{interrupted}`. Returns the recovered run ids.
+   *
+   * The crash time is unknown, so these events are stamped with the run's last
+   * recorded activity (the last moment it is known to have been alive), not
+   * the restart time: otherwise a replay would span the whole downtime. The
+   * actual recovery time is kept in the run summary.
    */
   recoverInterrupted(): string[] {
     const rows = this.db.prepare(`SELECT run_id FROM runs WHERE status = 'running' ORDER BY created_at`).all() as {
       run_id: string;
     }[];
+    const recoveredAt = this.now().toISOString();
     for (const { run_id: runId } of rows) {
       this.runs.delete(runId);
       const open = new Map<string, EventOf<'tool.call_started'>>();
+      let lastSeenMs = 0;
       for (const e of this.listAll(runId)) {
+        lastSeenMs = Math.max(lastSeenMs, Date.parse(e.timestamp));
         if (e.type === 'tool.call_started') open.set(e.payload.callId, e);
         else if (e.type === 'tool.call_completed' || e.type === 'tool.call_failed') open.delete(e.payload.callId);
       }
-      const nowMs = this.now().getTime();
+      const at = new Date(lastSeenMs);
       for (const started of open.values()) {
-        this.append(runId, {
-          type: 'tool.call_failed',
-          payload: {
-            callId: started.payload.callId,
-            errorType: 'runtime_restarted',
-            message: 'The runtime stopped before this call finished',
-            durationMs: Math.max(0, nowMs - Date.parse(started.timestamp)),
+        this.write(
+          runId,
+          {
+            type: 'tool.call_failed',
+            payload: {
+              callId: started.payload.callId,
+              errorType: 'runtime_restarted',
+              message: 'The runtime stopped before this call finished',
+              // Known running time only (up to the last recorded event).
+              durationMs: Math.max(0, lastSeenMs - Date.parse(started.timestamp)),
+            },
+            actorId: started.payload.agentId,
+            ...(started.payload.taskId ? { taskId: started.payload.taskId } : {}),
+            parentEventId: started.eventId,
           },
-          actorId: started.payload.agentId,
-          ...(started.payload.taskId ? { taskId: started.payload.taskId } : {}),
-          parentEventId: started.eventId,
-        });
+          at,
+        );
       }
-      this.append(runId, {
-        type: 'run.completed',
-        payload: { outcome: 'interrupted', summary: 'The runtime stopped while this run was active' },
-        actorId: 'system',
-      });
+      this.write(
+        runId,
+        {
+          type: 'run.completed',
+          payload: {
+            outcome: 'interrupted',
+            summary: `The runtime stopped while this run was active (recovered at ${recoveredAt})`,
+          },
+          actorId: 'system',
+        },
+        at,
+      );
     }
     return rows.map((r) => r.run_id);
   }
 
   // ── internals ───────────────────────────────────────────────────
 
-  private build(runId: string, sequence: number, draft: EventDraft): RunEvent {
+  private build(runId: string, sequence: number, draft: EventDraft, at: Date = this.now()): RunEvent {
     const { event: d } = redactEvent(draft, { secrets: this.secrets });
     const raw = {
       eventId: this.newId(),
       runId,
       sequence,
-      timestamp: this.now().toISOString(),
+      timestamp: at.toISOString(),
       type: d.type,
       schemaVersion: SCHEMA_VERSION,
       ...deriveRefs(d),

@@ -1,4 +1,5 @@
 import {
+  invalidEnvelopeEvent,
   parseEvent,
   SequenceBuffer,
   type AnyEvent,
@@ -159,6 +160,8 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
   let conflictsSeen = 0;
   /** min(clientNow − eventTimestamp): client clock minus server clock, plus the smallest latency seen. */
   let clockOffsetMs: number | null = null;
+  /** Latest valid event timestamp seen (stand-in time for invalid envelopes). */
+  let lastTimestamp: string | null = null;
   let gapSince: number | null = null;
   let frameMemo: { seq: number; state: RunState } | null = null;
   const effectListeners = new Set<(events: readonly AnyEvent[]) => void>();
@@ -182,6 +185,7 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
     rawSeen = new Set();
     conflictsSeen = 0;
     clockOffsetMs = null;
+    lastTimestamp = null;
     gapSince = null;
     frameMemo = null;
   };
@@ -215,7 +219,11 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
     return s.ended ? Math.min(t, s.settleMs) : t;
   };
 
-  const endMsOf = (s: StudioState): number => (s.ended ? s.settleMs : Math.max(s.settleMs, livePlayheadMs(s)));
+  /**
+   * Right end of the scrubber. A finished run ends once its characters settle;
+   * a running run ends at its live playhead (never at a predicted future).
+   */
+  const endMsOf = (s: StudioState): number => (s.ended ? s.settleMs : livePlayheadMs(s));
 
   const seqAt = (cursor: Cursor): number => {
     if (!index) return 0;
@@ -355,6 +363,14 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
       for (const raw of raws) {
         const parsed = parseEvent(raw);
         if (!parsed.ok) {
+          // Still names its sequence: fold a placeholder (an anomaly) so later events are not held forever.
+          const fallback = { runId: s.runId ?? '', timestamp: lastTimestamp ?? new Date(t).toISOString() };
+          const placeholder = invalidEnvelopeEvent(raw, parsed.error, fallback);
+          if (placeholder && (!s.runId || placeholder.runId === s.runId)) {
+            if (!rawById.has(placeholder.eventId)) rawById.set(placeholder.eventId, raw);
+            released.push(...buffer.push(placeholder));
+            continue;
+          }
           const key = safeJson(raw);
           if (rawSeen.has(key)) continue;
           rawSeen.add(key);
@@ -365,7 +381,10 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
         const e = parsed.event;
         if (s.runId && e.runId !== s.runId) continue; // stale delivery from a previous run
         const ts = Date.parse(e.timestamp);
-        if (Number.isFinite(ts)) clockOffsetMs = Math.min(clockOffsetMs ?? Infinity, t - ts);
+        if (Number.isFinite(ts)) {
+          clockOffsetMs = Math.min(clockOffsetMs ?? Infinity, t - ts);
+          if (lastTimestamp === null || ts > Date.parse(lastTimestamp)) lastTimestamp = e.timestamp;
+        }
         if (!rawById.has(e.eventId)) rawById.set(e.eventId, raw);
         released.push(...buffer.push(e));
       }

@@ -32,8 +32,8 @@ export function selectTaskProgress(s: ExecState, taskId: string): number | null 
 
 /**
  * One chip per task kind, in first-seen order. A chip is `current` while any of
- * its tasks is active (assigned / in progress / blocked), else `failed` if one
- * failed, else `done` when all completed, else `pending`.
+ * its tasks is assigned or in progress, else `blocked` if one is blocked, else
+ * `failed` if one failed, else `done` when all completed, else `pending`.
  */
 export function selectAgentFlow(s: ExecState): FlowChip[] {
   const byKind = new Map<TaskKind, TaskExec[]>();
@@ -45,7 +45,8 @@ export function selectAgentFlow(s: ExecState): FlowChip[] {
   }
   return [...byKind].map(([kind, tasks]) => {
     let status: FlowChip['status'] = 'pending';
-    if (tasks.some((t) => t.status === 'assigned' || t.status === 'in_progress' || t.status === 'blocked')) status = 'current';
+    if (tasks.some((t) => t.status === 'assigned' || t.status === 'in_progress')) status = 'current';
+    else if (tasks.some((t) => t.status === 'blocked')) status = 'blocked';
     else if (tasks.some((t) => t.status === 'failed')) status = 'failed';
     else if (tasks.every((t) => t.status === 'completed')) status = 'done';
     return { kind, status, taskIds: tasks.map((t) => t.id) };

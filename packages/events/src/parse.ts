@@ -1,4 +1,4 @@
-import { EnvelopeSchema, SCHEMA_VERSION } from './envelope';
+import { EnvelopeSchema, SCHEMA_VERSION, VisibilitySchema } from './envelope';
 import type { AnyEvent, RunEvent, UnknownEvent } from './event';
 import { isEventType, payloadSchemas } from './payloads';
 
@@ -41,4 +41,48 @@ export function parseKnownEvent(raw: unknown): ParseResult<RunEvent> {
     return { ok: false, error: `${u.reason}${u.error ? `: ${u.error}` : ''} (type ${u.type})` };
   }
   return { ok: true, event: r.event };
+}
+
+/**
+ * Stand-in for an item whose envelope failed to parse but that still names
+ * its sequence (e.g. a field value from a newer runtime). Readers fold it as
+ * an UnknownEvent so the sequence advances and the stream never stalls on a
+ * permanent gap. Returns null when there is no integer sequence ≥ 1.
+ * Missing or invalid fields are filled from `fallback` (runId, timestamp) or
+ * made up deterministically (eventId), so redeliveries dedupe.
+ */
+export function invalidEnvelopeEvent(
+  raw: unknown,
+  error: string,
+  fallback: { runId: string; timestamp: string },
+): UnknownEvent | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const sequence = r.sequence;
+  if (typeof sequence !== 'number' || !Number.isInteger(sequence) || sequence < 1) return null;
+  const str = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : undefined);
+  const runId = str(r.runId) ?? fallback.runId;
+  const ts = str(r.timestamp);
+  const visibility = VisibilitySchema.safeParse(r.visibility);
+  const schemaVersion = r.schemaVersion;
+  const actorId = str(r.actorId);
+  const taskId = str(r.taskId);
+  const parentEventId = str(r.parentEventId);
+  return {
+    eventId: str(r.eventId) ?? `invalid:${runId}:${sequence}`,
+    runId,
+    sequence,
+    timestamp: ts && Number.isFinite(Date.parse(ts)) ? ts : fallback.timestamp,
+    type: str(r.type) ?? 'invalid',
+    schemaVersion: typeof schemaVersion === 'number' && Number.isInteger(schemaVersion) ? schemaVersion : SCHEMA_VERSION,
+    ...(actorId ? { actorId } : {}),
+    ...(taskId ? { taskId } : {}),
+    ...(parentEventId ? { parentEventId } : {}),
+    // An unrecognised visibility is treated as the most restrictive one.
+    visibility: visibility.success ? visibility.data : 'sensitive',
+    payload: r.payload,
+    unknown: true,
+    reason: 'invalid_envelope',
+    error,
+  };
 }

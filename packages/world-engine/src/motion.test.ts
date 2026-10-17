@@ -72,10 +72,18 @@ describe('ticks', () => {
     expect(msToTick(0, 10)).toBe(0);
   });
 
-  it('eventTick floors and never goes backwards', () => {
+  it('arrives exactly at the arrival time even after a ms ↔ tick round trip', () => {
+    for (let ms = 0; ms < 20_000; ms += 7) {
+      const motion: Motion = { path: [[0, 0], [1, 0], [2, 0], [3, 0]], startTick: msToTick(ms, 10) };
+      const arrivalMs = (arrivalTick(motion, 2) / 10) * 1000; // e.g. a playhead parked at the end of the walk
+      expect(positionAt(motion, msToTick(arrivalMs, 10), 2).arrived, `start ${ms} ms`).toBe(true);
+    }
+  });
+
+  it('eventTick keeps the exact (fractional) time and never goes backwards', () => {
     const start = 1_000_000;
-    expect(eventTick(0, start + 1290, start, 10)).toBe(12);
-    expect(eventTick(12, start + 900, start, 10)).toBe(12); // earlier timestamp → clamped
+    expect(eventTick(0, start + 1290, start, 10)).toBeCloseTo(12.9);
+    expect(eventTick(12.9, start + 900, start, 10)).toBe(12.9); // earlier timestamp → clamped
     expect(eventTick(0, start - 500, start, 10)).toBe(0);
     expect(eventTick(12, start + 5000, start, 10)).toBe(50);
   });

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { cpSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { RunSummary } from '@runloop-world/events';
+import type { PayloadOf, RunSummary } from '@runloop-world/events';
 import {
   abortError,
   isAdapterEventType,
@@ -213,6 +213,12 @@ export class RunManager {
       emit(type, payload, meta) {
         if (signal.aborted) throw abortError();
         if (!isAdapterEventType(type)) throw new Error(`Adapters may not emit ${type}`);
+        if (type === 'task.completed') {
+          // A completion may only cite artifacts the tool invoker actually recorded in this run.
+          const cited = (payload as PayloadOf<'task.completed'>).artifactIds;
+          const unknown = cited.filter((id) => !recorder.hasArtifact(runId, id));
+          if (unknown.length > 0) throw new Error(`task.completed cites artifacts not recorded in this run: ${unknown.join(', ')}`);
+        }
         // The generic draft type cannot be narrowed from T here; the recorder validates strictly.
         return recorder.append(runId, { type, payload, ...meta } as never);
       },

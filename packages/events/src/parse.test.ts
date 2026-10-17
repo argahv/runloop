@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // events has no dependency on testkit (testkit depends on events), so tests import its source directly.
 import { codingMissionFixture } from '../../testkit/src/index';
 import { deriveRefs, isUnknownEvent, type EventDraft } from './event';
-import { parseEvent, parseKnownEvent } from './parse';
+import { invalidEnvelopeEvent, parseEvent, parseKnownEvent } from './parse';
 import { EVENT_TYPES, isEventType } from './payloads';
 
 const fixture = codingMissionFixture();
@@ -73,6 +73,38 @@ describe('parseEvent', () => {
     const completed = fixture.find((e) => e.type === 'tool.call_completed' && e.payload.metrics)!;
     const bad = { ...completed, payload: { ...completed.payload, metrics: { tests: 12, passed: -1, failed: 2 } } };
     expect(parseKnownEvent(bad).ok).toBe(false);
+  });
+});
+
+describe('invalidEnvelopeEvent', () => {
+  const fallback = { runId: '00000000-0000-4000-8000-000000000000', timestamp: '2026-10-17T09:00:00.000Z' };
+
+  it('turns an invalid envelope with a sequence into an UnknownEvent that keeps its place', () => {
+    const raw: Record<string, unknown> = { ...sample(), visibility: 'internal' };
+    const parsed = parseEvent(raw);
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    const e = invalidEnvelopeEvent(raw, parsed.error, fallback)!;
+    expect(isUnknownEvent(e)).toBe(true);
+    expect(e).toMatchObject({
+      eventId: raw.eventId,
+      runId: raw.runId,
+      sequence: raw.sequence,
+      timestamp: raw.timestamp,
+      type: raw.type,
+      visibility: 'sensitive',
+      reason: 'invalid_envelope',
+      error: parsed.error,
+    });
+  });
+
+  it('fills missing fields deterministically and needs an integer sequence', () => {
+    const e = invalidEnvelopeEvent({ sequence: 7, timestamp: 'yesterday' }, 'bad', fallback)!;
+    expect(e).toMatchObject({ eventId: `invalid:${fallback.runId}:7`, runId: fallback.runId, timestamp: fallback.timestamp, type: 'invalid' });
+    expect(invalidEnvelopeEvent({ sequence: 7 }, 'bad', fallback)).toEqual(e);
+    for (const raw of [null, 'x', {}, { sequence: 0 }, { sequence: 1.5 }, { sequence: '3' }]) {
+      expect(invalidEnvelopeEvent(raw, 'bad', fallback)).toBeNull();
+    }
   });
 });
 

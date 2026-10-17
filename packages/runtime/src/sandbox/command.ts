@@ -29,8 +29,12 @@ export function isAllowedCommand(argv: readonly string[]): boolean {
 }
 
 /**
- * The child sees only PATH, HOME (= the workspace) and NO_COLOR: no
- * NODE_OPTIONS, loaders or credentials from the runtime's environment.
+ * The child's environment holds only PATH, HOME (= the workspace) and
+ * NO_COLOR, so no NODE_OPTIONS or loaders reach it. This is not isolation:
+ * `node --test` runs the workspace's JS as the runtime's user, which can still
+ * read the parent's environment via /proc and write anywhere that user can
+ * (including the data dir). Fine for the scripted demo; an LLM adapter needs
+ * a real sandbox (container / bubblewrap / nsjail) first.
  */
 export function minimalEnv(cwd: string): NodeJS.ProcessEnv {
   return { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', HOME: cwd, NO_COLOR: '1' };

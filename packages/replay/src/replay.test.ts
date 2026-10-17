@@ -167,8 +167,27 @@ describe('ReplayIndex time mapping', () => {
     const events = longRun(4);
     const idx = new ReplayIndex(world, events);
     for (const e of events) {
-      expect(Math.floor(idx.tickAtMs(idx.timeOfSeq(e.sequence)))).toBe(idx.stateAt(e.sequence).world.tick);
+      expect(idx.tickAtMs(idx.timeOfSeq(e.sequence))).toBe(idx.stateAt(e.sequence).world.tick);
       expect(idx.seqAtTime(idx.timeOfSeq(e.sequence))).toBeGreaterThanOrEqual(e.sequence);
+    }
+  });
+
+  it('a re-route between ticks continues from where the playhead is (no jump)', () => {
+    const b = runBuilder({ startIso: '2026-10-17T09:00:00.000Z' });
+    b.add('run.started', { title: 't', missionId: 'm', worldId: 'research-campus', seed: 1, adapter: { id: 'x', kind: 'scripted', label: 'X' }, workspace: 'w' });
+    b.wait(100).add('agent.registered', { agentId: 't', name: 't', role: 't', model: null, tools: [], embodied: true, characterPreset: 'tester' });
+    b.wait(100).add('task.created', { taskId: 'T1', title: '', kind: 'test', dependsOn: [] });
+    b.wait(100).add('task.started', { taskId: 'T1', agentId: 't' }); // 300 ms: walk to the probe
+    b.wait(490).add('task.blocked', { taskId: 'T1', reason: 'x' }); // 790 ms, between ticks: walk back home
+    b.wait(1230).add('task.started', { taskId: 'T1', agentId: 't' }); // 2020 ms: and out again
+    const idx = new ReplayIndex(world, b.events);
+    const maxStep = 1 / world.def.ticksPerCell / world.def.tickHz; // cells per ms at walking speed
+    let prev: { x: number; y: number } | null = null;
+    for (let ms = 300; ms <= 6000; ms += 1) {
+      const c = idx.stateAt(idx.seqAtTime(ms)).world.characters.t!;
+      const p = presentationAt(c, idx.tickAtMs(ms), world);
+      if (prev) expect(Math.abs(p.x - prev.x) + Math.abs(p.y - prev.y), `jump at ${ms} ms`).toBeLessThanOrEqual(maxStep + 1e-9);
+      prev = p;
     }
   });
 

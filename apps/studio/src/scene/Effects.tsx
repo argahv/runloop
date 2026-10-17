@@ -14,12 +14,20 @@ import type { SceneFrame } from './types';
 
 type P3 = [number, number, number];
 
+/** `born` is performance.now() when the effect was queued; its age is wall-clock time since then. */
 type Fx =
-  | { id: number; kind: 'packet'; pts: P3[]; color: string }
-  | { id: number; kind: 'burst'; pos: P3; ok: boolean }
-  | { id: number; kind: 'artifact'; pos: P3; color: string };
+  | { id: number; born: number; kind: 'packet'; pts: P3[]; color: string }
+  | { id: number; born: number; kind: 'burst'; pos: P3; ok: boolean }
+  | { id: number; born: number; kind: 'artifact'; pos: P3; color: string };
 
 let nextId = 1;
+
+/**
+ * Seconds since the effect was queued. Measured on the wall clock (not from
+ * its first frame), so effects queued while frames were paused (background
+ * tab) expire instead of all playing at once when frames resume.
+ */
+const ageOf = (fx: Fx) => (performance.now() - fx.born) / 1000;
 
 const ARTIFACT_COLOR: Record<string, string> = {
   file: PALETTE.cyan,
@@ -40,6 +48,8 @@ export function Effects() {
   useEffect(
     () =>
       ctx.subscribeEffects((events) => {
+        // Nobody sees transient effects in a hidden tab; persistent markers show the outcome.
+        if (document.hidden) return;
         const frame = ctx.getFrame();
         const add: Fx[] = [];
         for (const e of events) add.push(...effectsFor(e, frame, ctx));
@@ -92,13 +102,21 @@ function effectsFor(e: AnyEvent, frame: SceneFrame, ctx: SceneCtx): Fx[] {
       const call = exec.toolCalls[e.payload.callId];
       const pos = anchorFor(ctx, frame, call?.agentId);
       const ok = e.type === 'tool.call_completed' && e.payload.status === 'success';
-      return pos ? [{ id: nextId++, kind: 'burst', pos, ok }] : [];
+      return pos ? [{ id: nextId++, born: performance.now(), kind: 'burst', pos, ok }] : [];
     }
     case 'artifact.created': {
       const by = e.payload.producedByCallId ? exec.toolCalls[e.payload.producedByCallId]?.agentId : e.actorId;
       const pos = anchorFor(ctx, frame, by);
       if (!pos) return [];
-      return [{ id: nextId++, kind: 'artifact', pos: [pos[0], pos[1] - 0.35, pos[2]], color: ARTIFACT_COLOR[e.payload.kind] ?? PALETTE.cyan }];
+      return [
+        {
+          id: nextId++,
+          born: performance.now(),
+          kind: 'artifact',
+          pos: [pos[0], pos[1] - 0.35, pos[2]],
+          color: ARTIFACT_COLOR[e.payload.kind] ?? PALETTE.cyan,
+        },
+      ];
     }
     case 'agent.message_sent': {
       const { world } = ctx;
@@ -115,7 +133,7 @@ function effectsFor(e: AnyEvent, frame: SceneFrame, ctx: SceneCtx): Fx[] {
         const to = poseAt(world, frame, id);
         if (!to) continue;
         const cells = bfs(world, start, to.cell) ?? [start, to.cell];
-        out.push({ id: nextId++, kind: 'packet', pts: pathPoints(world, cells, 1.05), color });
+        out.push({ id: nextId++, born: performance.now(), kind: 'packet', pts: pathPoints(world, cells, 1.05), color });
       }
       return out;
     }
@@ -132,18 +150,18 @@ function Packet({ fx, onDone }: { fx: Extract<Fx, { kind: 'packet' }>; onDone: (
   const len = useMemo(() => polylineLength(fx.pts), [fx.pts]);
   const trail = useMemo(() => ribbonGeometry(fx.pts, 0.1, { uPerUnit: 1 / Math.max(len, 0.001), extend: true }), [fx.pts, len]);
   useEffect(() => () => trail.dispose(), [trail]);
+  const root = useRef<Group>(null);
   const head = useRef<Group>(null);
   const trailMat = useRef<MeshBasicMaterial>(null);
-  const start = useRef<number | null>(null);
   const travel = Math.min(3, Math.max(0.6, len / SPEED));
   const total = reducedMotion ? 1.6 : travel + 0.6;
   const v = useMemo(() => new Vector3(), []);
   const c = useMemo(() => glow(fx.color, 2.4), [fx.color]);
 
-  useFrame(({ clock }) => {
-    start.current ??= clock.elapsedTime;
-    const age = clock.elapsedTime - start.current;
+  useFrame(() => {
+    const age = ageOf(fx);
     if (age > total) {
+      if (root.current) root.current.visible = false;
       onDone(fx.id);
       return;
     }
@@ -161,7 +179,7 @@ function Packet({ fx, onDone }: { fx: Extract<Fx, { kind: 'packet' }>; onDone: (
   });
 
   return (
-    <group>
+    <group ref={root}>
       <mesh geometry={trail}>
         <meshBasicMaterial ref={trailMat} color={c} transparent opacity={0.65} depthWrite={false} toneMapped={false} blending={AdditiveBlending} />
       </mesh>
@@ -186,14 +204,13 @@ function Burst({ fx, onDone }: { fx: Extract<Fx, { kind: 'burst' }>; onDone: (id
   const ringA = useRef<Mesh>(null);
   const ringB = useRef<Mesh>(null);
   const mats = useRef<MeshBasicMaterial[]>([]);
-  const start = useRef<number | null>(null);
   const color = useMemo(() => glow(fx.ok ? PALETTE.ok : PALETTE.err, 2.4), [fx.ok]);
   const total = fx.ok ? 1.3 : 1.6;
 
-  useFrame(({ clock }) => {
-    start.current ??= clock.elapsedTime;
-    const age = clock.elapsedTime - start.current;
+  useFrame(() => {
+    const age = ageOf(fx);
     if (age > total) {
+      if (group.current) group.current.visible = false;
       onDone(fx.id);
       return;
     }
@@ -254,14 +271,13 @@ function ArtifactPop({ fx, onDone }: { fx: Extract<Fx, { kind: 'artifact' }>; on
   const { reducedMotion } = useScene();
   const g = useRef<Group>(null);
   const mat = useRef<MeshBasicMaterial>(null);
-  const start = useRef<number | null>(null);
   const color = useMemo(() => glow(fx.color, 2.2), [fx.color]);
   const total = 2.4;
 
-  useFrame(({ clock }) => {
-    start.current ??= clock.elapsedTime;
-    const age = clock.elapsedTime - start.current;
+  useFrame(() => {
+    const age = ageOf(fx);
     if (age > total) {
+      if (g.current) g.current.visible = false;
       onDone(fx.id);
       return;
     }
@@ -364,7 +380,7 @@ function BeaconMarker({ beacon }: { beacon: Beacon }) {
       kind: 'incident',
       open,
       title: inc.message,
-      text: open ? `${INCIDENT_LABEL[inc.kind]} · ${clip(inc.message, 26)}` : `Resolved · ${INCIDENT_LABEL[inc.kind]}`,
+      text: open ? `${INCIDENT_LABEL[inc.kind]} · ${clip(inc.message, 36)}` : `Resolved · ${INCIDENT_LABEL[inc.kind]}`,
     },
     anchor,
   );

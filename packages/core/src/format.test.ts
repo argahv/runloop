@@ -58,6 +58,19 @@ describe('formatEvent', () => {
     expect(formatEvent(events.at(-1)!, s)).toMatchObject({ label: 'Run succeeded', severity: 'ok' });
   });
 
+  it('numbers retried task starts, with the state before or after the event', () => {
+    const starts = events.filter((x) => x.type === 'task.started' && x.payload.taskId === 'T3');
+    expect(starts).toHaveLength(2);
+    const before = foldExecution(events.slice(0, starts[1]!.sequence - 1));
+    const after = foldExecution(events.slice(0, starts[1]!.sequence));
+    expect(formatEvent(starts[1]!, before).label).toBe('Started T3 (attempt 2)');
+    expect(formatEvent(starts[1]!, after).label).toBe('Started T3 (attempt 2)');
+    expect(formatEvent(starts[0]!, foldExecution(events.slice(0, starts[0]!.sequence))).label).toBe('Started T3');
+    // Without the adjacent state the attempt is unknown, so it is left out.
+    expect(formatEvent(starts[1]!, s).label).toBe('Started T3');
+    expect(formatEvent(starts[1]!).label).toBe('Started T3');
+  });
+
   it('shows unknown events as warnings', () => {
     const u: UnknownEvent = {
       ...events[1]!,

@@ -10,7 +10,11 @@ import styles from './ReplayBar.module.css';
 /** Transport controls: prev / play / next, speed, time scrubber, live toggle. */
 export default function ReplayBar() {
   const store = useStudioStore();
-  const cursor = useStudio((s) => s.cursor);
+  // Not the whole cursor: replay playback replaces it every animation frame.
+  const live = useStudio((s) => s.cursor.mode === 'live');
+  const cursorPlaying = useStudio((s) => s.cursor.mode === 'replay' && s.cursor.playing);
+  useStudio((s) => (s.cursor.mode === 'replay' ? Math.floor(s.cursor.tMs / 100) : -1)); // re-render per 100 ms of playhead
+  useStudio((s) => s.playheadSeq);
   const runId = useStudio((s) => s.runId);
   const ended = useStudio((s) => s.ended);
   const settleMs = useStudio((s) => s.settleMs);
@@ -19,7 +23,6 @@ export default function ReplayBar() {
   const speed = useStudio((s) => s.speed);
   const s = store.getState();
 
-  const live = cursor.mode === 'live';
   const t = s.playheadMs();
   const end = s.endMs();
   const settled = ended && t >= settleMs;
@@ -27,7 +30,7 @@ export default function ReplayBar() {
   useTicker(live && runId !== null && !settled, 250);
 
   const disabled = runId === null || lastSequence === 0;
-  const playing = !disabled && (live ? !settled : cursor.playing);
+  const playing = !disabled && (live ? !settled : cursorPlaying);
 
   const incidents = useMemo(() => {
     const st = store.getState();
@@ -69,7 +72,8 @@ export default function ReplayBar() {
             type="range"
             className={styles.range}
             min={0}
-            max={Math.max(1, Math.round(end))}
+            // Rounded up to a whole step so the last event is reachable (seek clamps to the real end).
+            max={Math.max(100, Math.ceil(end / 100) * 100)}
             step={100}
             value={Math.round(t)}
             disabled={disabled}

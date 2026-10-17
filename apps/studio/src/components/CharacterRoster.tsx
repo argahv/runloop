@@ -2,9 +2,9 @@
 import { selectEmbodiedAgents } from '@runloop-world/core';
 import { useMemo, type CSSProperties } from 'react';
 import { useStudio, useStudioStore } from '../state/context';
-import { agentLook, characterStatusView } from '../state/view';
+import { agentLook } from '../state/view';
+import CharacterStatus from './CharacterStatus';
 import styles from './WorldView.module.css';
-import StatusBadge from './StatusBadge';
 
 /** Keyboard-reachable list of characters over the canvas (mirrors clicking them in 3D). */
 export default function CharacterRoster() {
@@ -20,8 +20,6 @@ export default function CharacterRoster() {
   return (
     <div className={styles.roster} role="group" aria-label="Characters">
       {agents.map((a) => {
-        const c = state.world.characters[a.id];
-        const view = characterStatusView(state.world.paused ? 'paused' : (c?.activity ?? 'idle'));
         const isSelected = selected === a.id;
         return (
           <button
@@ -34,7 +32,7 @@ export default function CharacterRoster() {
           >
             <span className="dot" aria-hidden="true" />
             <span className={styles.characterName}>{a.name}</span>
-            <StatusBadge view={view} />
+            <CharacterStatus agentId={a.id} />
           </button>
         );
       })}

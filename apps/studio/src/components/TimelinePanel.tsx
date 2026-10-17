@@ -33,8 +33,18 @@ export default function TimelinePanel() {
   }
 
   useEffect(() => {
-    if (!follow || current < 0) return;
-    listRef.current?.querySelector('[data-current="true"]')?.scrollIntoView({ block: 'nearest' });
+    const list = listRef.current;
+    const row = current >= 0 ? list?.querySelector<HTMLElement>('[data-current="true"]') : null;
+    if (!list || !row) return;
+    if (follow) {
+      row.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    // A seek while paused (scrub, ←/→, incident marker, "Move playhead here"):
+    // show the row if it is off-screen; a click on a visible row does not scroll.
+    const l = list.getBoundingClientRect();
+    const r = row.getBoundingClientRect();
+    if (r.top < l.top || r.bottom > l.bottom) row.scrollIntoView({ block: 'center' });
   }, [current, follow]);
 
   const onRow = (row: TimelineRow) => {
