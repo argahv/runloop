@@ -16,7 +16,11 @@ export interface CompiledWorld {
 
 /** Closed-form movement: walk `path` one cell per ticksPerCell, starting at startTick. */
 export interface Motion {
-  /** Cells from the start cell to the destination (inclusive). Length ≥ 1. */
+  /**
+   * Cells from the start cell to the destination (inclusive). Length ≥ 1.
+   * After a mid-step re-plan, path[0] is the cell being left and path[1] the
+   * cell being entered, so positions stay continuous.
+   */
   path: Cell[];
   startTick: number;
 }
