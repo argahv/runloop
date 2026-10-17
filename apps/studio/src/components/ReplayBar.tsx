@@ -5,16 +5,18 @@ import { useStudio, useStudioStore } from '../state/context';
 import { useTicker } from '../state/hooks';
 import { SPEEDS } from '../state/store';
 import { formatClockPair } from '../state/view';
+import { Button } from '../ui/Button';
+import { Icon } from '../ui/Icon';
 import styles from './ReplayBar.module.css';
 
-/** Transport controls: prev / play / next, speed, time scrubber, live toggle. */
-export default function ReplayBar() {
+/** Transport: previous / play / next, speed, scrubber with incident markers, live toggle. */
+export default function ReplayBar({ glass }: { glass?: boolean }) {
   const store = useStudioStore();
   // Not the whole cursor: replay playback replaces it every animation frame.
   const live = useStudio((s) => s.cursor.mode === 'live');
   const cursorPlaying = useStudio((s) => s.cursor.mode === 'replay' && s.cursor.playing);
   useStudio((s) => (s.cursor.mode === 'replay' ? Math.floor(s.cursor.tMs / 100) : -1)); // re-render per 100 ms of playhead
-  useStudio((s) => s.playheadSeq);
+  const playheadSeq = useStudio((s) => s.playheadSeq);
   const runId = useStudio((s) => s.runId);
   const ended = useStudio((s) => s.ended);
   const settleMs = useStudio((s) => s.settleMs);
@@ -37,94 +39,87 @@ export default function ReplayBar() {
     return st.stateAt(lastSequence).exec.incidents.map((i) => ({ ...i, tMs: st.timeOfSeq(i.seq) }));
   }, [store, lastSequence]);
 
-  return (
-    <div className={styles.wrap}>
-      <div className={styles.bar} role="group" aria-label="Playback">
-        <div className={styles.transport}>
-          <button type="button" className="btn btn-icon" onClick={s.stepPrev} disabled={disabled} aria-label="Previous event" title="Previous event (←)">
-            <span aria-hidden="true">⏮</span>
-          </button>
-          <button
-            type="button"
-            className={`btn btn-icon ${styles.play}`}
-            onClick={s.togglePlay}
-            disabled={disabled}
-            aria-label={playing ? 'Pause' : 'Play'}
-            title={`${playing ? 'Pause' : 'Play'} (Space)`}
-          >
-            <span aria-hidden="true">{playing ? '⏸' : '▶'}</span>
-          </button>
-          <button type="button" className="btn btn-icon" onClick={s.stepNext} disabled={disabled} aria-label="Next event" title="Next event (→)">
-            <span aria-hidden="true">⏭</span>
-          </button>
-        </div>
+  const pct = (ms: number) => `${end > 0 ? Math.min(100, (ms / end) * 100) : 0}%`;
 
-        <div className={styles.speeds} role="group" aria-label="Replay speed">
-          {SPEEDS.map((v) => (
-            <button key={v} type="button" className={`btn ${styles.speed}`} aria-pressed={speed === v} onClick={() => s.setSpeed(v)}>
-              {v}×
+  return (
+    <div className={styles.bar} role="group" aria-label="Playback" data-glass={glass || undefined}>
+      <div className={styles.transport}>
+        <Button variant="ghost" size="sm" iconOnly icon="skipBack" onClick={s.stepPrev} disabled={disabled} aria-label="Previous event" title="Previous event (←)" />
+        <button
+          type="button"
+          className={styles.play}
+          onClick={s.togglePlay}
+          disabled={disabled}
+          aria-label={playing ? 'Pause' : 'Play'}
+          title={`${playing ? 'Pause' : 'Play'} (Space)`}
+        >
+          <Icon name={playing ? 'pause' : 'play'} size={14} />
+        </button>
+        <Button variant="ghost" size="sm" iconOnly icon="skipForward" onClick={s.stepNext} disabled={disabled} aria-label="Next event" title="Next event (→)" />
+      </div>
+
+      <span className={styles.clock} aria-hidden="true">
+        {formatClockPair(t, end)}
+      </span>
+
+      <div className={styles.scrubber}>
+        <input
+          type="range"
+          className={styles.range}
+          min={0}
+          // Rounded up to a whole step so the last event is reachable (seek clamps to the real end).
+          max={Math.max(100, Math.ceil(end / 100) * 100)}
+          step={100}
+          value={Math.round(t)}
+          disabled={disabled}
+          onChange={(e) => s.seek(Number(e.target.value))}
+          aria-label="Playhead time"
+          aria-valuetext={`${formatClockPair(t, end)}, event ${playheadSeq} of ${lastSequence}`}
+          style={{ '--pct': pct(t) } as CSSProperties}
+        />
+        <div className={styles.markers}>
+          {incidents.map((i) => (
+            <button
+              key={i.eventId}
+              type="button"
+              className={styles.marker}
+              data-resolved={i.resolvedSeq !== null && i.resolvedSeq <= playheadSeq ? 'true' : undefined}
+              style={{ left: pct(i.tMs) }}
+              onClick={() => s.selectEvent(i.seq, { seek: true })}
+              aria-label={`Failure at ${formatClock(i.tMs)}: ${i.message}`}
+              title={`${formatClock(i.tMs)} · ${i.message}`}
+            >
+              <Icon name="alert" size={10} />
             </button>
           ))}
         </div>
+      </div>
 
-        <div className={styles.scrubber}>
-          <input
-            type="range"
-            className={styles.range}
-            min={0}
-            // Rounded up to a whole step so the last event is reachable (seek clamps to the real end).
-            max={Math.max(100, Math.ceil(end / 100) * 100)}
-            step={100}
-            value={Math.round(t)}
-            disabled={disabled}
-            onChange={(e) => s.seek(Number(e.target.value))}
-            aria-label="Playhead time"
-            aria-valuetext={formatClockPair(t, end)}
-            style={{ '--pct': `${end > 0 ? (t / end) * 100 : 0}%` } as CSSProperties}
-          />
-          <div className={styles.markers}>
-            {incidents.map((i) => (
-              <button
-                key={i.eventId}
-                type="button"
-                className={styles.marker}
-                data-resolved={i.resolvedSeq !== null && i.resolvedSeq <= s.playheadSeq ? 'true' : undefined}
-                style={{ left: `${end > 0 ? (i.tMs / end) * 100 : 0}%` }}
-                onClick={() => {
-                  s.seekToSeq(i.seq);
-                  if (i.agentId) s.selectAgent(i.agentId);
-                }}
-                aria-label={`Incident at ${formatClock(i.tMs)}: ${i.message}`}
-                title={`${formatClock(i.tMs)} · ${i.message}`}
-              >
-                <span aria-hidden="true">!</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <span className={styles.clock} aria-live="off">
-          {formatClockPair(t, end)}
-        </span>
-
-        <div className={styles.live}>
-          {!live && newSinceReplay > 0 && (
-            <button type="button" className={styles.newChip} onClick={s.goLive}>
-              Live • {newSinceReplay} new
-            </button>
-          )}
-          <button
-            type="button"
-            className={`btn ${styles.liveBtn}`}
-            aria-pressed={live}
-            onClick={s.goLive}
-            disabled={runId === null}
-            title="Follow the latest event (L)"
-          >
-            <span className={styles.liveDot} data-on={live && !ended && !disabled ? 'true' : undefined} aria-hidden="true" />
-            {live ? (ended ? 'Latest' : 'Live') : 'Go live'}
+      <div className={styles.speeds} role="group" aria-label="Replay speed">
+        {SPEEDS.map((v) => (
+          <button key={v} type="button" className={styles.speed} aria-pressed={speed === v} onClick={() => s.setSpeed(v)}>
+            {v}×
           </button>
-        </div>
+        ))}
+      </div>
+
+      <div className={styles.live}>
+        {!live && newSinceReplay > 0 && (
+          <button type="button" className={styles.newChip} onClick={s.goLive}>
+            {newSinceReplay} new
+          </button>
+        )}
+        <button
+          type="button"
+          className={styles.liveBtn}
+          aria-pressed={live}
+          onClick={s.goLive}
+          disabled={runId === null}
+          title="Follow the latest event (L)"
+        >
+          <span className={styles.liveDot} data-on={live && !ended && !disabled ? 'true' : undefined} aria-hidden="true" />
+          {live ? (ended ? 'Latest' : 'Live') : 'Go live'}
+        </button>
       </div>
     </div>
   );

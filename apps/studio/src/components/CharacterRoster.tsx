@@ -1,10 +1,11 @@
 'use client';
 import { selectEmbodiedAgents } from '@runloop-world/core';
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo } from 'react';
 import { useStudio, useStudioStore } from '../state/context';
 import { agentLook } from '../state/view';
+import { AgentDot } from '../ui/Chip';
 import CharacterStatus from './CharacterStatus';
-import styles from './WorldView.module.css';
+import styles from './WorldStage.module.css';
 
 /** Keyboard-reachable list of characters over the canvas (mirrors clicking them in 3D). */
 export default function CharacterRoster() {
@@ -28,9 +29,8 @@ export default function CharacterRoster() {
             className={styles.character}
             aria-pressed={isSelected}
             onClick={() => store.getState().selectAgent(isSelected ? null : a.id)}
-            style={{ '--role': agentLook(state.exec, world, a.id).color } as CSSProperties}
           >
-            <span className="dot" aria-hidden="true" />
+            <AgentDot color={agentLook(state.exec, world, a.id).color} />
             <span className={styles.characterName}>{a.name}</span>
             <CharacterStatus agentId={a.id} />
           </button>

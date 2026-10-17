@@ -7,7 +7,7 @@ import {
   type RunSummary,
   type StartRunResponse,
 } from '@runloop-world/events';
-import { API_BASE } from './config';
+import { apiBase } from './config';
 
 /** An HTTP error with the runtime's `{ error }` message when it sent one. */
 export class ApiError extends Error {
@@ -20,7 +20,7 @@ export class ApiError extends Error {
   }
 }
 
-export const apiUrl = (path: string) => `${API_BASE}${path}`;
+export const apiUrl = (path: string) => `${apiBase()}${path}`;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(apiUrl(path), { cache: 'no-store', ...init });
@@ -63,6 +63,15 @@ export async function getAllEvents(runId: string, after = 0): Promise<unknown[]>
     if (!page.hasMore || page.nextAfter <= cursor) return out;
     cursor = page.nextAfter;
   }
+}
+
+/** Stop the active scripted run (the runtime records run.completed{stopped}). */
+export function stopRun(runId: string): Promise<{ run: RunSummary }> {
+  return request<{ run: RunSummary }>(apiPaths.stop(runId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
 }
 
 export function startRun(missionId: string): Promise<StartRunResponse> {

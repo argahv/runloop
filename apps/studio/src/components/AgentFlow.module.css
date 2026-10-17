@@ -1,77 +1,45 @@
 .flow {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  min-height: 48px;
-}
-.heading {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--faint);
-  white-space: nowrap;
-}
-.empty {
-  margin: 0;
-  color: var(--muted);
-}
-.chips {
-  list-style: none;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .arrow {
-  color: var(--faint);
+  display: grid;
+  place-items: center;
+  color: var(--rl-text-faint);
 }
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--panel-2);
-}
-.icon {
-  font-size: 12px;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px 0 7px;
+  border-radius: var(--rl-radius-pill);
+  background: var(--rl-surface-2);
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  white-space: nowrap;
 }
 .label {
-  font-weight: 600;
-  color: var(--text-strong);
+  color: var(--rl-text);
+  font-weight: 500;
 }
 .status {
-  font-size: 11px;
-  color: var(--muted);
+  color: inherit;
 }
 .chip[data-tone='ok'] {
-  border-color: rgba(52, 211, 153, 0.5);
-}
-.chip[data-tone='ok'] .icon,
-.chip[data-tone='ok'] .status {
-  color: var(--ok);
-}
-.chip[data-tone='live'] {
-  border-color: var(--cyan);
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.25);
-}
-.chip[data-tone='live'] .icon,
-.chip[data-tone='live'] .status {
-  color: var(--cyan);
+  color: var(--rl-success);
 }
 .chip[data-tone='err'] {
-  border-color: var(--err);
+  color: var(--rl-failure);
 }
-.chip[data-tone='err'] .icon,
-.chip[data-tone='err'] .status {
-  color: var(--err);
+.chip[data-tone='warn'] {
+  color: var(--rl-warning);
+}
+.chip[data-tone='live'] {
+  color: var(--rl-accent-text);
+  background: var(--rl-accent-soft);
 }

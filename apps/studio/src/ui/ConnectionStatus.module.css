@@ -1,0 +1,59 @@
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--rl-radius-pill);
+  background: var(--rl-surface-2);
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.status[data-tone='live'] {
+  color: var(--rl-accent-text);
+  background: var(--rl-accent-soft);
+}
+.status[data-tone='err'] {
+  color: var(--rl-failure);
+  background: color-mix(in srgb, var(--rl-failure) 12%, transparent);
+}
+.status[data-tone='warn'] {
+  color: var(--rl-warning);
+  background: color-mix(in srgb, var(--rl-warning) 12%, transparent);
+}
+.status[data-tone='ok'] {
+  color: var(--rl-success);
+}
+.icon {
+  display: inline-grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+}
+.text {
+  color: inherit;
+}
+.extra {
+  color: var(--rl-text-muted);
+  font-weight: 500;
+}
+/* Live: a restrained pulse, because events are arriving (rule zero). */
+.pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+  animation: pulse 1.8s var(--rl-ease-out) infinite;
+}
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}

@@ -184,7 +184,7 @@ export function glowPaths(world: CompiledWorld): GlowPath[] {
     const zone = world.zonesById[s.zoneId];
     if (zone && zone.kind !== 'hub' && zone.door) continue;
     const p = shortestFromHub(s.slots[0]!);
-    if (p) out.push({ key: `hub>${s.id}`, color: zone?.color ?? '#f59e0b', cells: [...p], branch: false });
+    if (p) out.push({ key: `hub>${s.id}`, color: zone?.color ?? '#9297a2', cells: [...p], branch: false });
   }
   return out;
 }
@@ -228,14 +228,16 @@ export const yawFor = (dx: number, dy: number) => Math.atan2(dx, dy);
 /** Y rotation for a world-engine heading (radians in grid space, 0 = +x, π/2 = +y). */
 export const yawForHeading = (heading: number) => Math.atan2(Math.cos(heading), Math.sin(heading));
 
+/** The zone colour behind a station (the scene desaturates it; see palette.ts). */
 export function stationColor(world: CompiledWorld, s: Station): string {
-  return world.zonesById[s.zoneId]?.color ?? '#f59e0b';
+  return world.zonesById[s.zoneId]?.color ?? '#9297a2';
 }
 
 /**
  * Station an incident marker belongs to. Prefers the station the agent was
- * working at for that task (remembered in `cache`), else the first station
- * the activity rules map the task kind to.
+ * working at for that task (remembered in `cache`), else the station the
+ * activity rules give the failing call's tool category (traced runs), else
+ * the first station the rules map the task kind to.
  */
 export function incidentStationId(
   world: CompiledWorld,
@@ -250,10 +252,24 @@ export function incidentStationId(
     cache.set(inc.eventId, ch.stationId);
     return ch.stationId;
   }
-  const task = inc.taskId ? state.exec.tasks[inc.taskId] : undefined;
-  if (!task) return null;
-  const kind = matchActivityRule(world.def.activityRules, { taskKind: task.kind, permission: false });
+  const exec = state.exec;
+  const call = inc.kind === 'tool_error' || inc.kind === 'tool_failed' ? exec.toolCalls.get(inc.refId) : undefined;
+  const agent = inc.agentId ? exec.agents[inc.agentId] : undefined;
+  const category = call?.category ?? (agent?.lastCategory && agent.lastCategory.taskId === inc.taskId ? agent.lastCategory.category : null);
+  const task = inc.taskId ? exec.tasks[inc.taskId] : undefined;
+  if (!task && !category) return null;
+  const kind = matchActivityRule(world.def.activityRules, { taskKind: task?.kind ?? null, toolCategory: category, permission: false });
   return (kind && world.stationsByKind[kind]?.[0]?.id) || null;
+}
+
+/** Where a zone's sign stands: the room corner farthest from the hub (the hub's own sign sits at its front corner). */
+export function zoneSignCell(world: CompiledWorld, zone: Zone): [number, number] {
+  const [rx, ry, rw, rh] = zone.rect;
+  const [hx, hy] = world.def.hub.center;
+  if (zone.kind === 'hub') return [rx + rw - 0.5, ry + rh - 0.5];
+  const cx = rx + rw / 2;
+  const cy = ry + rh / 2;
+  return [cx < hx ? rx - 0.5 : rx + rw - 0.5, cy < hy ? ry - 0.5 : ry + rh - 0.5];
 }
 
 /** Cheap deterministic per-cell noise in [0, 1). */

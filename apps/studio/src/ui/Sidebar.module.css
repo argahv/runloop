@@ -1,0 +1,116 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: var(--rl-space-4) var(--rl-space-3);
+  gap: var(--rl-space-5);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px var(--rl-space-2);
+  border-radius: var(--rl-radius-control);
+}
+.mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--rl-surface-2);
+  color: var(--rl-accent-text);
+  flex: none;
+}
+.wordmark {
+  font-size: var(--rl-text-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.product {
+  color: var(--rl-text-muted);
+  font-weight: 500;
+}
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--rl-space-3);
+  height: 36px;
+  padding: 0 var(--rl-space-3);
+  border-radius: var(--rl-radius-control);
+  color: var(--rl-text-muted);
+  font-weight: 500;
+  transition:
+    background-color var(--rl-dur-instant) var(--rl-ease-out),
+    color var(--rl-dur-instant) var(--rl-ease-out);
+}
+.item:hover {
+  background: var(--rl-surface-2);
+  color: var(--rl-text);
+}
+.item[aria-current='page'] {
+  background: var(--rl-surface-2);
+  color: var(--rl-text);
+}
+.item[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--rl-accent-text);
+}
+.item[aria-current='page'] svg {
+  color: var(--rl-accent-text);
+}
+.label {
+  white-space: nowrap;
+}
+.extra {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 calc(-1 * var(--rl-space-3));
+  padding: 0 var(--rl-space-3);
+}
+.footer {
+  margin-top: auto;
+}
+
+/* Rail: icons only (labels stay available to assistive tech and as tooltips). */
+.sidebar[data-rail] .wordmark,
+.sidebar[data-rail] .label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+.sidebar[data-rail] {
+  padding: var(--rl-space-4) var(--rl-space-2);
+  align-items: center;
+}
+.sidebar[data-rail] .item {
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+}
+.sidebar[data-rail] .item[aria-current='page']::before {
+  left: -10px;
+}
+.sidebar[data-rail] .brand {
+  padding: 2px;
+}
+.sidebar[data-rail] .footer {
+  width: 100%;
+}

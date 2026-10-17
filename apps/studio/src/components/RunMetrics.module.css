@@ -1,0 +1,216 @@
+.metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl-space-5);
+}
+.note {
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--rl-space-2);
+}
+.metrics[data-variant='compact'] .tiles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--rl-space-3);
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-surface-2);
+}
+.tileLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tileValue {
+  font-size: var(--rl-text-lg);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.metrics[data-variant='full'] .tileValue {
+  font-size: var(--rl-text-h3);
+}
+.tileValue[data-tone='err'] {
+  color: var(--rl-failure);
+}
+.tileValue[data-tone='ok'] {
+  color: var(--rl-success);
+}
+.tileValue[data-tone='warn'] {
+  color: var(--rl-warning);
+}
+.tileValue .none {
+  font-size: var(--rl-text-sm);
+  font-weight: 400;
+}
+.tileSub {
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+}
+.tileAction {
+  margin-top: 2px;
+  font-size: var(--rl-text-2xs);
+}
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.link {
+  color: var(--rl-text);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  border-radius: 4px;
+}
+.none {
+  color: var(--rl-text-muted);
+  font-family: var(--rl-font-sans);
+  font-style: italic;
+}
+.muted {
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+}
+.foot {
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+}
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl-space-2);
+}
+.h3 {
+  color: var(--rl-text-faint);
+  font-size: var(--rl-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.barRow {
+  display: grid;
+  grid-template-columns: minmax(96px, 140px) minmax(40px, 1fr) 36px minmax(64px, auto);
+  align-items: center;
+  gap: var(--rl-space-3);
+  width: 100%;
+  min-height: 30px;
+  padding: 0 var(--rl-space-2);
+  border-radius: var(--rl-radius-sm);
+  text-align: left;
+  font-size: var(--rl-text-xs);
+}
+button.barRow:hover {
+  background: var(--rl-surface-2);
+}
+.barLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.barLabel svg {
+  flex: none;
+  color: var(--rl-text-muted);
+}
+.barTrack {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--rl-surface-2);
+  overflow: hidden;
+}
+button.barRow:hover .barTrack {
+  background: var(--rl-surface-3);
+}
+.barFill {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: 4px;
+  background: var(--rl-text-muted);
+}
+.barCount {
+  font-family: var(--rl-font-mono);
+  text-align: right;
+}
+.barErrors {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+  white-space: nowrap;
+}
+.barErrors[data-some] {
+  color: var(--rl-failure);
+}
+.tableWrap {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--rl-text-xs);
+}
+.table th,
+.table td {
+  padding: 7px var(--rl-space-2);
+  text-align: left;
+  white-space: nowrap;
+  box-shadow: inset 0 -1px 0 var(--rl-line);
+}
+.table thead th {
+  color: var(--rl-text-faint);
+  font-size: var(--rl-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.table td code {
+  font-size: var(--rl-text-2xs);
+}
+.right {
+  text-align: right !important;
+  font-family: var(--rl-font-mono);
+}
+.agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  border-radius: 4px;
+}
+.agent:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.metrics[data-variant='compact'] .barRow {
+  grid-template-columns: minmax(80px, 110px) minmax(30px, 1fr) 28px auto;
+  gap: var(--rl-space-2);
+}
+
+.table td.wrap {
+  white-space: normal;
+  min-width: 180px;
+}

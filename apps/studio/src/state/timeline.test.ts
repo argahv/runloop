@@ -1,6 +1,7 @@
+import { foldExecution } from '@runloop-world/core';
 import { CODING_MISSION, codingMissionFixture } from '@runloop-world/testkit';
 import { describe, expect, it } from 'vitest';
-import { buildTimelineRows, formatDuration, rowStatusAt } from './timeline';
+import { buildTimelineRows, formatDuration, rowIndexBySeq, rowStatusAt, selectedRow } from './timeline';
 
 const events = codingMissionFixture();
 const t0 = Date.parse(events[0]!.timestamp);
@@ -72,5 +73,27 @@ describe('timeline rows', () => {
     expect(formatDuration(380)).toBe('380 ms');
     expect(formatDuration(1450)).toBe('1.4 s');
     expect(formatDuration(125_000)).toBe('2 m 05 s');
+  });
+});
+
+describe('selected row', () => {
+  const exec = foldExecution(events);
+  const rows = buildTimelineRows(events, timeOfSeq, exec);
+  const bySeq = rowIndexBySeq(rows);
+
+  it('marks the event’s own row, or the agent’s latest row for an event that is no row', () => {
+    const failing = rows.findIndex((r) => r.status === 'error');
+    expect(selectedRow(rows, bySeq, rows, rows[failing]!.endSeq, 'tester')).toEqual({ index: failing, hiddenSeq: null });
+    const stateChange = events.find((e) => e.type === 'agent.state_changed' && !bySeq.has(e.sequence))!;
+    const agent = (stateChange.payload as { agentId: string }).agentId;
+    const { index } = selectedRow(rows, bySeq, rows, stateChange.sequence, agent);
+    expect(rows[index]!.actorId).toBe(agent);
+    expect(rows[index]!.seq).toBeLessThanOrEqual(stateChange.sequence);
+  });
+
+  it('marks nothing (and says so) when the filters hide the selected event’s row', () => {
+    const failing = rows.find((r) => r.status === 'error')!;
+    const visible = rows.filter((r) => r !== failing);
+    expect(selectedRow(rows, bySeq, visible, failing.endSeq, failing.actorId)).toEqual({ index: -1, hiddenSeq: failing.endSeq });
   });
 });

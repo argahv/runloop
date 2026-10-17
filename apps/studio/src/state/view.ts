@@ -9,6 +9,7 @@ import {
 } from '@runloop-world/core';
 import type { RunStatus, TaskKind } from '@runloop-world/events';
 import type { Activity, CompiledWorld, PresentationState } from '@runloop-world/world-engine';
+import { identityColor } from './identity';
 
 /** Every status is shown as icon + text (never colour alone); `tone` picks the colour. */
 export interface StatusView {
@@ -24,6 +25,8 @@ export const KIND_LABEL: Record<TaskKind, string> = {
   fix: 'Fix',
   approval: 'Approval',
   deploy: 'Deploy',
+  turn: 'Turn',
+  delegated: 'Delegated',
 };
 
 const FLOW_STATUS: Record<FlowChip['status'], StatusView> = {
@@ -69,7 +72,11 @@ const RUN_STATUS: Record<RunStatus | RunExecStatus, StatusView> = {
   interrupted: { icon: '⚠', text: 'interrupted', tone: 'warn' },
 };
 
-export function runStatusView(status: RunStatus | RunExecStatus, paused = false): StatusView {
+/** A traced session that ended normally is stored as `stopped`; it reads as "ended" (plan §6.6). */
+const TRACED_ENDED: StatusView = { icon: '■', text: 'ended', tone: 'muted' };
+
+export function runStatusView(status: RunStatus | RunExecStatus, paused = false, traced = false): StatusView {
+  if (traced && status === 'stopped') return TRACED_ENDED;
   return paused && status === 'running' ? RUN_STATUS.paused : RUN_STATUS[status];
 }
 
@@ -95,18 +102,16 @@ export function formatClockPair(tMs: number, endMs: number): string {
 
 export interface AgentLook {
   name: string;
-  /** CSS colour (the world's character preset colour for embodied agents). */
+  /** CSS colour: the agent's identity hue (tokens.css --rl-id-N), neutral for non-embodied agents and 'system'. */
   color: string;
   embodied: boolean;
 }
 
-/** Display name and colour for an agent id ('system' and unknown ids included). */
-export function agentLook(exec: ExecState, world: CompiledWorld | null, agentId: string): AgentLook {
+/** Display name and identity colour for an agent id ('system' and unknown ids included). */
+export function agentLook(exec: ExecState, _world: CompiledWorld | null, agentId: string): AgentLook {
   const a = exec.agents[agentId];
-  if (!a) return { name: agentId === 'system' ? 'System' : agentId, color: 'var(--role-system)', embodied: false };
-  if (!a.embodied || !world) return { name: a.name, color: 'var(--role-system)', embodied: a.embodied };
-  const preset = (a.characterPreset ? world.presetsById[a.characterPreset] : undefined) ?? world.presetsById[world.def.defaultPreset];
-  return { name: a.name, color: preset?.color ?? 'var(--role-system)', embodied: true };
+  if (!a) return { name: agentId === 'system' ? 'System' : agentId, color: 'var(--rl-id-neutral)', embodied: false };
+  return { name: a.name, color: identityColor(exec, agentId), embodied: a.embodied };
 }
 
 const TASK_STATUS: Record<TaskStatus, StatusView> = {

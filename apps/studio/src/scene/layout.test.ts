@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { ReplayIndex } from '@runloop-world/replay';
-import { codingMissionFixture } from '@runloop-world/testkit';
+import { codingMissionFixture, runBuilder } from '@runloop-world/testkit';
 import { loadWorld, type Cell } from '@runloop-world/world-engine';
 import { describe, expect, it } from 'vitest';
 import { badgeDetail, STATE_BADGE } from './badges';
@@ -15,6 +15,7 @@ import {
   incidentStationId,
   pathPoints,
   stationFront,
+  zoneSignCell,
 } from './layout';
 
 const world = loadWorld(JSON.parse(readFileSync(new URL('../../../../worlds/research-campus/world.json', import.meta.url), 'utf8')));
@@ -64,6 +65,14 @@ describe('scene layout (derived from the world definition)', () => {
     expect(pts).toHaveLength(4);
   });
 
+  it('puts each environment sign at the room corner away from the Atrium', () => {
+    const at = (id: string) => zoneSignCell(world, world.zonesById[id]!);
+    expect(at('research')).toEqual([0.5, 0.5]); // north-west: top of the iso view
+    expect(at('build')).toEqual([22.5, 0.5]);
+    expect(at('test')).toEqual([0.5, 18.5]);
+    expect(at('deploy')).toEqual([22.5, 18.5]);
+  });
+
   it('faces stations towards their first slot', () => {
     expect(stationFront(world.stationsById['archive']!)).toEqual([0, 1]);
     expect(stationFront(world.stationsById['testrig']!)).toEqual([0, -1]);
@@ -84,6 +93,28 @@ describe('scene derivations from Layer 1/2 state', () => {
     const cache = new Map<string, string>();
     expect(incidentStationId(world, index.stateAt(failSeq), inc, cache)).toBe('probe');
     expect(cache.get(inc.eventId)).toBe('probe');
+  });
+
+  it('places a traced failing call by its tool category (a failing Bash test run → the Test Chamber)', () => {
+    const b = runBuilder({ namespace: 0x5f });
+    b.add('run.started', {
+      title: 'Claude Code · demo',
+      missionId: 'claude-code',
+      worldId: 'research-campus',
+      adapter: { id: 'claude-code', kind: 'external', label: 'Claude Code' },
+      mode: 'traced',
+      source: { kind: 'claude-code', sessionId: 's', segment: 1, projectLabel: 'demo' },
+    });
+    b.add('agent.registered', { agentId: 'main', name: 'Claude', role: 'main agent', model: null, tools: [], embodied: true, characterPreset: 'claude' });
+    b.add('task.created', { taskId: 'turn-1', title: 'Turn 1', kind: 'turn', dependsOn: [] });
+    b.add('task.started', { taskId: 'turn-1', agentId: 'main' });
+    b.add('tool.call_started', { callId: 'c1', agentId: 'main', taskId: 'turn-1', tool: 'Bash', category: 'test', inputSummary: 'node --test' });
+    b.add('tool.call_completed', { callId: 'c1', status: 'error', durationMs: 120, outputSummary: 'Exit code 1' });
+    const state = new ReplayIndex(world, b.events).latest();
+    const inc = state.exec.incidents[0]!;
+    // Not remembered (the character moved on): the category rule decides, not the task kind ("turn" has no rule).
+    const where = incidentStationId(world, { ...state, world: { ...state.world, characters: {} } }, inc, new Map());
+    expect(world.stationsById[where!]!.kind).toBe('test');
   });
 
   it('badge text comes from the state (icon + label for every state, tool / reason detail)', () => {

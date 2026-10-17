@@ -10,21 +10,46 @@ import {
 import { initialRunState, ReplayIndex, type RunState } from '@runloop-world/replay';
 import { arrivalTick, loadWorld, type CompiledWorld } from '@runloop-world/world-engine';
 import { createStore, type StoreApi } from 'zustand/vanilla';
+import { setApiBaseOverride } from '../lib/config';
 import type { CameraMode, Quality, SceneFrame } from '../scene/types';
-import { advancePlayback, nextEventTime, prevEventTime } from './playback';
+import { EMPTY_FILTER, type TraceFilter } from './filters';
+import { EMPTY_ONBOARDING, type OnboardingProgress } from './onboarding';
+import { advancePlayback } from './playback';
+import type { MotionPref, ThemePref } from './prefs';
+import { agentOfEvent, latestEventOf, type InspectorTab } from './selection';
 
 export type Speed = 0.5 | 1 | 2 | 4;
 export const SPEEDS: readonly Speed[] = [0.5, 1, 2, 4];
 
 /**
- * Where the playhead is. Live follows the run in (estimated) server time;
- * replay is a fixed time since run start that only the user (or playback) moves.
+ * Where the playhead is. Live follows the run in (estimated) server time.
+ * Replay is a time since run start plus the exact event shown (`seq`): events
+ * can share a millisecond, so the event is kept, not derived from the time.
+ * Only the user (or playback) moves a replay cursor; events arriving later
+ * never change what it shows.
  */
-export type Cursor = { mode: 'live' } | { mode: 'replay'; tMs: number; playing: boolean; speed: Speed };
+export type Cursor = { mode: 'live' } | { mode: 'replay'; tMs: number; seq: number; playing: boolean; speed: Speed };
 
-export type Tab = 'timeline' | 'logs' | 'state' | 'metadata';
+export type Tab = 'timeline' | 'logs' | 'metrics' | 'state' | 'metadata';
 export type ConnStatus = 'idle' | 'loading' | 'streaming' | 'reconnecting' | 'complete' | 'error';
 export type RuntimeStatus = 'unknown' | 'online' | 'offline';
+/** Live World main view: the 3D world, or the 2D Network view (agent graph or agents table). */
+export type WorldView = 'world' | 'graph';
+
+/** Claude Code ingest as reported by /api/health (absent on runtimes without the tracer). */
+export interface IngestStatus {
+  claudeCode: { protocol: number } | null;
+}
+
+/** A deep-link target waiting for its events to arrive. */
+export interface PendingFocus {
+  /** The event the inspector shows (the playhead moves there unless `at` says otherwise). */
+  seq: number | null;
+  /** The agent whose card the inspector shows (when no event is named). */
+  agentId: string | null;
+  /** The paused playhead (event sequence); null keeps the cursor where it is (live). */
+  at?: number | null;
+}
 
 /** Something received that is not a valid event envelope (kept so the Logs tab can show it). */
 export interface RawEntry {
@@ -37,7 +62,14 @@ export interface RawEntry {
 
 export interface StudioState {
   // ── runtime + runs list ───────────────────────────────────────────
-  runtime: { status: RuntimeStatus; version: string | null; activeRunId: string | null };
+  runtime: {
+    status: RuntimeStatus;
+    version: string | null;
+    activeRunId: string | null;
+    /** null = this runtime does not report ingest (older runtime). */
+    ingest: IngestStatus | null;
+    tracedRunIds: string[];
+  };
   runs: RunSummary[];
 
   // ── the open run ─────────────────────────────────────────────────
@@ -69,16 +101,33 @@ export interface StudioState {
   /** Replay speed preference (also used when a replay starts from live). */
   speed: Speed;
 
-  // ── selection + view options ─────────────────────────────────────
+  // ── selection (one state shared by world, timeline, logs and inspector) ──
+  /** Selected event (sequence). */
+  selectedSeq: number | null;
   selectedAgentId: string | null;
   selectedStationId: string | null;
+  inspectorTab: InspectorTab;
+  /** Deep-link target applied once its events have arrived. */
+  pendingFocus: PendingFocus | null;
+
+  // ── view options ─────────────────────────────────────────────────
   tab: Tab;
+  worldView: WorldView;
+  filter: TraceFilter;
+  themePref: ThemePref;
+  motionPref: MotionPref;
+  /** Viewer's runtime URL override (null = build default). */
+  apiBaseOverride: string | null;
+  /** Bumped to reconnect the open run (retry after an error). */
+  connectNonce: number;
   cameraMode: CameraMode;
   follow: boolean;
   quality: Quality;
   reducedMotion: boolean;
   /** Artifact open in the viewer. */
   viewArtifactId: string | null;
+  /** What this viewer has done (Overview checklist; kept in this browser only). */
+  onboarding: OnboardingProgress;
 
   // ── actions ──────────────────────────────────────────────────────
   setRuntime(r: Partial<StudioState['runtime']>): void;
@@ -107,15 +156,36 @@ export interface StudioState {
   /** Advance replay playback by wall-clock `dtMs` (called every animation frame). */
   advance(dtMs: number): void;
 
+  /**
+   * Select an event: its agent and that agent's station follow, and the
+   * inspector shows the event. `seek` also moves the playhead to it.
+   */
+  selectEvent(seq: number | null, opts?: { seek?: boolean }): void;
+  /** Select an agent: its station follows, its latest event at the playhead is highlighted, the inspector shows its card. */
   selectAgent(agentId: string | null): void;
   selectStation(stationId: string | null): void;
+  clearSelection(): void;
+  setInspectorTab(tab: InspectorTab): void;
+  /** Focus a deep-link target now, or as soon as its events arrive. */
+  focusDeepLink(target: PendingFocus): void;
   cycleAgent(dir: 1 | -1): void;
   setTab(tab: Tab): void;
+  setWorldView(view: WorldView): void;
+  setFilter(filter: TraceFilter): void;
+  setThemePref(theme: ThemePref): void;
+  setMotionPref(motion: MotionPref): void;
+  /** Point the Studio at another runtime URL (null = build default); starts over with that runtime. */
+  setApiBase(url: string | null): void;
+  retryConnection(): void;
   setCameraMode(mode: CameraMode): void;
   toggleFollow(): void;
   setQuality(q: Quality): void;
   setReducedMotion(on: boolean): void;
   openArtifact(artifactId: string | null): void;
+  setOnboarding(patch: Partial<OnboardingProgress>): void;
+
+  /** A world view mounted (characters walk; a finished run settles over time). Returns the unmount. */
+  mountWorld(): () => void;
 
   // ── reads (non-reactive; pair them with lastSequence / playheadSeq) ─
   events(): readonly AnyEvent[];
@@ -164,6 +234,10 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
   let lastTimestamp: string | null = null;
   let gapSince: number | null = null;
   let frameMemo: { seq: number; state: RunState } | null = null;
+  /** Live events arrived before the run ended (else it was already over when opened: no settle animation). */
+  let sawLive = false;
+  /** World views mounted; without one there is nothing to settle. */
+  let worldsMounted = 0;
   const effectListeners = new Set<(events: readonly AnyEvent[]) => void>();
 
   const emitEffects = (events: readonly AnyEvent[]) => {
@@ -188,6 +262,7 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
     lastTimestamp = null;
     gapSince = null;
     frameMemo = null;
+    sawLive = false;
   };
 
   /**
@@ -214,6 +289,8 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
    */
   const livePlayheadMs = (s: StudioState): number => {
     if (!index || index.runStartMs === null) return 0;
+    // A run that was over when opened, or with no world on screen, shows its end at once.
+    if (s.ended && (!sawLive || worldsMounted === 0)) return s.settleMs;
     const serverNow = now() - (clockOffsetMs ?? 0);
     const t = Math.max(index.durationMs, serverNow - index.runStartMs);
     return s.ended ? Math.min(t, s.settleMs) : t;
@@ -227,20 +304,49 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
 
   const seqAt = (cursor: Cursor): number => {
     if (!index) return 0;
-    return cursor.mode === 'live' ? index.lastSequence : index.seqAtTime(cursor.tMs);
+    return cursor.mode === 'live' ? index.lastSequence : Math.min(cursor.seq, index.lastSequence);
   };
 
-  /** Character's station at the current playhead, for selection. */
-  const stationOf = (agentId: string | null): string | null => {
+  /** Character's station after event `seq` (default: the playhead), for selection. */
+  const stationOf = (agentId: string | null, seq?: number): string | null => {
     if (!agentId || !index) return null;
-    const s = store.getState();
-    return index.stateAt(s.playheadSeq).world.characters[agentId]?.stationId ?? null;
+    return index.stateAt(seq ?? store.getState().playheadSeq).world.characters[agentId]?.stationId ?? null;
   };
 
-  const toReplay = (s: StudioState, tMs: number, playing?: boolean): Cursor => {
+  /** Apply a deep-link target whose events have arrived; drop it once it can never apply. */
+  const applyPendingFocus = () => {
+    const s = store.getState();
+    const p = s.pendingFocus;
+    if (!p || !index) return;
+    const at = p.at ?? null;
+    const seqReady = (p.seq === null || index.lastSequence >= p.seq) && (at === null || index.lastSequence >= at);
+    const agentReady = p.agentId === null || index.latest().exec.agents[p.agentId] !== undefined;
+    if (!seqReady || !agentReady) {
+      if (s.ended) store.setState({ pendingFocus: null }); // the run is complete: what is missing never comes
+      return;
+    }
+    store.setState({ pendingFocus: null });
+    // The playhead first: an explicit one, else the named event. With neither, a live run stays live.
+    const playhead = at ?? p.seq;
+    if (playhead !== null) s.seekToSeq(playhead);
+    // Then what the inspector shows: the event (its own agent), else the agent's card.
+    if (p.seq !== null) s.selectEvent(p.seq);
+    else if (p.agentId !== null) s.selectAgent(p.agentId);
+  };
+
+  /** A replay cursor at `tMs`, showing event `seq` (default: the last event at that time). */
+  const toReplay = (s: StudioState, tMs: number, opts: { playing?: boolean; seq?: number } = {}): Cursor => {
     const prev = s.cursor.mode === 'replay' ? s.cursor : null;
     const clamped = Math.max(0, Math.min(endMsOf(s), tMs));
-    return { mode: 'replay', tMs: clamped, playing: playing ?? prev?.playing ?? false, speed: s.speed };
+    const seq = opts.seq ?? (index ? index.seqAtTime(clamped) : 0);
+    return { mode: 'replay', tMs: clamped, seq, playing: opts.playing ?? prev?.playing ?? false, speed: s.speed };
+  };
+
+  /** Pause on event `seq` exactly (0 = before the first event). */
+  const cursorAtSeq = (s: StudioState, seq: number): Cursor | null => {
+    if (!index) return null;
+    const n = Math.max(0, Math.min(index.lastSequence, Math.floor(seq)));
+    return toReplay(s, index.timeOfSeq(n), { playing: false, seq: n });
   };
 
   const setCursor = (cursor: Cursor) => {
@@ -267,7 +373,7 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
   };
 
   const store = createStore<StudioState>()((set, get) => ({
-    runtime: { status: 'unknown', version: null, activeRunId: null },
+    runtime: { status: 'unknown', version: null, activeRunId: null, ingest: null, tracedRunIds: [] },
     runs: [],
 
     runId: null,
@@ -288,14 +394,24 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
     newSinceReplay: 0,
     speed: 1,
 
+    selectedSeq: null,
     selectedAgentId: null,
     selectedStationId: null,
+    inspectorTab: 'run',
+    pendingFocus: null,
     tab: 'timeline',
+    worldView: 'world',
+    filter: EMPTY_FILTER,
+    themePref: 'system',
+    motionPref: 'system',
+    apiBaseOverride: null,
+    connectNonce: 0,
     cameraMode: 'iso',
     follow: false,
     quality: 'high',
     reducedMotion: false,
     viewArtifactId: null,
+    onboarding: EMPTY_ONBOARDING,
 
     setRuntime: (r) => set((s) => ({ runtime: { ...s.runtime, ...r } })),
 
@@ -324,8 +440,11 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
         cursor: { mode: 'live' },
         playheadSeq: 0,
         newSinceReplay: 0,
+        selectedSeq: null,
         selectedAgentId: null,
         selectedStationId: null,
+        inspectorTab: 'run',
+        pendingFocus: null,
         viewArtifactId: null,
       });
     },
@@ -402,6 +521,7 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
       const gap = missing && prevGap && missing.from === prevGap.from && missing.to === prevGap.to ? prevGap : missing;
 
       const wasReplay = get().cursor.mode === 'replay';
+      if (source === 'live' && released.length > 0 && !get().ended) sawLive = true;
       set({
         gap,
         ...(conflicts.length ? { warnings: [...get().warnings, ...conflicts] } : {}),
@@ -433,8 +553,8 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
     seek: (tMs) => setCursor(toReplay(get(), tMs)),
 
     seekToSeq: (seq) => {
-      if (!index) return;
-      setCursor(toReplay(get(), index.timeOfSeq(seq), false));
+      const c = cursorAtSeq(get(), seq);
+      if (c) setCursor(c);
     },
 
     play: () => {
@@ -442,12 +562,13 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
       const end = endMsOf(s);
       const t = s.cursor.mode === 'replay' ? s.cursor.tMs : livePlayheadMs(s);
       // At the end of a finished run, play restarts from the beginning.
-      setCursor(toReplay(s, t >= end - 1 && s.ended ? 0 : t, true));
+      if (t >= end - 1 && s.ended) setCursor(toReplay(s, 0, { playing: true }));
+      else setCursor(toReplay(s, t, { playing: true, seq: s.playheadSeq }));
     },
 
     pause: () => {
       const s = get();
-      setCursor(toReplay(s, s.cursor.mode === 'replay' ? s.cursor.tMs : livePlayheadMs(s), false));
+      setCursor(toReplay(s, s.cursor.mode === 'replay' ? s.cursor.tMs : livePlayheadMs(s), { playing: false, seq: s.playheadSeq }));
     },
 
     togglePlay: () => {
@@ -458,23 +579,20 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
       else s.play();
     },
 
+    // One event at a time (events can share a millisecond).
     stepNext: () => {
       if (!index) return;
       const s = get();
-      const from = s.cursor.mode === 'replay' ? s.cursor.tMs : livePlayheadMs(s);
-      const t = nextEventTime(index, from);
-      if (t === null) return;
       const before = s.playheadSeq;
-      setCursor(toReplay(s, t, false));
-      const after = get().playheadSeq;
-      if (after > before) emitEffects(index.events.slice(before, after));
+      if (before >= index.lastSequence) return;
+      setCursor(cursorAtSeq(s, before + 1)!);
+      emitEffects(index.events.slice(before, before + 1));
     },
 
     stepPrev: () => {
       if (!index) return;
       const s = get();
-      const from = s.cursor.mode === 'replay' ? s.cursor.tMs : livePlayheadMs(s);
-      setCursor(toReplay(s, prevEventTime(index, from), false));
+      setCursor(cursorAtSeq(s, s.playheadSeq - 1)!);
     },
 
     setSpeed: (speed) => {
@@ -488,14 +606,47 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
       const end = endMsOf(s);
       const next = advancePlayback(s.cursor, dtMs, end);
       const before = s.playheadSeq;
+      // Playback only moves forward, from the event shown (which may be early in its millisecond).
+      const seq = Math.max(before, index.seqAtTime(next.tMs));
       // Caught up with a run that is still going: hand over to live.
-      setCursor(!next.playing && !s.ended ? { mode: 'live' } : next);
+      setCursor(!next.playing && !s.ended ? { mode: 'live' } : { ...next, seq });
       const after = get().playheadSeq;
       if (after > before) emitEffects(index.events.slice(before, after));
     },
 
-    selectAgent: (agentId) => set({ selectedAgentId: agentId, selectedStationId: stationOf(agentId) }),
+    selectEvent: (seq, opts) => {
+      if (seq === null) {
+        set({ selectedSeq: null, inspectorTab: get().selectedAgentId ? 'agent' : 'run' });
+        return;
+      }
+      if (!index || seq < 1 || seq > index.lastSequence) return;
+      const e = index.events[seq - 1]!;
+      const agentId = agentOfEvent(e, index.latest().exec);
+      set({ selectedSeq: seq, selectedAgentId: agentId, selectedStationId: stationOf(agentId, seq), inspectorTab: 'event' });
+      if (opts?.seek) get().seekToSeq(seq);
+    },
+
+    selectAgent: (agentId) => {
+      if (agentId === null) {
+        set((s) => ({ selectedAgentId: null, selectedStationId: null, inspectorTab: s.selectedSeq !== null ? 'event' : 'run' }));
+        return;
+      }
+      const s = get();
+      const latest = index ? latestEventOf(index.events, index.latest().exec, agentId, s.playheadSeq) : null;
+      set({ selectedAgentId: agentId, selectedStationId: stationOf(agentId), selectedSeq: latest, inspectorTab: 'agent' });
+    },
+
     selectStation: (stationId) => set({ selectedStationId: stationId }),
+
+    clearSelection: () => set({ selectedSeq: null, selectedAgentId: null, selectedStationId: null, inspectorTab: 'run' }),
+
+    setInspectorTab: (inspectorTab) => set({ inspectorTab }),
+
+    focusDeepLink: (target) => {
+      if (target.seq === null && target.agentId === null) return;
+      set({ pendingFocus: target });
+      applyPendingFocus();
+    },
 
     cycleAgent: (dir) => {
       if (!index) return;
@@ -509,11 +660,30 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
     },
 
     setTab: (tab) => set({ tab }),
+    setWorldView: (worldView) => set({ worldView }),
+    setFilter: (filter) => set({ filter }),
+    setThemePref: (themePref) => set({ themePref }),
+    setMotionPref: (motionPref) => set({ motionPref }),
+    setApiBase: (url) => {
+      setApiBaseOverride(url);
+      get().openRun(null);
+      set({ apiBaseOverride: url, runs: [], runtime: { status: 'unknown', version: null, activeRunId: null, ingest: null, tracedRunIds: [] } });
+    },
+    retryConnection: () => {
+      const runId = get().runId;
+      get().openRun(runId);
+      set((s) => ({ connectNonce: s.connectNonce + 1 }));
+    },
     setCameraMode: (cameraMode) => set({ cameraMode }),
     toggleFollow: () => set((s) => ({ follow: !s.follow })),
     setQuality: (quality) => set({ quality }),
     setReducedMotion: (reducedMotion) => set({ reducedMotion }),
     openArtifact: (viewArtifactId) => set({ viewArtifactId }),
+    setOnboarding: (patch) => {
+      const cur = get().onboarding;
+      if (Object.entries(patch).every(([k, v]) => cur[k as keyof OnboardingProgress] === v)) return;
+      set({ onboarding: { ...cur, ...patch } });
+    },
 
     events: () => index?.events ?? [],
     rawEvent: (seq) => {
@@ -539,6 +709,15 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
       return { state: frameMemo.state, tick: index ? index.tickAtMs(playheadMs) : 0, playheadMs, advancing };
     },
 
+    mountWorld: () => {
+      worldsMounted += 1;
+      let mounted = true;
+      return () => {
+        if (mounted) worldsMounted -= 1;
+        mounted = false;
+      };
+    },
+
     subscribeEffects: (fn) => {
       effectListeners.add(fn);
       return () => {
@@ -559,6 +738,7 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
       ended: s.ended || terminal,
       playheadSeq: seqAt(s.cursor),
     });
+    applyPendingFocus();
   }
 
   return store;

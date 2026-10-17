@@ -1,52 +1,43 @@
 'use client';
 import { formatClock } from '@runloop-world/core';
-import { isUnknownEvent, type AnyEvent } from '@runloop-world/events';
-import { useMemo, useState } from 'react';
+import { isUnknownEvent } from '@runloop-world/events';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStudio, useStudioStore } from '../state/context';
+import { EMPTY_FILTER, activeFilterCount } from '../state/filters';
+import { eventProvenance } from '../state/selection';
+import { agentLook } from '../state/view';
+import { Button } from '../ui/Button';
+import { AgentDot, Chip } from '../ui/Chip';
+import { EmptyState, SkeletonRows } from '../ui/States';
+import { listKeyHandler, useRovingRow, useVirtualRows } from '../ui/useVirtualRows';
 import styles from './LogsPanel.module.css';
+import type { TraceModel } from './useTraceModel';
 
-const ALL = '*';
-const INVALID = '!invalid';
-
-/** Artifact ids an event points at (artifact.created and tool results). */
-function artifactIdsOf(e: AnyEvent): string[] {
-  if (isUnknownEvent(e)) return [];
-  if (e.type === 'artifact.created') return [e.payload.artifactId];
-  if (e.type === 'tool.call_completed') return e.payload.outputArtifactIds ?? [];
-  if (e.type === 'task.completed') return e.payload.artifactIds;
-  return [];
-}
-
-export default function LogsPanel() {
+/** Every recorded event, one line each (plus envelopes that failed validation). Selecting one opens it in the inspector. */
+export default function LogsPanel({ model }: { model: TraceModel }) {
   const store = useStudioStore();
-  const lastSequence = useStudio((s) => s.lastSequence);
   const playheadSeq = useStudio((s) => s.playheadSeq);
+  const selectedSeq = useStudio((s) => s.selectedSeq);
+  const world = useStudio((s) => s.world);
   const raw = useStudio((s) => s.raw);
-  const [filter, setFilter] = useState(ALL);
-  const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
+  const conn = useStudio((s) => s.conn);
+  const filter = useStudio((s) => s.filter);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const listRef = useRef<HTMLOListElement>(null);
+  const { events, visibleEvents, exec } = model;
+  const filtered = activeFilterCount(filter) > 0;
+  const keys = useMemo(() => visibleEvents.map((e) => e.eventId), [visibleEvents]);
+  const v = useVirtualRows(listRef, keys, 34);
+  const selected = selectedSeq === null ? -1 : visibleEvents.findIndex((e) => e.sequence === selectedSeq);
+  // One Tab stop for the whole list (arrow keys move within it): the selected entry, else the playhead's.
+  let atPlayhead = -1;
+  for (let i = visibleEvents.length - 1; i >= 0 && atPlayhead < 0; i--) if (visibleEvents[i]!.sequence <= playheadSeq) atPlayhead = i;
+  const roving = useRovingRow(selected >= 0 ? selected : Math.max(0, atPlayhead));
+  const tabStop = Math.min(roving.tabStop, visibleEvents.length - 1);
 
-  const events = useMemo(() => [...store.getState().events()], [store, lastSequence]);
-  const byId = useMemo(() => new Map(events.map((e) => [e.eventId, e])), [events]);
-  const types = useMemo(() => [...new Set(events.map((e) => e.type))].sort(), [events]);
-  const exec = useMemo(() => store.getState().stateAt(lastSequence).exec, [store, lastSequence]);
-
-  const shown = filter === ALL ? events : filter === INVALID ? [] : events.filter((e) => e.type === filter);
-  const showRaw = filter === ALL || filter === INVALID;
-
-  const toggle = (seq: number, force?: boolean) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (force ?? !next.has(seq)) next.add(seq);
-      else next.delete(seq);
-      return next;
-    });
-
-  const jumpTo = (e: AnyEvent) => {
-    setFilter(ALL);
-    toggle(e.sequence, true);
-    requestAnimationFrame(() => document.getElementById(`log-${e.sequence}`)?.scrollIntoView({ block: 'center' }));
-  };
+  useEffect(() => {
+    if (selected >= 0) v.scrollToIndex(selected);
+  }, [selected]);
 
   const copyJsonl = async () => {
     const s = store.getState();
@@ -60,113 +51,119 @@ export default function LogsPanel() {
     setTimeout(() => setCopyState('idle'), 2000);
   };
 
+  if (events.length === 0 && raw.length === 0) {
+    if (conn === 'loading') return <SkeletonRows rows={8} label="Loading the event log" />;
+    return (
+      <EmptyState compact icon="traces" title="No events recorded yet">
+        <p>Each event the runtime records appears here with its raw JSON.</p>
+      </EmptyState>
+    );
+  }
+
   return (
     <div className={styles.logs}>
       <div className={styles.toolbar}>
-        <label className={styles.filter}>
-          <span>Type</span>
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value={ALL}>All events ({events.length + raw.length})</option>
-            {types.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-            {raw.length > 0 && <option value={INVALID}>Invalid ({raw.length})</option>}
-          </select>
-        </label>
-        <button type="button" className="btn" onClick={() => void copyJsonl()} disabled={events.length + raw.length === 0}>
-          {copyState === 'copied' ? '✓ Copied' : copyState === 'failed' ? '✗ Copy failed' : 'Copy JSONL'}
-        </button>
+        <span className={styles.note}>
+          {raw.length > 0 ? `${raw.length} envelope${raw.length > 1 ? 's' : ''} failed validation (listed at the end)` : 'Raw events as recorded'}
+        </span>
+        <Button size="sm" variant="ghost" icon={copyState === 'copied' ? 'check' : 'copy'} onClick={() => void copyJsonl()}>
+          {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy JSONL'}
+        </Button>
       </div>
-
-      <ol className={styles.list} aria-label="Event log">
-        {shown.map((e) => {
-          const unknown = isUnknownEvent(e);
-          const parents: AnyEvent[] = [];
-          for (let p = e.parentEventId ? byId.get(e.parentEventId) : undefined; p && parents.length < 10; ) {
-            parents.push(p);
-            p = p.parentEventId ? byId.get(p.parentEventId) : undefined;
+      {visibleEvents.length === 0 && filtered ? (
+        <EmptyState
+          compact
+          icon="filter"
+          title="No events match these filters"
+          actions={
+            <Button size="sm" onClick={() => store.getState().setFilter(EMPTY_FILTER)}>
+              Clear filters
+            </Button>
           }
-          const artifacts = artifactIdsOf(e);
-          const isOpen = open.has(e.sequence);
-          return (
-            <li key={e.eventId} id={`log-${e.sequence}`} className={styles.entry} data-future={e.sequence > playheadSeq || undefined}>
-              <button type="button" className={styles.summary} aria-expanded={isOpen} onClick={() => toggle(e.sequence)}>
-                <span className={styles.caret} aria-hidden="true">
-                  {isOpen ? '▾' : '▸'}
-                </span>
-                <span className={styles.seq}>#{e.sequence}</span>
-                <span className={styles.clock}>{formatClock(store.getState().timeOfSeq(e.sequence))}</span>
-                <span className={styles.type}>{e.type}</span>
-                <span className={styles.meta}>
-                  {e.actorId ?? '—'}
-                  {e.taskId ? ` · ${e.taskId}` : ''}
-                </span>
-                {e.visibility !== 'public' && (
-                  <span className="badge" data-tone="warn">
-                    ⚿ {e.visibility}
+        />
+      ) : (
+        <ol className={styles.list} aria-label="Event log" ref={listRef} onKeyDown={listKeyHandler(visibleEvents.length, v)} onBlur={roving.onBlurList}>
+          {v.padTop > 0 && <li className={styles.spacer} style={{ height: v.padTop }} aria-hidden="true" />}
+          {visibleEvents.slice(v.start, v.end).map((e, k) => {
+            const i = v.start + k;
+            const unknown = isUnknownEvent(e);
+            const agentId = model.agentOf(e);
+            const look = agentLook(exec, world, agentId ?? 'system');
+            const isSelected = i === selected;
+            const future = e.sequence > playheadSeq;
+            return (
+              <li
+                key={e.eventId}
+                ref={v.measure(i)}
+                data-index={i}
+                aria-setsize={visibleEvents.length}
+                aria-posinset={i + 1}
+                className={styles.entry}
+                data-future={future || undefined}
+                data-playhead={(future && (i === 0 || visibleEvents[i - 1]!.sequence <= playheadSeq)) || undefined}
+                data-selected={isSelected || undefined}
+              >
+                <button
+                  type="button"
+                  data-row
+                  tabIndex={i === tabStop ? 0 : -1}
+                  onFocus={() => roving.onFocusRow(i)}
+                  className={styles.summary}
+                  aria-current={isSelected ? 'true' : undefined}
+                  aria-label={future ? `#${e.sequence} ${e.type}, after the playhead` : undefined}
+                  onClick={() => store.getState().selectEvent(e.sequence)}
+                >
+                  <span className={styles.seq}>#{e.sequence}</span>
+                  <span className={styles.clock}>{formatClock(store.getState().timeOfSeq(e.sequence))}</span>
+                  <span className={styles.type}>{e.type}</span>
+                  <span className={styles.actor}>
+                    <AgentDot color={look.color} size={7} />
+                    {look.name}
+                    {e.taskId && <span className={styles.task}>{e.taskId}</span>}
                   </span>
-                )}
-                {unknown && (
-                  <span className="badge" data-tone="warn">
-                    ⚠ {e.reason.replace('_', ' ')}
+                  <span className={styles.chips}>
+                    {eventProvenance(e) === 'inferred' && (
+                      <Chip tone="warn" icon="inferred">
+                        inferred
+                      </Chip>
+                    )}
+                    {e.visibility !== 'public' && (
+                      <Chip tone="warn" icon={e.visibility === 'sensitive' ? 'lock' : 'eyeOff'}>
+                        {e.visibility}
+                      </Chip>
+                    )}
+                    {unknown && (
+                      <Chip tone="warn" icon="alert">
+                        {e.reason.replace(/_/g, ' ')}
+                      </Chip>
+                    )}
                   </span>
-                )}
-              </button>
-              {isOpen && (
-                <div className={styles.body}>
-                  {parents.length > 0 && (
-                    <p className={styles.chain}>
-                      <span>Caused by</span>
-                      {parents.map((p) => (
-                        <button key={p.eventId} type="button" className="link" onClick={() => jumpTo(p)}>
-                          #{p.sequence} {p.type}
-                        </button>
-                      ))}
-                    </p>
-                  )}
-                  {artifacts.length > 0 && (
-                    <p className={styles.chain}>
-                      <span>Artifacts</span>
-                      {artifacts.map((id) => (
-                        <button key={id} type="button" className="link" onClick={() => store.getState().openArtifact(id)}>
-                          📄 {exec.artifacts[id]?.name ?? id}
-                        </button>
-                      ))}
-                    </p>
-                  )}
-                  {unknown && e.error && <p className={styles.error}>{e.error}</p>}
-                  <div className={styles.actions}>
-                    <button type="button" className="btn btn-ghost" onClick={() => store.getState().seekToSeq(e.sequence)}>
-                      Move playhead here
-                    </button>
-                  </div>
-                  <pre className={styles.json}>{JSON.stringify(store.getState().rawEvent(e.sequence) ?? e, null, 2)}</pre>
-                </div>
-              )}
-            </li>
-          );
-        })}
-        {showRaw &&
-          raw.map((r) => (
-            <li key={`raw-${r.id}`} className={styles.entry} data-invalid="true">
-              <details>
-                <summary className={styles.summary}>
-                  <span className={styles.seq}>{r.sequence !== null ? `#${r.sequence}` : '#?'}</span>
-                  <span className="badge" data-tone="err">
-                    ✗ invalid event
-                  </span>
-                  <span className={styles.meta}>{r.error}</span>
-                </summary>
-                <div className={styles.body}>
-                  <p className={styles.error}>{r.error}</p>
+                </button>
+              </li>
+            );
+          })}
+          {v.padBottom > 0 && <li className={styles.spacer} style={{ height: v.padBottom }} aria-hidden="true" />}
+          {!filtered &&
+            raw.map((r) => (
+              <li key={`raw-${r.id}`} className={styles.entry} data-invalid="true">
+                <details className={styles.invalid}>
+                  <summary className={styles.summary}>
+                    <span className={styles.seq}>{r.sequence !== null ? `#${r.sequence}` : '#?'}</span>
+                    <span className={styles.clock}>—</span>
+                    <span className={styles.type}>invalid envelope</span>
+                    <span className={styles.actor}>{r.error}</span>
+                    <span className={styles.chips}>
+                      <Chip tone="err" icon="x">
+                        not recorded as an event
+                      </Chip>
+                    </span>
+                  </summary>
                   <pre className={styles.json}>{typeof r.raw === 'string' ? r.raw : JSON.stringify(r.raw, null, 2)}</pre>
-                </div>
-              </details>
-            </li>
-          ))}
-      </ol>
+                </details>
+              </li>
+            ))}
+        </ol>
+      )}
     </div>
   );
 }

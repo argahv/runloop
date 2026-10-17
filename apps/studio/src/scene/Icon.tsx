@@ -17,11 +17,15 @@ const PATHS: Record<IconName, string> = {
   cross: 'M6 6l12 12M18 6L6 18',
   pause: 'M9 5v14M15 5v14',
   alert: 'M12 3L2.5 20h19zM12 9.5v5M12 17.5v.5',
+  frame: 'M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5',
+  target: 'M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16zM12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5zM12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3',
+  eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5z',
+  terminal: 'M4 5h16v14H4zM7.5 9.5l3 2.5-3 2.5M12.5 15h4',
 };
 
-export function Icon({ name, color }: { name: IconName; color?: string }) {
+export function Icon({ name, color, className }: { name: IconName; color?: string; className?: string }) {
   return (
-    <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg className={className ?? styles.icon} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d={PATHS[name]} />
     </svg>
   );

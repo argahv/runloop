@@ -1,59 +1,52 @@
 'use client';
 import { MapControls } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import type { CompiledWorld } from '@runloop-world/world-engine';
 import { useCallback, useEffect, useLayoutEffect, useRef, type ComponentRef } from 'react';
 import { MathUtils, Vector3, type OrthographicCamera } from 'three';
-import { poseAt, useScene } from './context';
+import { poseAt, useScene, type CameraRequest } from './context';
+import { ISO_DIR, TOP_DIR, easeOut, frameBoard, parseDurationMs } from './framing';
 import { cellTop, heightAt, toScene } from './layout';
 import type { CameraMode } from './types';
 
-/** View directions (from target towards the camera). Iso looks from the south-east, so north/west walls are at the back. */
-const ISO = new Vector3(1, 1.2, 1).normalize();
-const TOP = new Vector3(0, 1, 0.002).normalize();
-/** The same views as spherical angles, so transitions tilt and turn smoothly (no spin near the pole). */
+/** The two views as spherical angles, so transitions tilt and turn smoothly (no spin near the pole). */
 const ANGLES = {
-  iso: { azimuth: Math.atan2(ISO.x, ISO.z), polar: Math.acos(ISO.y) },
-  top: { azimuth: 0, polar: Math.acos(TOP.y) },
+  iso: { azimuth: Math.atan2(ISO_DIR.x, ISO_DIR.z), polar: Math.acos(ISO_DIR.y) },
+  top: { azimuth: 0, polar: Math.acos(TOP_DIR.y) },
 } as const;
-const fromAngles = (out: Vector3, a: { azimuth: number; polar: number }) =>
+type Angles = { azimuth: number; polar: number };
+const fromAngles = (out: Vector3, a: Angles) =>
   out.set(Math.sin(a.polar) * Math.sin(a.azimuth), Math.cos(a.polar), Math.sin(a.polar) * Math.cos(a.azimuth));
 const DIST = 80;
-const UP = new Vector3(0, 1, 0);
+/** Zoom relative to the fitted board when focusing one entity, and when following. */
+const FOCUS_ZOOM = 2.3;
+const FOLLOW_ZOOM = 1.8;
 
-/** Zoom and target that frame the whole board for a view direction. */
-export function frameBoard(world: CompiledWorld, dir: Vector3, w: number, h: number): { zoom: number; center: Vector3 } {
-  const fwd = dir.clone().negate();
-  const right = new Vector3().crossVectors(fwd, UP).normalize();
-  const up = new Vector3().crossVectors(right, fwd).normalize();
-  const hx = world.width / 2 + 0.8;
-  const hz = world.height / 2 + 0.8;
-  let r0 = Infinity;
-  let r1 = -Infinity;
-  let u0 = Infinity;
-  let u1 = -Infinity;
-  const p = new Vector3();
-  for (const x of [-hx, hx])
-    for (const z of [-hz, hz])
-      for (const y of [-0.7, 2.2]) {
-        p.set(x, y, z);
-        const r = p.dot(right);
-        const u = p.dot(up);
-        r0 = Math.min(r0, r);
-        r1 = Math.max(r1, r);
-        u0 = Math.min(u0, u);
-        u1 = Math.max(u1, u);
-      }
-  const zoom = Math.min(w / ((r1 - r0) * 1.04), h / ((u1 - u0) * 1.08));
-  const center = right.multiplyScalar((r0 + r1) / 2).add(up.multiplyScalar((u0 + u1) / 2));
-  center.y = Math.max(0, center.y);
-  return { zoom: Math.max(4, zoom), center };
+/** overview: the whole board, re-fitted on resize. free: the viewer (or a focus) set the view. follow: tracking the selected agent. */
+type Mode = 'overview' | 'free' | 'follow';
+
+interface Tween {
+  fromTarget: Vector3;
+  toTarget: Vector3;
+  fromZoom: number;
+  toZoom: number;
+  fromAngles: Angles;
+  toAngles: Angles;
+  start: number;
+  duration: number;
+}
+
+/** Camera move duration from the motion token (0 under reduced motion, where the tokens are zeroed). */
+function cameraDurationMs(reducedMotion: boolean): number {
+  if (reducedMotion || typeof document === 'undefined') return 0;
+  return parseDurationMs(getComputedStyle(document.documentElement).getPropertyValue('--rl-dur-camera'), 550);
 }
 
 /**
  * Orthographic camera: isometric or top-down, pan/zoom with MapControls
- * (rotation disabled), smooth transitions (instant under reduced motion),
- * follow the selected character, focus the selected station.
+ * (rotation disabled). Fits the whole board to the canvas (any aspect, with
+ * room for the floating controls) and keeps it fitted on resize until the
+ * viewer takes over. Presets (overview, focus, follow) ease with the camera
+ * motion token and snap under reduced motion.
  */
 export function CameraRig({
   cameraMode,
@@ -66,89 +59,181 @@ export function CameraRig({
   selectedAgentId: string | null;
   selectedStationId: string | null;
 }) {
-  const { world, getFrame, reducedMotion } = useScene();
+  const { world, getFrame, reducedMotion, camera: bus } = useScene();
   const controls = useRef<ComponentRef<typeof MapControls>>(null);
   const camera = useThree((s) => s.camera) as OrthographicCamera;
   const size = useThree((s) => s.size);
-  const angles = useRef({ ...ANGLES[cameraMode] });
+  const angles = useRef<Angles>({ ...ANGLES[cameraMode] });
   const dir = useRef(fromAngles(new Vector3(), angles.current));
-  const goalTarget = useRef<Vector3 | null>(null);
-  const goalZoom = useRef<number | null>(null);
+  const tween = useRef<Tween | null>(null);
+  const mode = useRef<Mode>('overview');
+  const fitZoom = useRef(1);
   const placed = useRef(false);
   const tmp = useRef(new Vector3()).current;
+
+  const setMode = useCallback(
+    (m: Mode) => {
+      mode.current = m;
+      bus.setOverview(m === 'overview');
+    },
+    [bus],
+  );
+
+  /** Start an eased move to `target`/`zoom` (and the view direction of `toMode`). */
+  const moveTo = useCallback(
+    (target: Vector3, zoom: number, toMode: CameraMode = cameraMode) => {
+      const c = controls.current;
+      if (!c) return;
+      tween.current = {
+        fromTarget: c.target.clone(),
+        toTarget: target.clone(),
+        fromZoom: camera.zoom,
+        toZoom: zoom,
+        fromAngles: { ...angles.current },
+        toAngles: { ...ANGLES[toMode] },
+        start: performance.now(),
+        duration: cameraDurationMs(reducedMotion),
+      };
+    },
+    [camera, cameraMode, reducedMotion],
+  );
+
+  /** Where an entity is: an agent's current position, else a station. */
+  const entityPoint = useCallback(
+    (agentId: string | null, stationId: string | null): Vector3 | null => {
+      if (agentId) {
+        const pose = poseAt(world, getFrame(), agentId);
+        if (pose) return new Vector3(...toScene(world, pose.x, pose.y, heightAt(world, pose.x, pose.y) + 0.6));
+      }
+      const s = stationId ? world.stationsById[stationId] : undefined;
+      return s ? new Vector3(...toScene(world, s.cell[0], s.cell[1], cellTop(world, s.cell[0], s.cell[1]) + 0.6)) : null;
+    },
+    [world, getFrame],
+  );
 
   // First layout: frame the board instantly.
   useLayoutEffect(() => {
     const c = controls.current;
-    if (!c || placed.current || size.width === 0) return;
+    if (!c || placed.current || size.width === 0 || size.height === 0) return;
     placed.current = true;
     const f = frameBoard(world, dir.current, size.width, size.height);
+    fitZoom.current = f.zoom;
     camera.zoom = f.zoom;
     camera.updateProjectionMatrix();
-    c.target.copy(f.center);
-    camera.position.copy(f.center).addScaledVector(dir.current, DIST);
-    camera.lookAt(f.center);
+    c.target.copy(f.target);
+    camera.position.copy(f.target).addScaledVector(dir.current, DIST);
+    camera.lookAt(f.target);
   }, [camera, size.width, size.height, world]);
 
-  // Re-frame on mode change or resize.
-  const firstFrame = useRef(true);
+  // Resize: the overview re-fits at once; a custom view keeps its target and scales with the fit.
   useEffect(() => {
-    if (firstFrame.current) {
-      firstFrame.current = false;
+    if (!placed.current || size.width === 0 || size.height === 0) return;
+    const c = controls.current;
+    if (!c) return;
+    const f = frameBoard(world, fromAngles(new Vector3(), ANGLES[cameraMode]), size.width, size.height);
+    const ratio = f.zoom / fitZoom.current;
+    fitZoom.current = f.zoom;
+    if (mode.current === 'overview') {
+      if (tween.current) {
+        tween.current.toTarget.copy(f.target);
+        tween.current.toZoom = f.zoom;
+      } else {
+        c.target.copy(f.target);
+        camera.zoom = f.zoom;
+        camera.updateProjectionMatrix();
+      }
+    } else {
+      camera.zoom *= ratio;
+      camera.updateProjectionMatrix();
+      if (tween.current) tween.current.toZoom *= ratio;
+    }
+    // Only on size changes.
+  }, [size.width, size.height]);
+
+  // Iso ↔ top: turn the camera; the overview re-fits for the new view.
+  const firstMode = useRef(true);
+  useEffect(() => {
+    if (firstMode.current) {
+      firstMode.current = false;
       return;
     }
-    const f = frameBoard(world, cameraMode === 'top' ? TOP : ISO, size.width, size.height);
-    goalZoom.current = f.zoom;
-    if (!(follow && selectedAgentId)) goalTarget.current = f.center;
-    // Only on mode/size changes (not when the selection changes).
-  }, [cameraMode, size.width, size.height, world]);
+    const c = controls.current;
+    if (!c) return;
+    const f = frameBoard(world, fromAngles(new Vector3(), ANGLES[cameraMode]), size.width, size.height);
+    const ratio = f.zoom / fitZoom.current;
+    fitZoom.current = f.zoom;
+    if (mode.current === 'overview') moveTo(f.target, f.zoom, cameraMode);
+    else moveTo(c.target, camera.zoom * ratio, cameraMode);
+  }, [cameraMode]);
 
-  // Following someone: move in a little closer (never zooms out).
+  // Presets from the camera rail.
+  useEffect(
+    () =>
+      bus.listen((r: CameraRequest) => {
+        const fit = frameBoard(world, fromAngles(new Vector3(), ANGLES[cameraMode]), size.width, size.height);
+        fitZoom.current = fit.zoom;
+        if (r.kind === 'overview') {
+          setMode('overview');
+          moveTo(fit.target, fit.zoom);
+          return;
+        }
+        const p = r.kind === 'focusAgent' ? entityPoint(r.agentId, null) : entityPoint(null, r.stationId);
+        if (!p) return;
+        setMode('free');
+        moveTo(p, Math.max(camera.zoom, fit.zoom * FOCUS_ZOOM));
+      }),
+    [bus, world, cameraMode, size.width, size.height, moveTo, entityPoint, setMode, camera],
+  );
+
+  // Follow: move in a little closer, then track the selected agent every frame.
   useEffect(() => {
-    if (!follow || !selectedAgentId) return;
-    const fit = frameBoard(world, cameraMode === 'top' ? TOP : ISO, size.width, size.height).zoom;
-    goalZoom.current = Math.max(camera.zoom, fit * 1.7);
-    // Only when follow is switched on or the followed agent changes.
+    if (follow && selectedAgentId) {
+      setMode('follow');
+      const p = entityPoint(selectedAgentId, null);
+      if (p) moveTo(p, Math.max(camera.zoom, fitZoom.current * FOLLOW_ZOOM));
+    } else if (mode.current === 'follow') {
+      setMode('free');
+    }
   }, [follow, selectedAgentId]);
 
-  // Focus the selected station.
+  // Selection from the timeline or inspector: when zoomed in, bring the entity into view (the overview already shows it).
   useEffect(() => {
-    if (!selectedStationId) return;
-    const s = world.stationsById[selectedStationId];
-    if (!s) return;
-    goalTarget.current = new Vector3(...toScene(world, s.cell[0], s.cell[1], cellTop(world, s.cell[0], s.cell[1]) + 0.5));
-  }, [selectedStationId, world]);
+    if (mode.current !== 'free') return;
+    const p = entityPoint(selectedAgentId, selectedStationId);
+    if (p) moveTo(p, camera.zoom);
+  }, [selectedAgentId, selectedStationId]);
 
-  // The user took over: drop any pending camera animation. (Stable, so drei does not reconnect the controls.)
+  // The viewer took over: drop any pending move. (Stable, so drei does not reconnect the controls.)
   const onUserStart = useCallback(() => {
-    goalTarget.current = null;
-    goalZoom.current = null;
-  }, []);
+    tween.current = null;
+    if (mode.current !== 'follow') setMode('free');
+  }, [setMode]);
 
   useFrame((_, dt) => {
     const c = controls.current;
     if (!c) return;
-    const k = reducedMotion ? 1 : 1 - Math.exp(-dt * 6);
-    const want = ANGLES[cameraMode];
-    angles.current.azimuth = MathUtils.lerp(angles.current.azimuth, want.azimuth, k);
-    angles.current.polar = MathUtils.lerp(angles.current.polar, want.polar, k);
-    fromAngles(dir.current, angles.current);
-
-    if (follow && selectedAgentId) {
+    const tw = tween.current;
+    if (tw) {
+      const t = tw.duration <= 0 ? 1 : easeOut(Math.min(1, (performance.now() - tw.start) / tw.duration));
+      angles.current.azimuth = MathUtils.lerp(tw.fromAngles.azimuth, tw.toAngles.azimuth, t);
+      angles.current.polar = MathUtils.lerp(tw.fromAngles.polar, tw.toAngles.polar, t);
+      // While following, the goal moves with the agent.
+      if (mode.current === 'follow' && selectedAgentId) {
+        const p = entityPoint(selectedAgentId, null);
+        if (p) tw.toTarget.copy(p);
+      }
+      c.target.lerpVectors(tw.fromTarget, tw.toTarget, t);
+      camera.zoom = MathUtils.lerp(tw.fromZoom, tw.toZoom, t);
+      camera.updateProjectionMatrix();
+      if (t >= 1) tween.current = null;
+    } else if (mode.current === 'follow' && selectedAgentId) {
       const pose = poseAt(world, getFrame(), selectedAgentId);
       if (pose) {
-        tmp.set(...toScene(world, pose.x, pose.y, heightAt(world, pose.x, pose.y) + 0.5));
-        c.target.lerp(tmp, reducedMotion ? 1 : 1 - Math.exp(-dt * 4));
+        tmp.set(...toScene(world, pose.x, pose.y, heightAt(world, pose.x, pose.y) + 0.6));
+        c.target.lerp(tmp, reducedMotion ? 1 : 1 - Math.exp(-dt * 5));
       }
-    } else if (goalTarget.current) {
-      c.target.lerp(goalTarget.current, k);
-      if (c.target.distanceTo(goalTarget.current) < 0.005) goalTarget.current = null;
     }
-    if (goalZoom.current !== null) {
-      camera.zoom = MathUtils.lerp(camera.zoom, goalZoom.current, k);
-      camera.updateProjectionMatrix();
-      if (Math.abs(camera.zoom - goalZoom.current) < 0.01) goalZoom.current = null;
-    }
+    fromAngles(dir.current, angles.current);
     camera.position.copy(c.target).addScaledVector(dir.current, DIST);
     camera.lookAt(c.target);
   });
@@ -158,10 +243,10 @@ export function CameraRig({
       ref={controls}
       makeDefault
       enableRotate={false}
-      enableDamping
+      enableDamping={!reducedMotion}
       dampingFactor={0.15}
-      minZoom={6}
-      maxZoom={220}
+      minZoom={4}
+      maxZoom={240}
       zoomToCursor
       onStart={onUserStart}
     />

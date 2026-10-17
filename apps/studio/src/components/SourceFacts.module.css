@@ -1,0 +1,35 @@
+.dl {
+  display: flex;
+  flex-direction: column;
+}
+.row {
+  display: grid;
+  grid-template-columns: minmax(110px, 38%) minmax(0, 1fr);
+  gap: var(--rl-space-3);
+  padding: 6px 0;
+  box-shadow: inset 0 -1px 0 var(--rl-line);
+  font-size: var(--rl-text-xs);
+}
+.row:last-child {
+  box-shadow: none;
+}
+.row dt {
+  color: var(--rl-text-muted);
+}
+.row dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.none {
+  color: var(--rl-text-faint);
+  font-style: italic;
+}
+.mono {
+  font-family: var(--rl-font-mono);
+}
+.link {
+  color: var(--rl-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  border-radius: 4px;
+}

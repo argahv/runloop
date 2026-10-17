@@ -1,151 +1,223 @@
-.wrap {
-  container-type: inline-size;
-}
-
 .bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  flex-wrap: wrap;
+  gap: var(--rl-space-3);
+  min-height: 48px;
+  padding: 0 var(--rl-space-3);
+  border-radius: var(--rl-radius-card);
+  background: var(--rl-surface);
 }
-
-.transport,
-.speeds {
-  display: inline-flex;
-  gap: 4px;
+.bar[data-glass] {
+  background: var(--rl-glass);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: var(--rl-shadow-pop), 0 0 0 1px var(--rl-glass-line);
+}
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 .play {
-  width: 36px;
-  border-color: #22d3ee80;
-  color: var(--cyan);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--rl-text);
+  color: var(--rl-canvas);
+  transition: transform var(--rl-dur-instant) var(--rl-ease-out);
 }
-.speed {
-  min-height: 26px;
-  padding: 0 7px;
-  font-size: 12px;
+.play:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+.play:disabled {
+  opacity: 0.4;
+}
+.clock {
+  flex: none;
+  min-width: 96px;
+  color: var(--rl-text-muted);
+  font-family: var(--rl-font-mono);
+  font-size: var(--rl-text-xs);
 }
 
 .scrubber {
   position: relative;
   flex: 1;
-  min-width: 160px;
-  height: 28px;
+  min-width: 120px;
+  height: 32px;
   display: flex;
   align-items: center;
 }
-
 .range {
   --pct: 0%;
   width: 100%;
+  height: 32px;
   margin: 0;
+  background: transparent;
   appearance: none;
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--cyan) 0 var(--pct), var(--panel-3) var(--pct) 100%);
   cursor: pointer;
+}
+.range:disabled {
+  cursor: not-allowed;
+}
+.range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--rl-text-muted) 0 var(--pct), var(--rl-surface-3) var(--pct) 100%);
+}
+.range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rl-surface-3);
+}
+.range::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--rl-text-muted);
 }
 .range::-webkit-slider-thumb {
   appearance: none;
   width: 14px;
   height: 14px;
+  margin-top: -5px;
   border-radius: 50%;
-  background: #ecfeff;
-  border: 2px solid var(--cyan);
-  box-shadow: 0 0 8px var(--cyan);
+  background: var(--rl-text);
+  box-shadow: 0 0 0 3px var(--rl-surface);
 }
 .range::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
+  border: 0;
   border-radius: 50%;
-  background: #ecfeff;
-  border: 2px solid var(--cyan);
+  background: var(--rl-text);
+  box-shadow: 0 0 0 3px var(--rl-surface);
 }
-.range:disabled {
-  cursor: default;
-  opacity: 0.5;
+.range:focus-visible {
+  box-shadow: none;
+}
+.range:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--rl-focus-ring);
+}
+.range:focus-visible::-moz-range-thumb {
+  box-shadow: var(--rl-focus-ring);
 }
 
 .markers {
   position: absolute;
-  inset: 0;
+  inset: 0 7px;
   pointer-events: none;
 }
 .marker {
-  pointer-events: auto;
   position: absolute;
-  top: -3px;
-  transform: translateX(-50%);
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--err);
-  background: #3f1219;
-  color: var(--err);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 12px;
+  top: -1px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 4px;
+  background: var(--rl-failure);
+  color: var(--rl-canvas);
+  pointer-events: auto;
+  transition: transform var(--rl-dur-instant) var(--rl-ease-out);
+}
+.marker:hover {
+  transform: translateY(-1px) scale(1.1);
 }
 .marker[data-resolved='true'] {
-  border-color: var(--faint);
-  background: var(--panel-3);
-  color: var(--muted);
+  background: var(--rl-surface-3);
+  color: var(--rl-text-muted);
 }
 
-.clock {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text);
-  min-width: 96px;
-  text-align: center;
+.speeds {
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-surface-2);
+}
+.speed {
+  min-width: 34px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  font-weight: 500;
+}
+.speed:hover {
+  color: var(--rl-text);
+}
+.speed[aria-pressed='true'] {
+  background: var(--rl-surface);
+  color: var(--rl-text);
+  box-shadow: var(--rl-shadow-card);
 }
 
 .live {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--rl-space-2);
 }
 .newChip {
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--cyan);
-  background: rgba(34, 211, 238, 0.12);
-  color: var(--cyan);
-  font-size: 12px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--rl-radius-pill);
+  background: var(--rl-accent-soft);
+  color: var(--rl-accent-text);
+  font-size: var(--rl-text-xs);
   font-weight: 600;
 }
 .liveBtn {
-  min-width: 84px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-surface-2);
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  font-weight: 600;
+}
+.liveBtn:hover:not(:disabled) {
+  color: var(--rl-text);
+}
+.liveBtn[aria-pressed='true'] {
+  color: var(--rl-text);
 }
 .liveDot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--faint);
+  background: var(--rl-text-faint);
 }
+/* Lime marks active execution: only while a running run streams live. */
 .liveDot[data-on='true'] {
-  background: var(--err);
-  box-shadow: 0 0 8px var(--err);
-  animation: pulse 1.4s ease-in-out infinite;
+  background: var(--rl-accent-text);
+  box-shadow: 0 0 0 3px var(--rl-accent-soft);
 }
 
-/* Narrow world column: the scrubber gets its own full-width row. */
-@container (max-width: 780px) {
+@media (max-width: 1100px) {
+  .speeds {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .bar {
+    flex-wrap: wrap;
+    padding: var(--rl-space-2);
+    gap: var(--rl-space-2);
+  }
   .scrubber {
-    order: -1;
+    order: 5;
     flex-basis: 100%;
   }
   .clock {
-    margin-left: auto;
+    min-width: 0;
   }
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.35;
+  .live {
+    margin-left: auto;
   }
 }

@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { useStudio, useStudioStore } from '../state/context';
 import { useTicker } from '../state/hooks';
 import { characterStatusView } from '../state/view';
-import StatusBadge from './StatusBadge';
+import { StatusBadge } from '../ui/Chip';
 
 /**
  * A character's state exactly as its 3D badge shows it at the playhead

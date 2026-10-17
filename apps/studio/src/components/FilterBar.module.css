@@ -1,0 +1,161 @@
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl-space-2);
+}
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--rl-space-2);
+  min-width: 0;
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--rl-space-2);
+  flex: 1 1 220px;
+  min-width: 160px;
+  max-width: 420px;
+  height: 30px;
+  padding: 0 6px 0 10px;
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-surface-2);
+  color: var(--rl-text-muted);
+}
+.search:focus-within {
+  box-shadow: var(--rl-focus-ring);
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--rl-text);
+  font-size: var(--rl-text-sm);
+}
+.input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+/* On slate, so muted (faint only reaches AA on canvas and surface). */
+.input::placeholder {
+  color: var(--rl-text-muted);
+}
+.input::-webkit-search-cancel-button {
+  filter: grayscale(1);
+}
+.statuses {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-surface-2);
+}
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  font-weight: 500;
+}
+.status:hover {
+  color: var(--rl-text);
+}
+.status[aria-pressed='true'] {
+  background: var(--rl-surface);
+  color: var(--rl-text);
+  box-shadow: var(--rl-shadow-card);
+}
+.status[aria-pressed='true'][data-status='ok'] svg {
+  color: var(--rl-success);
+}
+.status[aria-pressed='true'][data-status='error'] svg {
+  color: var(--rl-failure);
+}
+.status[aria-pressed='true'][data-status='running'] svg {
+  color: var(--rl-accent-text);
+}
+.status[aria-pressed='true'][data-status='inferred'] svg {
+  color: var(--rl-warning);
+}
+.facets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rl-space-1);
+}
+.count {
+  margin-left: auto;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  white-space: nowrap;
+}
+.fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+}
+.legend {
+  padding: 4px 8px 6px;
+  color: var(--rl-text-faint);
+  font-size: var(--rl-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--rl-space-2);
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--rl-radius-sm);
+  cursor: pointer;
+}
+.option:hover {
+  background: var(--rl-surface-2);
+}
+.option input {
+  accent-color: var(--rl-accent-text);
+  margin: 0;
+}
+.optionText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--rl-text-xs);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rl-space-1);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 6px 0 9px;
+  border-radius: var(--rl-radius-pill);
+  background: var(--rl-accent-soft);
+  color: var(--rl-accent-text);
+  font-size: var(--rl-text-xs);
+  font-weight: 500;
+}
+.chip:hover {
+  background: color-mix(in srgb, var(--rl-accent-text) 18%, transparent);
+}
+.bar[data-compact] .statuses .status {
+  padding: 0 6px;
+}
