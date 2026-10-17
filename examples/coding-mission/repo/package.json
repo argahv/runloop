@@ -1,0 +1,10 @@
+{
+  "name": "task-store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny in-memory task store. Used by the Runloop coding-mission demo.",
+  "scripts": {
+    "test": "node --test --test-reporter=tap"
+  }
+}

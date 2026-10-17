@@ -1,0 +1,15 @@
+{
+  "id": "coding-mission",
+  "title": "Build a task store and make its test suite pass",
+  "description": "A coordinator plans research, implementation and testing for a tiny task-store library. The test suite runs for real; a planted bug makes the first run fail, which drives a fix and a passing rerun.",
+  "worldId": "research-campus",
+  "seed": 42,
+  "adapter": "scripted-coding-mission",
+  "repo": "repo",
+  "script": {
+    "target": "src/task-store.js",
+    "implementation": "script/implement.buggy.js",
+    "fix": "script/implement.fixed.js",
+    "testCommand": ["node", "--test", "--test-reporter=tap"]
+  }
+}
