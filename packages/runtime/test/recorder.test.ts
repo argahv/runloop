@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { collectEnvSecrets } from '../src/config';
-import { EventValidationError, RunClosedError } from '../src/recorder';
+import { ArtifactIntegrityError, EventValidationError, RunClosedError } from '../src/recorder';
 import { MANIFEST, openRecorder, tempDir } from './helpers';
 
 const RUN = '11111111-1111-4111-8111-111111111111';
@@ -138,6 +139,49 @@ describe('Recorder', () => {
     expect(rebooted.recorder.getRun(RUN)).toMatchObject({ status: 'interrupted', lastSequence: 6 });
     // Recovery is idempotent.
     expect(rebooted.recorder.recoverInterrupted()).toEqual([]);
+  });
+
+  it('stamps recovery events at the last recorded activity, so a replay does not span the downtime', () => {
+    const dir = tempDir();
+    const t0 = Date.parse('2026-10-17T09:00:00.000Z');
+    let clock = t0;
+    const now = () => new Date(clock);
+    const crashed = openRecorder(dir, { now });
+    crashed.recorder.createRun({ runId: RUN, manifest: MANIFEST });
+    clock += 1000;
+    crashed.recorder.append(RUN, {
+      type: 'tool.call_started',
+      payload: { callId: 'call-1', agentId: 'tester', taskId: 'T3', tool: 'run_command', inputSummary: 'node --test' },
+    });
+    clock += 2500;
+    const last = crashed.recorder.append(RUN, { type: 'agent.state_changed', payload: { agentId: 'builder', state: 'idle' } });
+    crashed.db.close();
+
+    clock += 24 * 3600_000; // restarted a day later
+    const rebooted = openRecorder(dir, { now });
+    rebooted.recorder.recoverInterrupted();
+    const [failed, completed] = rebooted.recorder.list(RUN, { after: 3 });
+    expect(failed!.timestamp).toBe(last.timestamp);
+    expect(completed!.timestamp).toBe(last.timestamp);
+    expect(failed!.payload).toMatchObject({ errorType: 'runtime_restarted', durationMs: 2500 });
+    expect(completed!.payload).toMatchObject({ outcome: 'interrupted', summary: expect.stringContaining(new Date(clock).toISOString()) });
+    expect(rebooted.recorder.getRun(RUN)?.endedAt).toBe(last.timestamp);
+  });
+
+  it('refuses to serve artifact bytes that changed after they were recorded', () => {
+    const dir = tempDir();
+    const { recorder } = openRecorder(dir);
+    recorder.createRun({ runId: RUN, manifest: MANIFEST });
+    const { bytes, sha256 } = recorder.putArtifactContent(RUN, 'art-1', 'ok 1 - passes\n');
+    recorder.append(RUN, {
+      type: 'artifact.created',
+      payload: { artifactId: 'art-1', kind: 'log', name: 'out.log', mediaType: 'text/plain', bytes, sha256, summary: 'log' },
+    });
+    expect(recorder.hasArtifact(RUN, 'art-1')).toBe(true);
+    expect(recorder.hasArtifact(RUN, 'art-2')).toBe(false);
+    expect(recorder.getArtifact(RUN, 'art-1')?.content.toString()).toBe('ok 1 - passes\n');
+    writeFileSync(path.join(dir, 'artifacts', RUN, 'art-1'), 'REWRITTEN AFTER THE FACT');
+    expect(() => recorder.getArtifact(RUN, 'art-1')).toThrow(ArtifactIntegrityError);
   });
 
   it('refuses events after run.completed', () => {

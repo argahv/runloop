@@ -3,8 +3,9 @@ import { selectRecentActions, selectTaskProgress, type ExecState } from '@runloo
 import { useMemo, type CSSProperties } from 'react';
 import { useStudio, useStudioStore } from '../state/context';
 import { formatDuration } from '../state/timeline';
-import { agentLook, callStatusView, characterStatusView, KIND_LABEL, taskStatusView } from '../state/view';
+import { agentLook, callStatusView, KIND_LABEL, runHasEnded, taskStatusView } from '../state/view';
 import styles from './AgentDetails.module.css';
+import CharacterStatus from './CharacterStatus';
 import StatusBadge from './StatusBadge';
 
 /** Details of the selected agent at the playhead (or a task overview when none is selected). */
@@ -55,8 +56,10 @@ export default function AgentDetails() {
         </button>
       </header>
       <p className={styles.badges}>
-        {character && <StatusBadge view={characterStatusView(state.world.paused ? 'paused' : character.activity)} />}
-        <span className="chip">state: {agent.state}</span>
+        {character && <CharacterStatus agentId={agent.id} />}
+        <span className="chip">
+          {runHasEnded(exec) ? 'last state' : 'state'}: {agent.state}
+        </span>
         {station && <span className="chip">at {station.label}</span>}
       </p>
       {agent.stateReason && <p className={styles.muted}>{agent.stateReason}</p>}
@@ -78,7 +81,7 @@ export default function AgentDetails() {
           <div className={styles.task}>
             <div className={styles.taskTop}>
               <span className={styles.taskTitle}>{task.title}</span>
-              <StatusBadge view={taskStatusView(task.status)} />
+              <StatusBadge view={taskStatusView(task.status, runHasEnded(exec))} />
             </div>
             <span className={styles.muted}>
               {task.id} · {KIND_LABEL[task.kind]} · attempt {Math.max(1, task.attempts)}
@@ -197,7 +200,7 @@ function TaskOverview({ exec }: { exec: ExecState }) {
                       <span className={styles.actionTitle}>
                         {t.id} · {t.title}
                       </span>
-                      <StatusBadge view={taskStatusView(t.status)} />
+                      <StatusBadge view={taskStatusView(t.status, runHasEnded(exec))} />
                     </span>
                     <span className={styles.muted}>
                       {KIND_LABEL[t.kind]}

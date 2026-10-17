@@ -85,6 +85,9 @@ export function streamRunEvents(
         });
         if (timedOut && !stream.aborted) await stream.write(': ping\n\n');
       }
+    } catch (err) {
+      // A client that went away (or a server shutting down) is not an error.
+      if (!stream.aborted) throw err;
     } finally {
       unsubscribe();
     }

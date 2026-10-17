@@ -184,7 +184,8 @@ export interface ExecState {
 /** A chip in the Agent Flow row, one per task kind in first-seen order. */
 export interface FlowChip {
   kind: TaskKind;
-  status: 'pending' | 'current' | 'done' | 'failed';
+  /** current = a task of this kind is assigned / in progress; blocked = only blocked ones are open. */
+  status: 'pending' | 'current' | 'blocked' | 'done' | 'failed';
   taskIds: string[];
 }
 

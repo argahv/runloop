@@ -13,15 +13,16 @@ export type EventOf<T extends EventType> = EnvelopeFields & {
 export type RunEvent = { [T in EventType]: EventOf<T> }[EventType];
 
 /**
- * An event with a valid envelope that this version cannot interpret:
- * an unknown type, an unsupported schemaVersion, or an invalid payload.
- * Reducers skip it (recording an anomaly) but the text trace still shows it.
+ * An event this version cannot interpret: an unknown type, an unsupported
+ * schemaVersion or an invalid payload, or (from invalidEnvelopeEvent) an
+ * invalid envelope that still names its sequence. Reducers skip it
+ * (recording an anomaly) but the text trace still shows it.
  */
 export type UnknownEvent = EnvelopeFields & {
   type: string;
   payload: unknown;
   unknown: true;
-  reason: 'unknown_type' | 'unsupported_version' | 'invalid_payload';
+  reason: 'unknown_type' | 'unsupported_version' | 'invalid_payload' | 'invalid_envelope';
   error?: string;
 };
 

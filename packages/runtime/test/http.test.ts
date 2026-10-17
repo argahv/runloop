@@ -1,6 +1,8 @@
 import { apiPaths, type EventsPageResponse, type RunDetailResponse } from '@runloop-world/events';
 import { parseWorldDefinition } from '@runloop-world/world-engine';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { main } from '../src/cli';
+import { isLoopbackAddress } from '../src/http/app';
 import { createRuntime, type Runtime } from '../src/runtime';
 import { MANIFEST, REPO_ROOT, openRecorder, tempDir } from './helpers';
 
@@ -35,6 +37,35 @@ describe('HTTP API', () => {
     expect((await app.request(apiPaths.health, { headers: { host: 'localhost.evil.example:4317' } })).status).toBe(403);
     expect((await app.request(apiPaths.health, { headers: { host: '127.0.0.1:4317' } })).status).toBe(200);
     expect((await app.request(apiPaths.health, { headers: { host: 'localhost:9999' } })).status).toBe(200);
+  });
+
+  it('refuses connections from non-loopback peers, even with a spoofed localhost Host', async () => {
+    const { app } = runtime();
+    const peer = (remoteAddress: string) => ({ incoming: { socket: { remoteAddress } } });
+    const spoofed = { headers: { host: 'localhost' } };
+    expect((await app.request(apiPaths.health, spoofed, peer('192.0.2.2'))).status).toBe(403);
+    expect((await app.request(apiPaths.health, spoofed, peer('::ffff:10.0.0.7'))).status).toBe(403);
+    for (const local of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+      expect((await app.request(apiPaths.health, spoofed, peer(local))).status).toBe(200);
+    }
+  });
+
+  it('isLoopbackAddress accepts only loopback addresses', () => {
+    for (const a of ['127.0.0.1', '127.1.2.3', '::1', '[::1]', '::ffff:127.0.0.1']) expect(isLoopbackAddress(a), a).toBe(true);
+    for (const a of ['0.0.0.0', '192.168.1.2', '::', '::ffff:10.0.0.1', 'localhost.evil', '1127.0.0.1']) {
+      expect(isLoopbackAddress(a), a).toBe(false);
+    }
+  });
+
+  it('the CLI refuses to listen on a non-loopback host', async () => {
+    const errors: unknown[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a.join(' ')));
+    try {
+      expect(await main(['serve', '--host', '0.0.0.0', '--port', '0'])).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(String(errors[0])).toContain('loopback');
   });
 
   it('sends CORS headers only to allowed origins', async () => {

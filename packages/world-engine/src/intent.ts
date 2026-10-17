@@ -1,4 +1,4 @@
-import type { ExecState } from '@runloop-world/core';
+import type { ExecState, RunExecStatus } from '@runloop-world/core';
 import type { TaskKind } from '@runloop-world/events';
 import type { ActivityRule, StationKind } from './definition';
 import type { Activity, CompiledWorld } from './types';
@@ -11,6 +11,8 @@ export interface Intent {
 }
 
 const IDLE: Intent = { activity: 'idle', taskId: null, stationKind: null };
+
+const RUN_ENDED: ReadonlySet<RunExecStatus> = new Set(['succeeded', 'failed', 'stopped', 'interrupted']);
 
 /**
  * First matching activity rule. Rules with `permission: true` only apply to a
@@ -31,7 +33,11 @@ export function matchActivityRule(
 /**
  * What the world wants an agent's character to do, from Layer-1 state only.
  * Priority: failed → awaiting_approval → waiting (blocked) → working →
- * succeeded (last task completed, nothing current) → idle.
+ * succeeded (a task completed in this very event, nothing current) → idle.
+ *
+ * Once the run has ended (succeeded / failed / stopped / interrupted) nothing
+ * executes any more, so tasks left unfinished no longer drive work, waiting or
+ * approval: those characters go home idle and free their station slots.
  */
 export function deriveIntent(exec: ExecState, agentId: string, world: CompiledWorld): Intent {
   const agent = exec.agents[agentId];
@@ -44,6 +50,8 @@ export function deriveIntent(exec: ExecState, agentId: string, world: CompiledWo
   if (agent.state === 'failed' || task?.status === 'failed' || lastFailed) {
     return { activity: 'failed', taskId: task?.id ?? last?.taskId ?? null, stationKind: null };
   }
+
+  if (RUN_ENDED.has(exec.run.status)) return IDLE;
 
   const perm = agent.pendingPermissionId ? exec.permissions[agent.pendingPermissionId] : undefined;
   if (perm?.status === 'pending') {
@@ -64,6 +72,9 @@ export function deriveIntent(exec: ExecState, agentId: string, world: CompiledWo
     };
   }
 
-  if (!task && last?.status === 'completed') return { activity: 'succeeded', taskId: last.taskId, stationKind: null };
+  // A reaction to the completion itself: an old completion never re-triggers it.
+  if (!task && last?.status === 'completed' && last.seq === exec.lastSequence) {
+    return { activity: 'succeeded', taskId: last.taskId, stationKind: null };
+  }
   return IDLE;
 }

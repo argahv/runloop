@@ -33,7 +33,7 @@ export const MANIFEST: RunManifest = {
 };
 
 /** A recorder on a file DB in `dataDir`; listener errors are swallowed quietly. */
-export function openRecorder(dataDir: string, opts: { secrets?: string[] } = {}) {
+export function openRecorder(dataDir: string, opts: { secrets?: string[]; now?: () => Date } = {}) {
   const file = path.join(dataDir, 'runloop.db');
   const db = openDb(file);
   const recorder = new Recorder({ db, dataDir, bus: new EventBus(() => {}), ...opts });

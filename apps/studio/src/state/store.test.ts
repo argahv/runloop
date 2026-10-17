@@ -57,6 +57,22 @@ describe('studio store: ingest', () => {
     expect(s.stateAt(2).exec.anomalies.map((a) => a.code)).toContain('unknown_event');
   });
 
+  it('folds an invalid envelope that names its sequence as an anomaly instead of stalling', () => {
+    const { store, events } = openFixture();
+    const bad = { ...(wire(events[2]) as object), visibility: 'internal' }; // e.g. from a newer runtime
+    const raws = events.map((e, i) => (i === 2 ? bad : wire(e)));
+    store.getState().ingest(raws, 'live');
+    store.getState().ingest([bad], 'backlog'); // a backfill redelivers it: no duplicate
+    const s = store.getState();
+    expect(s.lastSequence).toBe(events.length);
+    expect(s.gap).toBeNull();
+    expect(s.raw).toEqual([]);
+    expect(s.events()[2]).toMatchObject({ sequence: 3, unknown: true, reason: 'invalid_envelope', eventId: events[2]!.eventId });
+    expect(s.rawEvent(3)).toEqual(bad);
+    expect(s.stateAt(3).exec.anomalies.map((a) => a.code)).toEqual(['unknown_event']);
+    expect(s.ended).toBe(true);
+  });
+
   it('keeps the raw JSON of each event as received', () => {
     const { store, events } = openFixture();
     const withExtra = { ...(wire(events[0]) as object), extraField: 'kept' };
@@ -172,6 +188,20 @@ describe('studio store: playback', () => {
     expect(s.playheadSeq).toBe(events.length);
     s.play();
     expect(store.getState().cursor).toMatchObject({ mode: 'replay', playing: true, tMs: 0 });
+  });
+
+  it('ends the scrubber of a running run at the live playhead, not at predicted arrivals', () => {
+    const { events } = openFixture();
+    const clock = fakeNow(ms(events[20]!.timestamp));
+    const { store } = openFixture({ now: clock.now });
+    store.getState().ingest(events.slice(0, 21).map(wire), 'live');
+    const s = store.getState();
+    expect(s.ended).toBe(false);
+    expect(s.settleMs).toBeGreaterThan(s.playheadMs()); // characters are still walking
+    expect(s.endMs()).toBe(s.playheadMs());
+    s.seek(1e9);
+    expect(store.getState().cursor).toMatchObject({ mode: 'replay', tMs: s.durationMs });
+    expect(store.getState().playheadSeq).toBe(21);
   });
 
   it('hands over to live when playback catches up with a running run', () => {

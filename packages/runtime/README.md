@@ -28,6 +28,8 @@ RunManager.start ─► copy examples/<mission>/repo → workspaces/<runId>
 boot             ─► Recorder.recoverInterrupted()        (runs left "running" → interrupted)
 ```
 
+Recovery stamps its `tool.call_failed{runtime_restarted}` and `run.completed{interrupted}` events with the run's last recorded activity, not the restart time, so a replay of an interrupted run does not stretch over the downtime. The summary says when the run was recovered.
+
 ### Recorder (`src/recorder.ts`)
 
 `append` is synchronous and runs these steps in order:
@@ -45,7 +47,9 @@ Adapters may only emit `agent.*` and `task.*` events:
 - `run.*` comes from the run manager.
 - `tool.*` and `artifact.*` come from the tool invoker.
 
-So an adapter cannot fabricate a tool result or an outcome. Every `tool.call_started` gets exactly one terminal event, linked by `parentEventId`:
+So an adapter cannot fabricate a tool result or an artifact: those are produced by the runtime. Task and run outcomes are different: `task.completed`, `task.failed` and the final `run.completed` outcome and summary are the adapter's **claims**, recorded as made. The run manager only checks that a `task.completed` cites artifact ids this run actually recorded; it cannot tell whether "all tests pass" is true. Read claims against the tool results they rest on.
+
+Every `tool.call_started` gets exactly one terminal event, linked by `parentEventId`:
 - **`tool.call_completed`:** the tool ran. A failing test run is `status: error` with its real metrics.
 - **`tool.call_failed`:** the tool could not run (denied, timeout, aborted, spawn_error, exception or runtime_restarted).
 
@@ -54,6 +58,8 @@ So an adapter cannot fabricate a tool result or an outcome. Every `tool.call_sta
 - Paths are resolved inside the workspace, and realpath catches symlink escapes.
 - Reads and writes are capped at 256 KB; listings at 500 entries.
 - `run_command` allows only the exact argv `node --test --test-reporter=tap`. It runs as `process.execPath` with `shell: false` and a minimal env, has a 30 s timeout, and its process group is SIGKILLed on timeout or abort.
+- **This is not isolation.** `node --test` executes the workspace's JavaScript as your user. That code can read the runtime's environment through `/proc/<pid>/environ` and write anywhere you can, including the data dir. It is fine for the scripted demo, whose code is fixed. Run commands in a real sandbox (a container, bubblewrap or nsjail without access to the data dir) before connecting an adapter that writes code of its own.
+- Artifact bytes are checked against the sha256 recorded in `artifact.created` whenever they are served; changed bytes get a 409 instead of being shown.
 
 ### Scripted coding mission (`src/adapters/scripted-coding-mission.ts`)
 
@@ -72,7 +78,7 @@ The contract is `packages/events/src/protocol.ts`. Every request needs a `localh
 | `GET /api/runs/:id/events?after&limit` | `{ events, nextAfter, hasMore }` (limit ≤ 1000) |
 | `GET /api/runs/:id/stream` | SSE. Resume with `Last-Event-ID` or `?after`. Sends `: ping` every 15 s and an `end` event when the run is terminal. |
 | `POST /api/runs/:id/{stop,pause,resume}` | 202 `{ run }`, or 409 if the run is not active |
-| `GET /api/runs/:id/artifacts/:artifactId` | The stored bytes, with their media type |
+| `GET /api/runs/:id/artifacts/:artifactId` | The stored bytes, with their media type. 409 if they no longer match the recorded sha256. |
 
 ## Tests
 

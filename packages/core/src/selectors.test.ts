@@ -61,7 +61,7 @@ describe('selectors', () => {
     expect(kinds(after((e) => e.type === 'task.blocked'))).toEqual([
       'research:done',
       'code:done',
-      'test:current',
+      'test:blocked',
       'fix:pending',
     ]);
     expect(kinds(foldExecution(events))).toEqual(['research:done', 'code:done', 'test:done', 'fix:done']);

@@ -124,7 +124,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  max-width: 220px;
+  /* Room for "Tool error · 12 tests: 10 passed, 2 failed" (the text is clipped to 36 chars). */
+  max-width: 300px;
   padding: 3px 8px;
   border-radius: 6px;
   border: 1px solid #f43f5e;

@@ -7,7 +7,7 @@ export * from './run-manager';
 export * from './runtime';
 export * from './tool-invoker';
 export * from './trace-printer';
-export { createApp, type AppOptions } from './http/app';
+export { createApp, isLoopbackAddress, type AppOptions } from './http/app';
 export { streamRunEvents } from './http/sse';
 export { openDb, migrate, tx, type Db } from './store/db';
 export { SandboxError, resolveInside } from './sandbox/paths';

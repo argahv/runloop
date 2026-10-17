@@ -1,7 +1,7 @@
 'use client';
 import { useFrame, useThree } from '@react-three/fiber';
 import type { PresentationState } from '@runloop-world/world-engine';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useSyncExternalStore } from 'react';
 import { Vector3 } from 'three';
 import { STATE_BADGE, TONE_COLOR, type IconName } from './badges';
 import { useScene } from './context';
@@ -40,10 +40,14 @@ export class LabelStore {
   readonly elements = new Map<string, HTMLElement>();
   /** Stacking boost: station label (hover/selection) > selected badge > badges > signs and incident chips. */
   readonly boost = new Map<string, number>();
+  /** Zone signs stay put; every other label moves up out of the way of labels in front of it. */
+  readonly fixed = new Set<string>();
 
   set(id: string, content: LabelContent, anchor: Anchor) {
     this.specs.set(id, content);
     this.anchors.set(id, anchor);
+    if (content.kind === 'zone') this.fixed.add(id);
+    else this.fixed.delete(id);
     this.boost.set(id, content.kind === 'station' ? 3000 : content.kind === 'agent' ? (content.selected ? 2000 : 1000) : 0);
     this.emit();
   }
@@ -52,6 +56,7 @@ export class LabelStore {
     if (!this.specs.delete(id)) return;
     this.anchors.delete(id);
     this.boost.delete(id);
+    this.fixed.delete(id);
     this.emit();
   }
 
@@ -72,7 +77,8 @@ export class LabelStore {
 export function useLabel(id: string, content: LabelContent | null, anchor: Anchor) {
   const { labels } = useScene();
   const key = content ? JSON.stringify(content) : '';
-  useEffect(() => {
+  // Layout effects, so a synchronous badge update reaches the label layer in the same commit.
+  useLayoutEffect(() => {
     if (!content) {
       labels.remove(id);
       return;
@@ -80,18 +86,36 @@ export function useLabel(id: string, content: LabelContent | null, anchor: Ancho
     labels.set(id, content, anchor);
     // `key` captures content by value; anchor objects are stable per caller.
   }, [labels, id, key]);
-  useEffect(() => () => labels.remove(id), [labels, id]);
+  useLayoutEffect(() => () => labels.remove(id), [labels, id]);
 }
 
 const v = new Vector3();
+/** Minimum spacing (px) between labels that would otherwise overlap. */
+const LABEL_GAP = 3;
 
-/** Inside the Canvas: projects every label anchor to screen space each frame. Mount it last. */
+interface Placed {
+  el: HTMLElement;
+  id: string;
+  x: number;
+  /** Screen y of the label's bottom edge (the anchor point). */
+  y: number;
+  depth: number;
+}
+
+/**
+ * Inside the Canvas: projects every label anchor to screen space each frame,
+ * then nudges overlapping labels apart. Labels nearer the front (lower on
+ * screen) keep their spot; ones further back move up just enough to clear
+ * them, so badges at a crowded hub or next to a station stay readable.
+ * Mount it last.
+ */
 export function LabelProjector() {
   const { labels } = useScene();
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   useFrame(() => {
     camera.updateMatrixWorld();
+    const items: Placed[] = [];
     for (const [id, el] of labels.elements) {
       const a = labels.anchors.get(id);
       const p = typeof a === 'function' ? a(v) : a ? v.copy(a) : null;
@@ -104,8 +128,32 @@ export function LabelProjector() {
       const y = ((1 - p.y) / 2) * size.height;
       const off = p.z > 1 || x < -200 || y < -100 || x > size.width + 200 || y > size.height + 100;
       el.style.visibility = off ? 'hidden' : 'visible';
-      el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -100%)`;
-      el.style.zIndex = String(Math.round((1 - p.z) * 500) + (labels.boost.get(id) ?? 0));
+      if (!off) items.push({ el, id, x, y, depth: p.z });
+    }
+
+    items.sort((a, b) => b.y - a.y);
+    const taken: { l: number; r: number; t: number; b: number }[] = [];
+    for (const it of items) {
+      if (!labels.fixed.has(it.id)) {
+        const half = it.el.offsetWidth / 2;
+        const h = it.el.offsetHeight;
+        // Move up past every placed label this one overlaps (a few passes settle chains).
+        for (let pass = 0; pass < 6; pass++) {
+          let moved = false;
+          for (const r of taken) {
+            const overlaps =
+              it.x + half > r.l - LABEL_GAP && it.x - half < r.r + LABEL_GAP && it.y > r.t - LABEL_GAP && it.y - h < r.b + LABEL_GAP;
+            if (overlaps) {
+              it.y = r.t - LABEL_GAP;
+              moved = true;
+            }
+          }
+          if (!moved) break;
+        }
+        taken.push({ l: it.x - half, r: it.x + half, t: it.y - h, b: it.y });
+      }
+      it.el.style.transform = `translate3d(${it.x.toFixed(1)}px, ${it.y.toFixed(1)}px, 0) translate(-50%, -100%)`;
+      it.el.style.zIndex = String(Math.round((1 - it.depth) * 500) + (labels.boost.get(it.id) ?? 0));
     }
   });
   return null;

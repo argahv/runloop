@@ -1,6 +1,6 @@
 'use client';
 import { RoundedBox } from '@react-three/drei';
-import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { flushSync, useFrame, type ThreeEvent } from '@react-three/fiber';
 import type { PresentationState } from '@runloop-world/world-engine';
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Color, MathUtils, MeshBasicMaterial, type Group, type Mesh, type Vector3 } from 'three';
@@ -102,11 +102,14 @@ export const Character = memo(function Character({
     }
     g.rotation.y = yaw.current;
 
-    // React only hears about badge changes.
+    // React only hears about badge changes. They are rare, so commit them
+    // synchronously: the badge then paints in the same frame as this pose
+    // (otherwise it trails by a frame or more on slow renderers).
     const detail = badgeDetail(pose.state, agentId, frame.state, world);
     if (pose.state !== viewRef.current.state || detail !== viewRef.current.detail) {
-      viewRef.current = { state: pose.state, detail };
-      setView(viewRef.current);
+      const next = { state: pose.state, detail };
+      viewRef.current = next;
+      flushSync(() => setView(next));
     }
 
     // Layer 3 decoration.

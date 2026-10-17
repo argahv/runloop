@@ -4,7 +4,7 @@
   "name": "Research Campus",
   "description": "Four cutaway rooms around a central hub: Research, Build, Test and Deploy.",
   "tickHz": 10,
-  "ticksPerCell": 3,
+  "ticksPerCell": 2,
   "grid": [
     "........................",
     ".#########....#########.",

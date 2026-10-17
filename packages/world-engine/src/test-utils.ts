@@ -11,7 +11,11 @@ import type { CompiledWorld, WorldState } from './types';
 export const campusJson = (): WorldDefinition =>
   JSON.parse(readFileSync(new URL('../../../worlds/research-campus/world.json', import.meta.url), 'utf8'));
 
-export const campus = (): CompiledWorld => loadWorld(campusJson());
+/**
+ * The campus layout with its walk speed pinned to 3 ticks per cell, so the
+ * tick arithmetic in tests doesn't change when world.json's speed is retuned.
+ */
+export const campus = (): CompiledWorld => loadWorld({ ...campusJson(), ticksPerCell: 3 });
 
 export interface Step {
   event: AnyEvent;

@@ -29,9 +29,20 @@ export const KIND_LABEL: Record<TaskKind, string> = {
 const FLOW_STATUS: Record<FlowChip['status'], StatusView> = {
   pending: { icon: '○', text: 'pending', tone: 'muted' },
   current: { icon: '◉', text: 'in progress', tone: 'live' },
+  blocked: { icon: '⏳', text: 'blocked', tone: 'warn' },
   done: { icon: '✓', text: 'done', tone: 'ok' },
   failed: { icon: '✗', text: 'failed', tone: 'err' },
 };
+
+/** Work left open when the run ended (stopped, interrupted, failed): nothing is in progress any more. */
+const UNFINISHED: StatusView = { icon: '■', text: 'unfinished', tone: 'muted' };
+
+const RUN_ENDED: ReadonlySet<RunExecStatus> = new Set(['succeeded', 'failed', 'stopped', 'interrupted']);
+
+/** The run has a terminal status: nothing executes any more. */
+export function runHasEnded(exec: ExecState): boolean {
+  return RUN_ENDED.has(exec.run.status);
+}
 
 export interface FlowChipView extends FlowChip {
   label: string;
@@ -40,7 +51,12 @@ export interface FlowChipView extends FlowChip {
 
 /** Agent Flow chips (core selectAgentFlow) with labels and status icons. */
 export function flowChips(exec: ExecState): FlowChipView[] {
-  return selectAgentFlow(exec).map((c) => ({ ...c, label: KIND_LABEL[c.kind], view: FLOW_STATUS[c.status] }));
+  const ended = runHasEnded(exec);
+  return selectAgentFlow(exec).map((c) => ({
+    ...c,
+    label: KIND_LABEL[c.kind],
+    view: ended && (c.status === 'current' || c.status === 'blocked') ? UNFINISHED : FLOW_STATUS[c.status],
+  }));
 }
 
 const RUN_STATUS: Record<RunStatus | RunExecStatus, StatusView> = {
@@ -102,7 +118,9 @@ const TASK_STATUS: Record<TaskStatus, StatusView> = {
   failed: { icon: '✗', text: 'failed', tone: 'err' },
 };
 
-export function taskStatusView(status: TaskStatus): StatusView {
+/** A task's status; open tasks of a run that has ended show as unfinished. */
+export function taskStatusView(status: TaskStatus, runEnded = false): StatusView {
+  if (runEnded && (status === 'assigned' || status === 'in_progress' || status === 'blocked')) return UNFINISHED;
   return TASK_STATUS[status];
 }
 

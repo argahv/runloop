@@ -174,6 +174,9 @@ class Sim {
     for (const id of this.characterOrder) {
       const c = this.characters[id]!;
       const intent = deriveIntent(exec, id, this.world);
+      // 'succeeded' is only entered on the completing event; it then lasts until
+      // something else changes (presentationAt fades it to idle after a moment).
+      if (c.activity === 'succeeded' && intent.activity === 'idle') continue;
       // With fixed rules, the station kind is a function of (activity, task).
       if (intent.activity !== c.activity || intent.taskId !== c.taskId) changed.push({ id, intent });
     }
@@ -190,7 +193,8 @@ class Sim {
         stationId: target.kind === 'slot' || target.kind === 'overflow' ? target.stationId : null,
         target,
         motion: this.route(c, target),
-        sinceTick: intent.activity !== c.activity ? this.tick : c.sinceTick,
+        // Entering 'succeeded' always means a fresh completion, so its reaction restarts.
+        sinceTick: intent.activity !== c.activity || intent.activity === 'succeeded' ? this.tick : c.sinceTick,
       });
     }
 

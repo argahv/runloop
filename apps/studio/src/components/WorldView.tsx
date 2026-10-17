@@ -41,9 +41,10 @@ export default function WorldView() {
   const reducedMotion = useStudio((s) => s.reducedMotion);
 
   const [webgl, setWebgl] = useState<'checking' | 'ok' | 'unavailable'>('checking');
-  const [ready, setReady] = useState(false);
+  // The world whose canvas has rendered: a new run's world is not ready until its own canvas says so.
+  const [readyWorld, setReadyWorld] = useState<typeof world>(null);
   useEffect(() => setWebgl(webglAvailable() ? 'ok' : 'unavailable'), []);
-  const onReady = useCallback(() => setReady(true), []);
+  const onReady = useCallback(() => setReadyWorld(world), [world]);
 
   let body: ReactNode;
   if (loadError) {
@@ -108,7 +109,7 @@ export default function WorldView() {
   }
 
   return (
-    <section className={styles.view} aria-label="World view" data-world-ready={ready && world ? 'true' : undefined}>
+    <section className={styles.view} aria-label="World view" data-world-ready={world && readyWorld === world ? 'true' : undefined}>
       <div className={styles.canvas}>{body}</div>
 
       {world && (

@@ -17,12 +17,27 @@ describe('agent flow chips', () => {
     expect(statuses(at((e) => e.type === 'task.blocked'))).toEqual({
       research: 'done',
       code: 'done',
-      test: 'in progress', // blocked counts as current
+      test: 'blocked',
       fix: 'pending',
     });
     const final = flowChips(foldExecution(events));
     expect(final.map((c) => c.label)).toEqual(['Research', 'Code', 'Test', 'Fix']);
     expect(final.every((c) => c.status === 'done' && c.view.icon === '✓')).toBe(true);
+  });
+
+  it('shows open work of an ended run as unfinished, not in progress', () => {
+    const toolStart = events.findIndex((e) => e.type === 'tool.call_started' && e.payload.tool === 'write_file');
+    const b = runBuilder({ runId: events[0]!.runId });
+    for (const e of events.slice(0, toolStart + 1)) b.add(e.type, e.payload as never);
+    expect(statuses(foldExecution(b.events)).code).toBe('in progress');
+    b.add('run.completed', { outcome: 'stopped', summary: 'Stopped by user' });
+    const chips = flowChips(foldExecution(b.events));
+    expect(Object.fromEntries(chips.map((c) => [c.kind, c.view.text]))).toEqual({
+      research: 'done',
+      code: 'unfinished',
+      test: 'pending',
+    });
+    expect(chips[1]!.view.icon).toBe('■');
   });
 
   it('marks a failed task kind as failed with an icon and text', () => {

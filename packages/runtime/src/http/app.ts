@@ -14,7 +14,7 @@ import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { RUNTIME_VERSION } from '../config';
 import { MissionNotFoundError } from '../mission';
-import { UnknownRunError, type Recorder } from '../recorder';
+import { ArtifactIntegrityError, UnknownRunError, type Recorder } from '../recorder';
 import { RunConflictError, RunNotActiveError, type RunManager } from '../run-manager';
 import { streamRunEvents } from './sse';
 
@@ -31,6 +31,18 @@ export interface AppOptions {
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
 const SAFE_WORLD_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MAX_PAGE = 1000;
+
+/** True for 127.0.0.0/8 and ::1 (also IPv4-mapped and bracketed forms). */
+export function isLoopbackAddress(address: string): boolean {
+  const a = address.replace(/^\[|\]$/g, '').replace(/^::ffff:/i, '');
+  return a === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a);
+}
+
+/** Peer address of the socket when served by @hono/node-server (absent for in-process app.request()). */
+function remoteAddressOf(c: Context): string | undefined {
+  const env = c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined;
+  return env?.incoming?.socket?.remoteAddress;
+}
 
 function hostnameOf(c: Context): string | null {
   const host = c.req.header('host');
@@ -52,10 +64,10 @@ function errorBody(error: string): ErrorResponse {
 }
 
 /**
- * The local HTTP API (see packages/events/src/protocol.ts). Guards: the Host
- * header must be localhost/127.0.0.1 (blocks DNS rebinding), POSTs must be
- * JSON (forces a CORS preflight) and come from an allowed Origin when a
- * browser sends one.
+ * The local HTTP API (see packages/events/src/protocol.ts). It has no auth, so
+ * guards: the peer must be a loopback address, the Host header must be
+ * localhost/127.0.0.1 (blocks DNS rebinding), POSTs must be JSON (forces a
+ * CORS preflight) and come from an allowed Origin when a browser sends one.
  */
 export function createApp(opts: AppOptions): Hono {
   const { recorder, manager, allowedOrigins } = opts;
@@ -74,6 +86,8 @@ export function createApp(opts: AppOptions): Hono {
   const app = new Hono();
 
   app.use('*', async (c, next) => {
+    const peer = remoteAddressOf(c);
+    if (peer !== undefined && !isLoopbackAddress(peer)) return c.json(errorBody('Only local connections are allowed'), 403);
     const hostname = hostnameOf(c);
     if (!hostname || !LOCAL_HOSTNAMES.has(hostname)) return c.json(errorBody('Host not allowed'), 403);
     await next();
@@ -185,7 +199,13 @@ export function createApp(opts: AppOptions): Hono {
   app.post('/api/runs/:id/resume', control('resume'));
 
   app.get('/api/runs/:id/artifacts/:aid', (c) => {
-    const artifact = recorder.getArtifact(c.req.param('id'), c.req.param('aid'));
+    let artifact;
+    try {
+      artifact = recorder.getArtifact(c.req.param('id'), c.req.param('aid'));
+    } catch (err) {
+      if (err instanceof ArtifactIntegrityError) return c.json(errorBody(err.message), 409);
+      throw err;
+    }
     if (!artifact) return c.json(errorBody('Artifact not found'), 404);
     const textual = /^text\/|^application\/json/.test(artifact.mediaType);
     return c.body(new Uint8Array(artifact.content), 200, {

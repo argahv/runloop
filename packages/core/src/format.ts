@@ -87,8 +87,14 @@ function describe(e: RunEvent, s?: ExecState): Described {
     }
     case 'task.assigned':
       return { label: `Assigned ${e.payload.taskId} to ${e.payload.agentId}` };
-    case 'task.started':
-      return { label: `Started ${e.payload.taskId}` };
+    case 'task.started': {
+      // Numbered only when `s` is the state just before or just after this event.
+      const task = s?.tasks[e.payload.taskId];
+      const after = s?.lastSequence === e.sequence;
+      const before = s?.lastSequence === e.sequence - 1;
+      const attempt = task && (after || before) ? task.attempts + (after ? 0 : 1) : 1;
+      return { label: attempt > 1 ? `Started ${e.payload.taskId} (attempt ${attempt})` : `Started ${e.payload.taskId}` };
+    }
     case 'task.blocked':
       return { label: `Blocked ${e.payload.taskId}`, detail: e.payload.reason, severity: 'warn' };
     case 'task.completed':

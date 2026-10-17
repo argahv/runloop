@@ -16,6 +16,13 @@ export interface MotionSample {
 }
 
 /**
+ * Ticks are fractional, so a ms → tick → ms round trip (e.g. a playhead parked
+ * at a walk's arrival time) can land a hair before the end. Within this many
+ * steps of the last cell counts as arrived (far below anything visible).
+ */
+const ARRIVAL_EPS = 1e-9;
+
+/**
  * Closed-form position on a motion at `tick` (fractional ticks allowed, giving
  * smooth continuous x/y). No tick loop: one cell per `ticksPerCell` ticks.
  */
@@ -23,7 +30,7 @@ export function positionAt(motion: Motion, tick: number, ticksPerCell: number): 
   const { path } = motion;
   const last = path.length - 1;
   const steps = Math.max(0, tick - motion.startTick) / ticksPerCell;
-  if (steps >= last) {
+  if (steps >= last - ARRIVAL_EPS) {
     const end = path[last]!;
     return { x: end[0], y: end[1], cell: end, next: end, frac: 0, arrived: true };
   }
@@ -58,12 +65,13 @@ export function msToTick(ms: number, tickHz: number): number {
 }
 
 /**
- * Integer tick of an event: floor of its time since run start, clamped so it
+ * Tick of an event: its exact (fractional) time since run start, clamped so it
  * never goes below the previous event's tick (timestamps may be non-monotonic;
- * order always comes from `sequence`).
+ * order always comes from `sequence`). Not floored, so a new route branches
+ * exactly where the playhead is when the event happens (no jump).
  */
 export function eventTick(prevTick: number, eventMs: number, runStartMs: number, tickHz: number): number {
-  return Math.max(prevTick, 0, Math.floor(msToTick(eventMs - runStartMs, tickHz)));
+  return Math.max(prevTick, 0, msToTick(eventMs - runStartMs, tickHz));
 }
 
 const sameCell = (a: Cell, b: Cell) => a[0] === b[0] && a[1] === b[1];
@@ -75,7 +83,7 @@ const sameCell = (a: Cell, b: Cell) => a[0] === b[0] && a[1] === b[1];
 function interruptionPoint(motion: Motion, tick: number, ticksPerCell: number) {
   const last = motion.path.length - 1;
   const steps = Math.max(0, tick - motion.startTick) / ticksPerCell;
-  if (steps >= last) return { i: last, midStep: false };
+  if (steps >= last - ARRIVAL_EPS) return { i: last, midStep: false };
   const i = Math.floor(steps);
   return { i, midStep: steps > i };
 }
