@@ -164,7 +164,7 @@ export interface ExecState {
   /** Last folded sequence (0 = nothing folded). */
   lastSequence: number;
   runId: string | null;
-  /** Timestamp (ms since epoch) of run.started, or of the first event folded. */
+  /** Timestamp (ms since epoch) of the first event folded (normally run.started). */
   runStartMs: number | null;
   run: RunExec;
   agents: Record<string, AgentExec>;
