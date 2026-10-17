@@ -1,0 +1,19 @@
+{
+  "name": "@runloop-world/core",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@runloop-world/events": "workspace:*"
+  },
+  "devDependencies": {
+    "@runloop-world/testkit": "workspace:*"
+  }
+}

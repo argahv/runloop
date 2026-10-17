@@ -1,0 +1,28 @@
+{
+  "name": "runloop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A 3D living world for AI agents: watch real agent work, inspect the trace, replay what happened.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @runloop-world/runtime --filter @runloop-world/studio dev",
+    "demo": "pnpm --filter @runloop-world/runtime demo",
+    "serve": "pnpm --filter @runloop-world/runtime serve",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm --filter @runloop-world/studio build"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}
