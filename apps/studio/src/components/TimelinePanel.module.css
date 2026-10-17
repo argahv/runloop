@@ -1,0 +1,124 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.empty {
+  margin: 16px;
+  color: var(--muted);
+}
+
+.row {
+  position: relative;
+  border-left: 2px solid transparent;
+  transition: opacity 150ms;
+}
+.row[data-status='error'] {
+  border-left-color: var(--err);
+}
+.row[data-current='true'] {
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.1), transparent 80%);
+  border-left-color: var(--cyan);
+}
+.row[data-future='true'] {
+  opacity: 0.38;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 40px 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 12px 7px 8px;
+  border: none;
+  background: none;
+  text-align: left;
+}
+.main:hover {
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  padding-top: 1px;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  background: var(--panel-3);
+  color: var(--muted);
+}
+.icon[data-tone='ok'] { color: var(--ok); background: rgba(52, 211, 153, 0.14); }
+.icon[data-tone='err'] { color: var(--err); background: rgba(248, 113, 113, 0.16); }
+.icon[data-tone='warn'] { color: var(--warn); background: rgba(251, 191, 36, 0.14); }
+.icon[data-tone='live'] {
+  color: var(--cyan);
+  background: rgba(34, 211, 238, 0.14);
+  animation: spin 1.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.actor {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--role, var(--muted));
+}
+.title {
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.detail {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.facts :global(.chip[data-tone='ok']) {
+  color: var(--ok);
+}
+.facts :global(.chip[data-tone='err']) {
+  color: var(--err);
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.artifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 12px 8px 74px;
+  font-size: 12px;
+}

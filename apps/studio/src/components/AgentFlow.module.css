@@ -1,0 +1,77 @@
+.flow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  min-height: 48px;
+}
+.heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.empty {
+  margin: 0;
+  color: var(--muted);
+}
+.chips {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+.arrow {
+  color: var(--faint);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-2);
+}
+.icon {
+  font-size: 12px;
+}
+.label {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.status {
+  font-size: 11px;
+  color: var(--muted);
+}
+.chip[data-tone='ok'] {
+  border-color: rgba(52, 211, 153, 0.5);
+}
+.chip[data-tone='ok'] .icon,
+.chip[data-tone='ok'] .status {
+  color: var(--ok);
+}
+.chip[data-tone='live'] {
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.25);
+}
+.chip[data-tone='live'] .icon,
+.chip[data-tone='live'] .status {
+  color: var(--cyan);
+}
+.chip[data-tone='err'] {
+  border-color: var(--err);
+}
+.chip[data-tone='err'] .icon,
+.chip[data-tone='err'] .status {
+  color: var(--err);
+}
