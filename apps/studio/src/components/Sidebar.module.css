@@ -1,0 +1,151 @@
+.sidebar {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 12px;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, #0b1222, #080d19);
+  overflow: hidden;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 4px 10px;
+  font-size: 15px;
+  color: var(--text-strong);
+}
+.logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 5px, var(--cyan) 6px, var(--cyan) 7.5px, transparent 8.5px),
+    linear-gradient(135deg, #1e1b4b, #0c4a6e);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.35);
+}
+.sub {
+  margin-left: 6px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.start {
+  width: 100%;
+  min-height: 34px;
+}
+
+.error {
+  margin: 0;
+  color: var(--err);
+  font-size: 12px;
+}
+
+.heading {
+  margin: 8px 4px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.empty {
+  margin: 0 4px;
+  color: var(--muted);
+}
+
+.runs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 9px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+}
+.run:hover {
+  background: var(--panel-2);
+}
+.run[aria-current='true'] {
+  background: var(--panel-2);
+  border-color: var(--border-strong);
+  box-shadow: inset 2px 0 0 var(--cyan);
+}
+.runTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.runNo {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.runTitle {
+  color: var(--text);
+  font-size: 12px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.runMeta {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.runtime {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 4px;
+}
+.meta {
+  color: var(--faint);
+  font-size: 11px;
+}
+.offline {
+  margin: 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.offline p {
+  margin: 6px 0;
+}
+.cmd {
+  display: block;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: #020617;
+  border: 1px solid var(--border-strong);
+  color: var(--amber);
+  user-select: all;
+}
+.endpoint {
+  margin: 6px 4px 0;
+  color: var(--faint);
+}

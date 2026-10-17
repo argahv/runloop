@@ -1,0 +1,151 @@
+.wrap {
+  container-type: inline-size;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  flex-wrap: wrap;
+}
+
+.transport,
+.speeds {
+  display: inline-flex;
+  gap: 4px;
+}
+.play {
+  width: 36px;
+  border-color: #22d3ee80;
+  color: var(--cyan);
+}
+.speed {
+  min-height: 26px;
+  padding: 0 7px;
+  font-size: 12px;
+}
+
+.scrubber {
+  position: relative;
+  flex: 1;
+  min-width: 160px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.range {
+  --pct: 0%;
+  width: 100%;
+  margin: 0;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--cyan) 0 var(--pct), var(--panel-3) var(--pct) 100%);
+  cursor: pointer;
+}
+.range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ecfeff;
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+}
+.range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ecfeff;
+  border: 2px solid var(--cyan);
+}
+.range:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.marker {
+  pointer-events: auto;
+  position: absolute;
+  top: -3px;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--err);
+  background: #3f1219;
+  color: var(--err);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 12px;
+}
+.marker[data-resolved='true'] {
+  border-color: var(--faint);
+  background: var(--panel-3);
+  color: var(--muted);
+}
+
+.clock {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  min-width: 96px;
+  text-align: center;
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.newChip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--cyan);
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+}
+.liveBtn {
+  min-width: 84px;
+}
+.liveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.liveDot[data-on='true'] {
+  background: var(--err);
+  box-shadow: 0 0 8px var(--err);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* Narrow world column: the scrubber gets its own full-width row. */
+@container (max-width: 780px) {
+  .scrubber {
+    order: -1;
+    flex-basis: 100%;
+  }
+  .clock {
+    margin-left: auto;
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

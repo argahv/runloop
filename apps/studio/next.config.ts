@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   // Lets a second dev server (e.g. a scene preview) run from the same folder.
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   reactStrictMode: true,
+  // Don't (re)generate an AGENTS.md file on `next dev`.
+  agentRules: false,
+  // The dev badge would cover the sidebar's runtime status.
+  devIndicators: false,
   transpilePackages: [
     '@runloop-world/core',
     '@runloop-world/events',

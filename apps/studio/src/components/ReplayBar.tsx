@@ -1,0 +1,127 @@
+'use client';
+import { formatClock } from '@runloop-world/core';
+import { useMemo, type CSSProperties } from 'react';
+import { useStudio, useStudioStore } from '../state/context';
+import { useTicker } from '../state/hooks';
+import { SPEEDS } from '../state/store';
+import { formatClockPair } from '../state/view';
+import styles from './ReplayBar.module.css';
+
+/** Transport controls: prev / play / next, speed, time scrubber, live toggle. */
+export default function ReplayBar() {
+  const store = useStudioStore();
+  const cursor = useStudio((s) => s.cursor);
+  const runId = useStudio((s) => s.runId);
+  const ended = useStudio((s) => s.ended);
+  const settleMs = useStudio((s) => s.settleMs);
+  const lastSequence = useStudio((s) => s.lastSequence);
+  const newSinceReplay = useStudio((s) => s.newSinceReplay);
+  const speed = useStudio((s) => s.speed);
+  const s = store.getState();
+
+  const live = cursor.mode === 'live';
+  const t = s.playheadMs();
+  const end = s.endMs();
+  const settled = ended && t >= settleMs;
+  // The live clock moves with wall time, not with store updates.
+  useTicker(live && runId !== null && !settled, 250);
+
+  const disabled = runId === null || lastSequence === 0;
+  const playing = !disabled && (live ? !settled : cursor.playing);
+
+  const incidents = useMemo(() => {
+    const st = store.getState();
+    return st.stateAt(lastSequence).exec.incidents.map((i) => ({ ...i, tMs: st.timeOfSeq(i.seq) }));
+  }, [store, lastSequence]);
+
+  return (
+    <div className={styles.wrap}>
+      <div className={styles.bar} role="group" aria-label="Playback">
+        <div className={styles.transport}>
+          <button type="button" className="btn btn-icon" onClick={s.stepPrev} disabled={disabled} aria-label="Previous event" title="Previous event (←)">
+            <span aria-hidden="true">⏮</span>
+          </button>
+          <button
+            type="button"
+            className={`btn btn-icon ${styles.play}`}
+            onClick={s.togglePlay}
+            disabled={disabled}
+            aria-label={playing ? 'Pause' : 'Play'}
+            title={`${playing ? 'Pause' : 'Play'} (Space)`}
+          >
+            <span aria-hidden="true">{playing ? '⏸' : '▶'}</span>
+          </button>
+          <button type="button" className="btn btn-icon" onClick={s.stepNext} disabled={disabled} aria-label="Next event" title="Next event (→)">
+            <span aria-hidden="true">⏭</span>
+          </button>
+        </div>
+
+        <div className={styles.speeds} role="group" aria-label="Replay speed">
+          {SPEEDS.map((v) => (
+            <button key={v} type="button" className={`btn ${styles.speed}`} aria-pressed={speed === v} onClick={() => s.setSpeed(v)}>
+              {v}×
+            </button>
+          ))}
+        </div>
+
+        <div className={styles.scrubber}>
+          <input
+            type="range"
+            className={styles.range}
+            min={0}
+            max={Math.max(1, Math.round(end))}
+            step={100}
+            value={Math.round(t)}
+            disabled={disabled}
+            onChange={(e) => s.seek(Number(e.target.value))}
+            aria-label="Playhead time"
+            aria-valuetext={formatClockPair(t, end)}
+            style={{ '--pct': `${end > 0 ? (t / end) * 100 : 0}%` } as CSSProperties}
+          />
+          <div className={styles.markers}>
+            {incidents.map((i) => (
+              <button
+                key={i.eventId}
+                type="button"
+                className={styles.marker}
+                data-resolved={i.resolvedSeq !== null && i.resolvedSeq <= s.playheadSeq ? 'true' : undefined}
+                style={{ left: `${end > 0 ? (i.tMs / end) * 100 : 0}%` }}
+                onClick={() => {
+                  s.seekToSeq(i.seq);
+                  if (i.agentId) s.selectAgent(i.agentId);
+                }}
+                aria-label={`Incident at ${formatClock(i.tMs)}: ${i.message}`}
+                title={`${formatClock(i.tMs)} · ${i.message}`}
+              >
+                <span aria-hidden="true">!</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <span className={styles.clock} aria-live="off">
+          {formatClockPair(t, end)}
+        </span>
+
+        <div className={styles.live}>
+          {!live && newSinceReplay > 0 && (
+            <button type="button" className={styles.newChip} onClick={s.goLive}>
+              Live • {newSinceReplay} new
+            </button>
+          )}
+          <button
+            type="button"
+            className={`btn ${styles.liveBtn}`}
+            aria-pressed={live}
+            onClick={s.goLive}
+            disabled={runId === null}
+            title="Follow the latest event (L)"
+          >
+            <span className={styles.liveDot} data-on={live && !ended && !disabled ? 'true' : undefined} aria-hidden="true" />
+            {live ? (ended ? 'Latest' : 'Live') : 'Go live'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

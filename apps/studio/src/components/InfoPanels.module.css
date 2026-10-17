@@ -1,0 +1,61 @@
+.scroll {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 20px;
+}
+
+.note {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.section {
+  margin-bottom: 16px;
+}
+
+.h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  cursor: default;
+}
+summary.h2 {
+  cursor: pointer;
+}
+
+.pre {
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: #050913;
+  border: 1px solid var(--border);
+  color: #cbd5e1;
+  overflow: auto;
+  max-height: 70vh;
+  white-space: pre;
+}
+
+.dl {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+.dl dt {
+  color: var(--muted);
+}
+.dl dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.anomalies {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
