@@ -1,0 +1,26 @@
+{
+  "name": "@runloop-world/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "serve": "node --disable-warning=ExperimentalWarning --import tsx src/bin.ts serve",
+    "dev": "node --disable-warning=ExperimentalWarning --import tsx src/bin.ts serve",
+    "demo": "node --disable-warning=ExperimentalWarning --import tsx src/bin.ts demo"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "@runloop-world/core": "workspace:*",
+    "@runloop-world/events": "workspace:*",
+    "@runloop-world/world-engine": "workspace:*",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@runloop-world/testkit": "workspace:*"
+  }
+}
