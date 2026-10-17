@@ -22,6 +22,8 @@ export interface EventMeta {
   taskId?: string;
   parentEventId?: string;
   visibility?: RunEvent['visibility'];
+  /** Traced runs only. */
+  provenance?: RunEvent['provenance'];
 }
 
 /**
@@ -61,6 +63,7 @@ export class RunBuilder {
       ...(meta.taskId !== undefined ? { taskId: meta.taskId } : {}),
       ...(meta.parentEventId !== undefined ? { parentEventId: meta.parentEventId } : {}),
       visibility: meta.visibility ?? 'public',
+      ...(meta.provenance !== undefined ? { provenance: meta.provenance } : {}),
       payload,
     } as EventOf<T>;
     this.events.push(event as RunEvent);

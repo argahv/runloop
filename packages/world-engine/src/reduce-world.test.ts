@@ -67,10 +67,11 @@ describe('reduceWorld — characters', () => {
     ]);
     const w = finalWorld(b.events, world);
     const homes = w.characterOrder.map((id) => w.characters[id]!.home);
+    // Offsets skip every preset's home (the subagent presets reserve the cells around the Atrium).
     expect(homes).toEqual([
       [13, 8],
       [13, 7],
-      [14, 8],
+      [13, 9],
       [13, 11],
       [13, 10],
     ]);

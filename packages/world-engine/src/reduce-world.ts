@@ -116,6 +116,7 @@ class Sim {
         activity: 'idle',
         taskId: null,
         stationId: null,
+        stationKind: null,
         target: { kind: 'home' },
         motion: { path: [home], startTick: this.tick },
         sinceTick: this.tick,
@@ -177,8 +178,10 @@ class Sim {
       // 'succeeded' is only entered on the completing event; it then lasts until
       // something else changes (presentationAt fades it to idle after a moment).
       if (c.activity === 'succeeded' && intent.activity === 'idle') continue;
-      // With fixed rules, the station kind is a function of (activity, task).
-      if (intent.activity !== c.activity || intent.taskId !== c.taskId) changed.push({ id, intent });
+      // The station kind can change within one task (a Read, then an Edit), so it is compared too.
+      if (intent.activity !== c.activity || intent.taskId !== c.taskId || intent.stationKind !== c.stationKind) {
+        changed.push({ id, intent });
+      }
     }
 
     for (const { id } of changed) this.release(id);
@@ -190,6 +193,7 @@ class Sim {
         ...c,
         activity: intent.activity,
         taskId: intent.taskId,
+        stationKind: intent.stationKind,
         stationId: target.kind === 'slot' || target.kind === 'overflow' ? target.stationId : null,
         target,
         motion: this.route(c, target),

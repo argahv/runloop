@@ -7,6 +7,14 @@ export const VisibilitySchema = z.enum(['public', 'redacted', 'sensitive']);
 export type Visibility = z.infer<typeof VisibilitySchema>;
 
 /**
+ * Traced runs only. reported: the source (e.g. Claude Code) reported it.
+ * inferred: Runloop reconstructed it (e.g. a denied permission, a call closed at session end).
+ * Absent: the runtime observed it itself (executed runs).
+ */
+export const ProvenanceSchema = z.enum(['reported', 'inferred']);
+export type Provenance = z.infer<typeof ProvenanceSchema>;
+
+/**
  * Fields shared by every recorded event. `sequence` is the only ordering key:
  * timestamps are informational and may be non-monotonic.
  */
@@ -24,6 +32,7 @@ export const EnvelopeSchema = z.object({
   /** Causal link, e.g. tool.call_completed -> its tool.call_started. */
   parentEventId: z.uuid().optional(),
   visibility: VisibilitySchema,
+  provenance: ProvenanceSchema.optional(),
   payload: z.unknown(),
 });
 

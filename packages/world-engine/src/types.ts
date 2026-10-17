@@ -43,6 +43,8 @@ export interface CharacterWorld {
   taskId: string | null;
   /** Station involved in the current activity (also kept for 'waiting' in overflow). */
   stationId: string | null;
+  /** Station kind the current intent asked for (null = home / none). */
+  stationKind: StationKind | null;
   target: Target;
   motion: Motion;
   /** Tick at which the activity last changed. */

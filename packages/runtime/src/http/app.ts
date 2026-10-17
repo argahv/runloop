@@ -16,6 +16,8 @@ import { RUNTIME_VERSION } from '../config';
 import { MissionNotFoundError } from '../mission';
 import { ArtifactIntegrityError, UnknownRunError, type Recorder } from '../recorder';
 import { RunConflictError, RunNotActiveError, type RunManager } from '../run-manager';
+import type { TraceSessionManager } from '../tracers/claude-code/session-manager';
+import { mountClaudeCodeIngest, rejectBrowserOrigins, type IngestRouteOptions } from './ingest';
 import { streamRunEvents } from './sse';
 
 export interface AppOptions {
@@ -26,6 +28,8 @@ export interface AppOptions {
   allowedOrigins: readonly string[];
   /** SSE keep-alive interval (tests shorten it). */
   pingMs?: number;
+  /** Claude Code ingest (tracer mode); null or absent = the route is not served. */
+  tracer?: { manager: TraceSessionManager; token: string; rate?: IngestRouteOptions['rate'] } | null;
 }
 
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -93,6 +97,8 @@ export function createApp(opts: AppOptions): Hono {
     await next();
   });
 
+  if (opts.tracer) rejectBrowserOrigins(app);
+
   app.use(
     '/api/*',
     cors({
@@ -116,9 +122,26 @@ export function createApp(opts: AppOptions): Hono {
   });
 
   app.get(apiPaths.health, (c) => {
-    const body: HealthResponse = { ok: true, version: RUNTIME_VERSION, activeRunId: manager.activeRunId };
+    const body: HealthResponse = {
+      ok: true,
+      version: RUNTIME_VERSION,
+      activeRunId: manager.activeRunId,
+      tracedRunIds: recorder
+        .listRuns()
+        .filter((r) => r.mode === 'traced' && r.status === 'running')
+        .map((r) => r.runId),
+      ingest: opts.tracer ? { claudeCode: { protocol: 1 } } : null,
+    };
     return c.json(body);
   });
+
+  if (opts.tracer) {
+    mountClaudeCodeIngest(app, {
+      manager: opts.tracer.manager,
+      token: opts.tracer.token,
+      ...(opts.tracer.rate ? { rate: opts.tracer.rate } : {}),
+    });
+  }
 
   app.get(apiPaths.runs, (c) => {
     const body: ListRunsResponse = { runs: recorder.listRuns() };
@@ -185,6 +208,7 @@ export function createApp(opts: AppOptions): Hono {
 
   const control = (action: 'stop' | 'pause' | 'resume') => (c: Context) => {
     const runId = c.req.param('id')!;
+    if (recorder.getRun(runId)?.mode === 'traced') return c.json(errorBody('Traced runs are controlled by Claude Code'), 409);
     try {
       const run = manager[action](runId);
       return c.json({ run }, 202);

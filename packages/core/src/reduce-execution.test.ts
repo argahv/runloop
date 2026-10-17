@@ -2,7 +2,8 @@ import type { AnyEvent, RunEvent, UnknownEvent } from '@runloop-world/events';
 import { CODING_MISSION, codingMissionFixture, runBuilder, type RunBuilder } from '@runloop-world/testkit';
 import { describe, expect, it } from 'vitest';
 import { SequenceGapError } from './errors';
-import { foldExecution, initialExecState, reduceExecution } from './reduce-execution';
+import { IdMap } from './id-map';
+import { foldExecution, initialExecState, reduceExecution, transient } from './reduce-execution';
 
 /** run.started + one embodied agent "a1" + task "T1" (code). */
 function base(): RunBuilder {
@@ -64,9 +65,9 @@ describe('reduceExecution — coding mission fixture', () => {
     expect(inc.message).toBe('12 tests: 10 passed, 2 failed');
     const t3Done = events.find((e) => e.type === 'task.completed' && e.payload.taskId === 'T3')!;
     expect(inc.resolvedSeq).toBe(t3Done.sequence);
-    expect(s.toolCalls['call-6']!.metrics).toEqual({ tests: 12, passed: 10, failed: 2 });
-    expect(s.toolCalls['call-6']!.status).toBe('error');
-    expect(s.toolCalls['call-9']!.status).toBe('success');
+    expect(s.toolCalls.get('call-6')!.metrics).toEqual({ tests: 12, passed: 10, failed: 2 });
+    expect(s.toolCalls.get('call-6')!.status).toBe('error');
+    expect(s.toolCalls.get('call-9')!.status).toBe('success');
   });
 
   it('leaves agents without current work and remembers their last outcome', () => {
@@ -200,12 +201,12 @@ describe('reduceExecution — semantics', () => {
     b.add('tool.call_started', { callId: 'c1', agentId: 'a1', taskId: 'T1', tool: 'read_file', inputSummary: 'a.js' });
     let s = foldExecution(b.events);
     expect(s.agents.a1!.activeCallId).toBe('c1');
-    expect(s.toolCalls.c1!.status).toBe('running');
+    expect(s.toolCalls.get('c1')!.status).toBe('running');
     b.add('tool.call_completed', { callId: 'c1', status: 'success', durationMs: 3, outputSummary: 'read 3 bytes' });
     b.add('tool.call_completed', { callId: 'c1', status: 'success', durationMs: 3, outputSummary: 'again' });
     s = foldExecution(b.events);
     expect(s.agents.a1!.activeCallId).toBeNull();
-    expect(s.toolCalls.c1).toMatchObject({ status: 'success', durationMs: 3, outputSummary: 'read 3 bytes' });
+    expect(s.toolCalls.get('c1')).toMatchObject({ status: 'success', durationMs: 3, outputSummary: 'read 3 bytes' });
     expect(s.tasks.T1!.stepsDoneThisAttempt).toBe(1);
     expect(s.anomalies.map((a) => a.code)).toEqual(['invalid_transition']);
   });
@@ -252,5 +253,157 @@ describe('reduceExecution — semantics', () => {
     const half = foldExecution(events.slice(0, 30));
     expect(foldExecution(events.slice(30), half)).toEqual(foldExecution(events));
     expect(foldExecution([], initialExecState())).toEqual(initialExecState());
+  });
+});
+
+describe('reduceExecution — traced runs', () => {
+  /** A traced run.started (no seed or workspace) with main embodied and a turn task. */
+  function traced(): RunBuilder {
+    const b = runBuilder();
+    b.add(
+      'run.started',
+      {
+        title: 'Claude Code · demo',
+        missionId: 'claude-code',
+        worldId: 'research-campus',
+        adapter: { id: 'claude-code', kind: 'external', label: 'Claude Code' },
+        mode: 'traced',
+        source: { kind: 'claude-code', sessionId: 's1', segment: 1, projectLabel: 'demo', model: null },
+      },
+      { provenance: 'reported' },
+    );
+    b.add('agent.registered', { agentId: 'main', name: 'Claude', role: 'main', model: null, tools: [], embodied: true });
+    b.add('task.created', { taskId: 'turn-1', title: 'Turn 1', kind: 'turn', dependsOn: [] });
+    b.add('task.started', { taskId: 'turn-1', agentId: 'main' });
+    return b;
+  }
+
+  it('stores the mode and source; traced runs have no seed or workspace', () => {
+    const s = foldExecution(traced().events);
+    expect(s.run).toMatchObject({ mode: 'traced', seed: null, workspace: null, status: 'running' });
+    expect(s.run.source).toMatchObject({ kind: 'claude-code', sessionId: 's1', segment: 1 });
+    expect(s.anomalies).toEqual([]);
+    const executed = foldExecution(codingMissionFixture());
+    expect(executed.run).toMatchObject({ mode: 'executed', source: null, seed: CODING_MISSION.seed });
+  });
+
+  it('remembers the category of the last call per agent, and its task', () => {
+    const b = traced();
+    b.add('tool.call_started', { callId: 'c1', agentId: 'main', taskId: 'turn-1', tool: 'Read', category: 'read', inputSummary: 'a.ts' }, { provenance: 'reported' });
+    b.add('tool.call_completed', { callId: 'c1', status: 'success', durationMs: 5, outputSummary: '3 lines' }, { provenance: 'inferred' });
+    let s = foldExecution(b.events);
+    expect(s.agents.main!.activeCallId).toBeNull();
+    expect(s.agents.main!.lastCategory).toEqual({ category: 'read', taskId: 'turn-1' });
+    expect(s.toolCalls.get('c1')).toMatchObject({ category: 'read', startProvenance: 'reported', endProvenance: 'inferred' });
+    // A call without a category (an executed run's) leaves it alone.
+    b.add('tool.call_started', { callId: 'c2', agentId: 'main', taskId: 'turn-1', tool: 'x', inputSummary: '' });
+    s = foldExecution(b.events);
+    expect(s.agents.main!.lastCategory).toEqual({ category: 'read', taskId: 'turn-1' });
+    expect(s.toolCalls.get('c2')!.category).toBeNull();
+  });
+
+  it('records markers and usage reports (never inventing usage for silent agents)', () => {
+    const b = traced();
+    b.add('agent.registered', { agentId: 'sa-1', name: 'Explore #1', role: 'Explore', model: null, tools: [], embodied: true });
+    b.add('run.marker', { kind: 'compaction', label: 'Compaction started', agentId: 'main' }, { provenance: 'reported' });
+    b.add('agent.usage_reported', {
+      agentId: 'sa-1',
+      model: 'claude-haiku-5-5',
+      inputTokens: 2,
+      outputTokens: 193,
+      cacheReadTokens: 19620,
+      cacheCreationTokens: 705,
+      totalTokens: 20520,
+      source: 'claude-code.agent_result',
+    });
+    b.add('run.marker', { kind: 'other', label: 'x', agentId: 'ghost' });
+    const s = foldExecution(b.events);
+    expect(s.markers.map((m) => [m.kind, m.label, m.agentId, m.provenance])).toEqual([
+      ['compaction', 'Compaction started', 'main', 'reported'],
+      ['other', 'x', 'ghost', null],
+    ]);
+    expect(s.usageReports).toHaveLength(1);
+    expect(s.agents['sa-1']!.usage).toMatchObject({ inputTokens: 2, outputTokens: 193, totalTokens: 20520 });
+    expect(s.agents.main!.usage).toBeNull();
+    expect(s.anomalies.map((a) => a.code)).toEqual(['unknown_agent']);
+  });
+
+  it('records the provenance of a permission resolution', () => {
+    const b = traced();
+    b.add('tool.permission_requested', { permissionId: 'perm-1', agentId: 'main', action: 'Bash', scope: 'default' }, { provenance: 'reported' });
+    b.add('tool.permission_resolved', { permissionId: 'perm-1', decision: 'denied', by: 'user' }, { provenance: 'inferred' });
+    expect(foldExecution(b.events).permissions['perm-1']).toMatchObject({ status: 'denied', resolvedProvenance: 'inferred' });
+  });
+
+  /** A traced failing test run, the end of its turn, then (optionally) a passing rerun. */
+  function failingTurn(b: RunBuilder, opts: { endProvenance?: 'reported' | 'inferred' } = {}) {
+    const meta = { provenance: 'reported' as const };
+    b.add('tool.call_started', { callId: 't1', agentId: 'main', taskId: 'turn-1', tool: 'Bash', category: 'test', inputSummary: 'node --test' }, meta);
+    b.add('tool.call_completed', { callId: 't1', status: 'error', durationMs: 300, exitCode: 1, outputSummary: 'Exit code 1', metrics: { tests: 12, passed: 10, failed: 2 } }, meta);
+    b.add('task.completed', { taskId: 'turn-1', summary: 'Done', artifactIds: [] }, { provenance: opts.endProvenance ?? 'reported' });
+    return b;
+  }
+
+  it('a traced failure stays open when the turn ends (Claude stopping fixes nothing)', () => {
+    for (const endProvenance of ['reported', 'inferred'] as const) {
+      const s = foldExecution(failingTurn(traced(), { endProvenance }).events);
+      expect(s.incidents).toHaveLength(1);
+      expect(s.incidents[0]).toMatchObject({ kind: 'tool_error', resolvedSeq: null, resolution: null });
+    }
+  });
+
+  it('a later passing run of the same kind resolves a traced failure (inferred: later_success)', () => {
+    const b = failingTurn(traced());
+    b.add('task.created', { taskId: 'turn-2', title: 'Turn 2', kind: 'turn', dependsOn: [] });
+    b.add('task.started', { taskId: 'turn-2', agentId: 'main' });
+    const meta = { provenance: 'reported' as const };
+    // A piped run that exits 0 but still reports failures does not resolve it.
+    b.add('tool.call_started', { callId: 't2', agentId: 'main', taskId: 'turn-2', tool: 'Bash', category: 'test', inputSummary: 'node --test | tail' }, meta);
+    b.add('tool.call_completed', { callId: 't2', status: 'success', durationMs: 300, outputSummary: '10/12', metrics: { tests: 12, passed: 10, failed: 2 } }, meta);
+    expect(foldExecution(b.events).incidents[0]!.resolvedSeq).toBeNull();
+    b.add('tool.call_started', { callId: 't3', agentId: 'main', taskId: 'turn-2', tool: 'Bash', category: 'test', inputSummary: 'npm test' }, meta);
+    const passed = b.add('tool.call_completed', { callId: 't3', status: 'success', durationMs: 300, outputSummary: '12/12', metrics: { tests: 12, passed: 12, failed: 0 } }, meta);
+    const s = foldExecution(b.events);
+    expect(s.incidents[0]).toMatchObject({ resolvedSeq: passed.sequence, resolution: 'later_success' });
+    expect(s.anomalies).toEqual([]);
+  });
+
+  it('other traced failures resolve only when the same input later succeeds', () => {
+    const b = traced();
+    const meta = { provenance: 'reported' as const };
+    b.add('tool.call_started', { callId: 'r1', agentId: 'main', taskId: 'turn-1', tool: 'Read', category: 'read', inputSummary: 'NOTES.md' }, meta);
+    b.add('tool.call_completed', { callId: 'r1', status: 'error', durationMs: 3, outputSummary: 'File does not exist' }, meta);
+    b.add('tool.call_started', { callId: 'r2', agentId: 'main', taskId: 'turn-1', tool: 'Read', category: 'read', inputSummary: 'src/a.ts' }, meta);
+    b.add('tool.call_completed', { callId: 'r2', status: 'success', durationMs: 3, outputSummary: 'Read 3 lines' }, meta);
+    expect(foldExecution(b.events).incidents[0]!.resolvedSeq).toBeNull();
+    b.add('tool.call_started', { callId: 'r3', agentId: 'main', taskId: 'turn-1', tool: 'Read', category: 'read', inputSummary: 'NOTES.md' }, meta);
+    b.add('tool.call_completed', { callId: 'r3', status: 'success', durationMs: 3, outputSummary: 'Read 1 line' }, meta);
+    expect(foldExecution(b.events).incidents[0]).toMatchObject({ resolution: 'later_success' });
+  });
+});
+
+describe('batch folds (transient)', () => {
+  it('equal the event-by-event fold and never change the state they start from', () => {
+    const events = codingMissionFixture();
+    let plain = initialExecState();
+    for (const e of events) plain = reduceExecution(plain, e);
+    const half = foldExecution(events.slice(0, 30));
+    const snapshot = JSON.stringify(half);
+    const rest = foldExecution(events.slice(30), half);
+    expect(rest).toEqual(plain);
+    expect(JSON.stringify(half)).toBe(snapshot);
+    expect(transient(() => foldExecution(events))).toEqual(plain);
+  });
+});
+
+describe('IdMap', () => {
+  it('is immutable outside a batch, counts entries and serialises as a sorted object', () => {
+    const a = IdMap.from<number>([['b', 2], ['a', 1]]);
+    const b = a.set('c', 3).set('a', 10);
+    expect([a.get('a'), a.has('c'), a.size]).toEqual([1, false, 2]);
+    expect([b.get('a'), b.get('c'), b.size]).toEqual([10, 3, 3]);
+    expect(JSON.stringify(b)).toBe('{"a":10,"b":2,"c":3}');
+    expect(b.values().sort((x, y) => x - y)).toEqual([2, 3, 10]);
+    expect(IdMap.from([['a', 1], ['b', 2]])).toEqual(IdMap.from([['b', 2], ['a', 1]]));
   });
 });

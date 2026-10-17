@@ -42,6 +42,11 @@ export function formatEvent(e: AnyEvent, s?: ExecState): FormattedEvent {
   return { ...base, actor: e.actorId ?? actor ?? owner ?? 'system', label, detail, severity };
 }
 
+/** 20520 → "20,520" (fixed locale, so traces are identical everywhere). */
+function fmtInt(n: number): string {
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 interface Described {
   label: string;
   detail?: string | null;
@@ -53,6 +58,15 @@ function describe(e: RunEvent, s?: ExecState): Described {
   switch (e.type) {
     case 'run.started':
       return { label: `Run started: ${e.payload.title}`, detail: e.payload.adapter.label };
+    case 'run.marker': {
+      const p = e.payload;
+      return {
+        label: p.label,
+        detail: p.detail ?? null,
+        severity: p.kind === 'api_error' ? 'error' : 'info',
+        ...(p.agentId ? { actor: p.agentId } : {}),
+      };
+    }
     case 'run.paused':
       return { label: 'Run paused', detail: e.payload.reason ?? null, severity: 'warn' };
     case 'run.resumed':
@@ -80,6 +94,18 @@ function describe(e: RunEvent, s?: ExecState): Described {
     }
     case 'agent.message_sent':
       return { label: `Message to ${e.payload.to}`, detail: e.payload.text };
+    case 'agent.usage_reported': {
+      const p = e.payload;
+      const total = p.totalTokens ?? p.inputTokens + p.outputTokens + (p.cacheReadTokens ?? 0) + (p.cacheCreationTokens ?? 0);
+      const parts = [`in ${fmtInt(p.inputTokens)}`, `out ${fmtInt(p.outputTokens)}`];
+      if (p.cacheReadTokens !== undefined) parts.push(`cache read ${fmtInt(p.cacheReadTokens)}`);
+      if (p.cacheCreationTokens !== undefined) parts.push(`cache write ${fmtInt(p.cacheCreationTokens)}`);
+      if (p.durationMs !== undefined) parts.push(`${(p.durationMs / 1000).toFixed(1)} s`);
+      return {
+        label: `Usage reported: ${fmtInt(total)} tokens${p.model ? ` (${p.model})` : ''}`,
+        detail: parts.join(' · '),
+      };
+    }
     case 'task.created': {
       const p = e.payload;
       const deps = p.dependsOn.length ? `after ${p.dependsOn.join(', ')}` : null;
@@ -102,10 +128,10 @@ function describe(e: RunEvent, s?: ExecState): Described {
     case 'task.failed':
       return { label: `Failed ${e.payload.taskId}`, detail: e.payload.reason, severity: 'error' };
     case 'tool.call_started':
-      return { label: `${e.payload.tool} ${e.payload.inputSummary}`.trim() };
+      return { label: `${e.payload.tool} ${e.payload.inputSummary}`.trim(), detail: e.payload.category ?? null };
     case 'tool.call_completed': {
       const p = e.payload;
-      const call = s?.toolCalls[p.callId];
+      const call = s?.toolCalls.get(p.callId);
       const counts = p.metrics ? ` · ${p.metrics.passed} passed, ${p.metrics.failed} failed` : '';
       return {
         label: `${call?.tool ?? p.callId} ${p.status}${counts}`,
@@ -116,7 +142,7 @@ function describe(e: RunEvent, s?: ExecState): Described {
     }
     case 'tool.call_failed': {
       const p = e.payload;
-      const call = s?.toolCalls[p.callId];
+      const call = s?.toolCalls.get(p.callId);
       return {
         label: `${call?.tool ?? p.callId} could not run (${p.errorType})`,
         detail: p.message,

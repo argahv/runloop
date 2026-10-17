@@ -1,0 +1,31 @@
+# run 1
+#001 run.started system - reported public - {"title":"Claude Code · demo","missionId":"claude-code","worldId":"research-campus","adapter":{"id":"claude-code","kind":"external","label":"Claude Code (traced via hooks)"},"mode":"traced","source":{"kind":"claude-code","sessionId":"synthetic-out-of-order","segment":1,"projectLabel":"demo","model":null,"permissionMode":"default","startSource":"startup","pluginVersion":"fixture"}}
+#002 agent.registered user - reported public - {"agentId":"user","name":"You","role":"user","model":null,"tools":[],"embodied":false}
+#003 agent.registered main - reported public - {"agentId":"main","name":"Claude","role":"main agent","model":null,"tools":[],"embodied":true,"characterPreset":"claude"}
+#004 task.created user turn-1 reported public - {"taskId":"turn-1","title":"Turn 1","kind":"turn","dependsOn":[]}
+#005 task.started main turn-1 reported public - {"taskId":"turn-1","agentId":"main"}
+#006 agent.message_sent user - reported sensitive - {"messageId":"msg-1","fromAgentId":"user","to":"main","text":"Ask a subagent to map the tests, then run npm test."}
+#007 agent.state_changed main - reported public - {"agentId":"main","state":"working","reason":"Prompt received"}
+#008 agent.registered sa-a0syntheticexplore1 - reported public - {"agentId":"sa-a0syntheticexplore1","name":"Explore #1","role":"Explore","model":null,"tools":[],"embodied":true,"characterPreset":"subagent-1"}
+#009 task.created main delegate-1 reported public - {"taskId":"delegate-1","title":"Explore subagent","kind":"delegated","dependsOn":[]}
+#010 task.assigned main delegate-1 reported public - {"taskId":"delegate-1","agentId":"sa-a0syntheticexplore1"}
+#011 task.started sa-a0syntheticexplore1 delegate-1 reported public - {"taskId":"delegate-1","agentId":"sa-a0syntheticexplore1"}
+#012 agent.state_changed sa-a0syntheticexplore1 - reported public - {"agentId":"sa-a0syntheticexplore1","state":"working","reason":"Delegated task started"}
+#013 tool.call_started main turn-1 reported public - {"callId":"toolu_syn_agent1","agentId":"main","taskId":"turn-1","tool":"Agent","category":"delegate","inputSummary":"→ Explore: \"Map the tests\""}
+#014 tool.call_started sa-a0syntheticexplore1 delegate-1 reported public - {"callId":"toolu_syn_glob1","agentId":"sa-a0syntheticexplore1","taskId":"delegate-1","tool":"Glob","category":"search","inputSummary":"test/**/*.js"}
+#015 tool.permission_requested main - reported sensitive - {"permissionId":"perm-1","agentId":"main","action":"Bash npm test","scope":"default"}
+#016 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_syn_bash2","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"npm test"}
+#017 tool.permission_resolved - - inferred public - {"permissionId":"perm-1","decision":"approved","by":"user"}
+#018 tool.call_completed main turn-1 reported public ^16 {"callId":"toolu_syn_bash2","status":"success","durationMs":1400,"outputSummary":"2 tests: 2 passed, 0 failed","metrics":{"tests":2,"passed":2,"failed":0}}
+#019 tool.call_completed sa-a0syntheticexplore1 delegate-1 reported public ^14 {"callId":"toolu_syn_glob1","status":"success","durationMs":6,"outputSummary":"1 file found"}
+#020 agent.message_sent sa-a0syntheticexplore1 - reported sensitive - {"messageId":"msg-2","fromAgentId":"sa-a0syntheticexplore1","to":"main","text":"One test file: test/task-store.test.js."}
+#021 task.completed - delegate-1 reported sensitive - {"taskId":"delegate-1","summary":"One test file: test/task-store.test.js.","artifactIds":[]}
+#022 agent.state_changed sa-a0syntheticexplore1 - reported public - {"agentId":"sa-a0syntheticexplore1","state":"done","reason":"Subagent finished"}
+#023 tool.call_completed main turn-1 reported public ^13 {"callId":"toolu_syn_agent1","status":"success","durationMs":2150,"outputSummary":"Explore finished · 1 tool call · 15,000 tokens reported"}
+#024 agent.usage_reported sa-a0syntheticexplore1 - reported public - {"agentId":"sa-a0syntheticexplore1","model":"claude-haiku-5-5","inputTokens":3,"outputTokens":120,"cacheReadTokens":14000,"cacheCreationTokens":877,"totalTokens":15000,"durationMs":2100,"toolUseCount":1,"callId":"toolu_syn_agent1","source":"claude-code.agent_result"}
+#025 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_syn_sleep1","agentId":"main","taskId":"turn-1","tool":"Bash","category":"execute","inputSummary":"sleep 30"}
+#026 tool.call_failed main turn-1 reported public ^25 {"callId":"toolu_syn_sleep1","errorType":"aborted","message":"Interrupted: The user doesn't want to proceed with this tool use.","durationMs":2480}
+#027 agent.message_sent main - reported sensitive - {"messageId":"msg-3","fromAgentId":"main","to":"user","text":"Mapped the tests; npm test passes (2/2). I stopped the sleep when you interrupted."}
+#028 task.completed - turn-1 reported sensitive - {"taskId":"turn-1","summary":"Mapped the tests; npm test passes (2/2). I stopped the sleep when you interrupted.","artifactIds":[]}
+#029 agent.state_changed main - reported public - {"agentId":"main","state":"idle","reason":"Turn finished"}
+#030 run.completed system - reported public - {"outcome":"stopped","summary":"Session ended (other)"}

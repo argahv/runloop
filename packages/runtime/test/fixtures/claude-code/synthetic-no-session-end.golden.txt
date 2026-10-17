@@ -1,0 +1,22 @@
+# run 1
+#001 run.started system - reported public - {"title":"Claude Code · demo","missionId":"claude-code","worldId":"research-campus","adapter":{"id":"claude-code","kind":"external","label":"Claude Code (traced via hooks)"},"mode":"traced","source":{"kind":"claude-code","sessionId":"synthetic-no-session-end","segment":1,"projectLabel":"demo","model":null,"permissionMode":"default","startSource":"startup","pluginVersion":"fixture"}}
+#002 agent.registered user - reported public - {"agentId":"user","name":"You","role":"user","model":null,"tools":[],"embodied":false}
+#003 agent.registered main - reported public - {"agentId":"main","name":"Claude","role":"main agent","model":null,"tools":[],"embodied":true,"characterPreset":"claude"}
+#004 task.created user turn-1 reported public - {"taskId":"turn-1","title":"Turn 1","kind":"turn","dependsOn":[]}
+#005 task.started main turn-1 reported public - {"taskId":"turn-1","agentId":"main"}
+#006 agent.message_sent user - reported sensitive - {"messageId":"msg-1","fromAgentId":"user","to":"main","text":"Fetch the changelog."}
+#007 agent.state_changed main - reported public - {"agentId":"main","state":"working","reason":"Prompt received"}
+#008 tool.call_started main turn-1 reported public - {"callId":"toolu_syn_fetch1","agentId":"main","taskId":"turn-1","tool":"WebFetch","category":"web","inputSummary":"https://example.com/changelog"}
+#009 tool.call_completed main turn-1 reported public ^8 {"callId":"toolu_syn_fetch1","status":"success","durationMs":680,"outputSummary":"HTTP 200 · 5,120 bytes"}
+#010 task.failed - turn-1 reported public - {"taskId":"turn-1","reason":"overloaded_error","errorType":"api_error"}
+#011 agent.state_changed main - reported public - {"agentId":"main","state":"failed","reason":"overloaded_error"}
+#012 run.marker main - reported public - {"kind":"api_error","label":"API error","detail":"overloaded_error","agentId":"main"}
+#013 task.created user turn-2 reported public - {"taskId":"turn-2","title":"Turn 2","kind":"turn","dependsOn":[]}
+#014 task.started main turn-2 reported public - {"taskId":"turn-2","agentId":"main"}
+#015 agent.message_sent user - reported sensitive - {"messageId":"msg-2","fromAgentId":"user","to":"main","text":"Try again and run the slow test suite."}
+#016 agent.state_changed main - reported public - {"agentId":"main","state":"working","reason":"Prompt received"}
+#017 tool.call_started main turn-2 reported sensitive - {"callId":"toolu_syn_slow1","agentId":"main","taskId":"turn-2","tool":"Bash","category":"test","inputSummary":"API_TOKEN=[REDACTED] npm test -- --runInBand"}
+#018 tool.call_failed main turn-2 inferred public ^17 {"callId":"toolu_syn_slow1","errorType":"unobserved","message":"No events from Claude Code for 120 min; result not reported (inferred)","durationMs":0}
+#019 task.completed - turn-2 inferred public - {"taskId":"turn-2","summary":"Closed without a reported end (inferred)","artifactIds":[]}
+#020 agent.state_changed main - inferred public - {"agentId":"main","state":"idle","reason":"Session closed"}
+#021 run.completed system - inferred public - {"outcome":"interrupted","summary":"No events from Claude Code for 120 min; closed without a session end (inferred)"}
