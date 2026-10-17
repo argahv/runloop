@@ -643,3 +643,28 @@ Core v1 (M0–M6): about 11–14 working days.
 - `worlds/research-campus/world.json`: activity rules begin at about line 171 with the permission rule; `defaultPreset` is `operator`; stations are library×2, build×2, test×2, ops×1, gate×1.
 - Studio: `components/Sidebar.tsx` (demo button disabled when `activeRunId` is set, line 54); `state/hooks.ts` (line 49); `state/view.ts` (`KIND_LABEL`); `scene/layout.ts` (`incidentStationId` uses task kind only, lines 240–255); `components/AgentFlow.tsx` (coordinator wording); `components/WorldView.tsx` (demo copy); `state/connect.ts` (`getAllEvents`); `scene/Character.tsx` (the draft's `components/Character.tsx` path is wrong); `state/timeline.ts`, `components/MetadataPanel.tsx`, `components/LogsPanel.tsx`, `components/ReplayBar.tsx`, `components/RunHeader.tsx` all exist.
 - Root `package.json`: `engines.node` is `>=22.16`; `packageManager` is `pnpm@10.28.0`. `pnpm-workspace.yaml` lists `apps/*` and `packages/*`. `vitest.config.ts` lists `packages/*` and `apps/studio`.
+
+## Appendix C: M0 probe results (2026-10-17)
+
+Two real headless sessions (`claude -p`, model Haiku, Claude Code 2.1.302) ran with a probe plugin. It registered synchronous command hooks for 18 events and logged raw stdin. The raw payloads are sanitised into `packages/runtime/test/fixtures/claude-code/`.
+
+| Question (§12) | Answer |
+|---|---|
+| Do tool events inside subagents carry `agent_id` and `agent_type`? | **Yes.** `PreToolUse`, `PostToolUse` and `PostToolBatch` fired inside an Explore subagent carried both. Main-agent events carry neither. |
+| Does `PostToolUse` carry `tool_use_id` and `tool_input`? | **Yes**, both. `PostToolUseFailure` also carries `tool_use_id`, `tool_input`, `error`, `is_interrupt` and `duration_ms`. |
+| How does a failing Bash command arrive? | As **`PostToolUseFailure`**. `error` holds `"Exit code 1\n<stdout/stderr>"`. There is no `PostToolUse`. |
+| Does `PermissionRequest` carry `tool_use_id`? | **No.** It carries `tool_name`, `tool_input` and `permission_suggestions`, and is preceded by a `PreToolUse` that has the id. |
+| Does a denial fire any hook (default mode, `-p`)? | **No.** After `PermissionRequest`, no `PermissionDenied`, `PostToolUse` or failure fired for the denied call. The plan's inferred close at the next boundary is required. |
+| How do you link a subagent to its spawning call? | `PostToolUse(Agent).tool_response.agentId` equals `SubagentStart.agent_id`. The order was `PreToolUse(Agent)` → `SubagentStart` → the subagent's tools → `SubagentStop` → `PostToolUse(Agent)`. |
+| Is subagent usage reported? | **Yes**, source-reported in `PostToolUse(Agent).tool_response`: `resolvedModel`, `usage` (input, output, cache read and cache creation tokens), `totalTokens`, `totalDurationMs`, `totalToolUseCount` and `toolStats`. |
+| What are the `Agent` tool input fields? | `description`, `prompt`, `subagent_type`, `run_in_background`. |
+| What does `SessionStart` carry? | `session_id`, `transcript_path`, `cwd`, `source` (`startup`). **No `model` and no `permission_mode`** (`permission_mode` first appears on `UserPromptSubmit`). |
+| What is the `SessionEnd` reason for `-p`? | `other`. |
+| Does `PostToolBatch` fire? | Yes, after every resolved batch (including batches of 1), with `tool_calls[]` (`tool_name`, `tool_input`, `tool_response`, `tool_use_id`). |
+| Is the `ppid` stable within a session? | Yes, one value for every hook in a session. |
+| Is there a `prompt_id`? | Yes, from `UserPromptSubmit` on, constant across the turn's events. |
+| What was the latency? | Hook events arrived within about 100 ms of each other. The sessions took 13 s and 21 s. |
+
+**Still unverified (needs an interactive session):** Esc interrupts, `Notification`, approving a permission, compaction, `/clear`, resume, and async-hook delivery at exit. The mapper keeps its defensive fallbacks for these.
+
+**Probe gotcha:** a nested `claude` inherits `CLAUDE_CODE_SESSION_ID` from its parent session. Pass `--session-id <uuid>` to probe or test sessions.
