@@ -665,6 +665,10 @@ Two real headless sessions (`claude -p`, model Haiku, Claude Code 2.1.302) ran w
 | Is there a `prompt_id`? | Yes, from `UserPromptSubmit` on, constant across the turn's events. |
 | What was the latency? | Hook events arrived within about 100 ms of each other. The sessions took 13 s and 21 s. |
 
+**Async delivery (third session, all hooks `async: true` except SessionEnd):**
+- Async hooks arrive **out of order**: `PostToolBatch` was logged before its `PostToolUse`. The mapper must tolerate this (D5).
+- Under `-p` the async **`Stop` hook never ran**; only the synchronous `SessionEnd` was delivered at exit. **Decision:** register `Stop`, `StopFailure` and `SessionEnd` as synchronous with a fast spool write. Everything else stays async.
+
 **Still unverified (needs an interactive session):** Esc interrupts, `Notification`, approving a permission, compaction, `/clear`, resume, and async-hook delivery at exit. The mapper keeps its defensive fallbacks for these.
 
 **Probe gotcha:** a nested `claude` inherits `CLAUDE_CODE_SESSION_ID` from its parent session. Pass `--session-id <uuid>` to probe or test sessions.

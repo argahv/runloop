@@ -36,14 +36,21 @@ Plan: `docs/plans/claude-code-tracer.md`. It depends on A4.
 | C2 | Run diff: outcome, duration, tool calls by category, files touched, test results, tokens and cost where reported, permission waits, failures | Not started | Unit tests on the diff function; unknown values show as "not reported", never as zero |
 | C3 | Compare view in Studio (side by side, with links to the differing events) | Not started | Clicking a difference opens the event in that run |
 
-## Milestone D: Core observability and design system
+## Milestone D: Runloop Signature design system and core observability
+
+Spec: `docs/design/design-system.md` (founder brief). This milestone runs in parallel with B; B5 is built on top of it.
 
 | ID | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| D1 | Search and filter in the timeline and logs (agent, tool, category, status, text) | Not started | Filters compose; URL-addressable; tested |
-| D2 | Run metrics panel (duration, calls by category, failures, tokens where reported) | Not started | Defined calculations; missing data shown honestly |
-| D3 | Design-system pass: tokens, typography, components, empty/loading/error states | Not started | Every page audited at 1440 and 1920 wide; contrast checked |
-| D4 | 3D framing and readability: fit to viewport, label collision, camera presets | Not started | No clipped rooms at 1280–1920 width; labels never overlap at default zoom |
+| D1 | Tokens (dark and light), Geist and Geist Mono self-hosted, tabular numerals, motion tokens, reduced motion | Not started | `tokens.css` is the only colour source; contrast checked at AA in both themes |
+| D2 | Component library `src/ui/` (sidebar, tabs, split and resizable panels, command palette, chips, skeletons, empty, error, toast, confirm) | Not started | Keyboard reachable; used by every page; no colour-only state |
+| D3 | IA: Overview · Live World · Traces · Integrations · Settings (Experiments and Evaluations hidden until they work); deep links | Not started | Each page has loading, empty and error states; deep link restores run, view, event and agent |
+| D4 | Synchronised selection across world, timeline and inspector; resizable inspector | Not started | Selecting in any view focuses the same entity in the others (tested in the store) |
+| D5 | World refresh: Signature palette, named environments (Atrium, Observatory, Workshop, Test Chamber, Launch Bay), lime only for active execution, fit to viewport, no label collisions | Not started | No clipped rooms at 1280–1920 px; labels never overlap at default zoom; screenshots in both themes |
+| D6 | 2D agent graph ("Network") view and a table fallback | Not started | Every world interaction has a 2D route |
+| D7 | Search and filter in the timeline and logs (agent, tool, category, status, text) | Not started | Filters compose; URL-addressable; tested |
+| D8 | Run metrics panel (duration, calls by category, failures, tokens and cost where reported) | Not started | Defined calculations; "not reported" never shown as zero |
+| D9 | Visual regression screenshots of every page and state | Not started | Script in the repo; images checked on each milestone |
 
 ## Milestone E: Generalisation
 
@@ -60,6 +67,7 @@ Plan: `docs/plans/claude-code-tracer.md`. It depends on A4.
 | F1 | Threat model, data-flow and retention docs; delete-run API | Not started |
 | F2 | Contribution guide, security policy, changelog | Not started |
 | F3 | Reproducible demo script (real Claude Code + scripted fallback, clearly labelled) | Not started |
+| F5 | Marketing landing page in the Signature system ("Execution, made visible.") with a real recorded run | Not started |
 | F4 | Performance measurements: ingest throughput, event-to-UI latency, large traces | Not started |
 
 ## Deferred (with reason)

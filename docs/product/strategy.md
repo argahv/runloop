@@ -57,7 +57,8 @@ Not yet:
 | 1 | Foundation: event model, recorder, replay, Studio, scripted demo | Done (verified, see `docs/status/current-state.md`) |
 | 2 | **Claude Code tracer:** plugin, live ingest, subagents, provenance | Next |
 | 3 | **Compare:** baselines and a side-by-side run diff (calls, files, tests, tokens, time) | Then |
-| 4 | Search, filter, metrics; design-system pass on Studio and the 3D world | Then |
+| 2b | **Runloop Signature design system** (`docs/design/design-system.md`): tokens, components, IA, synchronised world/timeline/inspector, 2D graph fallback. Runs in parallel with 2 | Now |
+| 4 | Search, filter, metrics | Then |
 | 5 | **Codex CLI hooks** (second integration, same user, cross-harness); a documented adapter contract | Then |
 | 6 | Headless A/B runner (`runloop ab`): N runs × setup variants, scored by tests | Later |
 | 7 | OTLP/HTTP ingest bridge; OpenAI Agents SDK adapter | Later, on demand |
