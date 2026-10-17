@@ -45,4 +45,25 @@ export const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (run_id, artifact_id)
   ) WITHOUT ROWID;
   `,
+  // 1: traced runs (Claude Code tracer) and idempotent hook ingest.
+  `
+  ALTER TABLE runs ADD COLUMN mode TEXT NOT NULL DEFAULT 'executed';
+  ALTER TABLE runs ADD COLUMN source_kind TEXT;
+  ALTER TABLE runs ADD COLUMN external_session_id TEXT;
+  ALTER TABLE runs ADD COLUMN segment INTEGER;
+  ALTER TABLE runs ADD COLUMN project_label TEXT;
+  ALTER TABLE runs ADD COLUMN last_event_at TEXT;
+  CREATE INDEX runs_by_external_session ON runs (source_kind, external_session_id, segment);
+
+  -- One row per accepted hook delivery, written in the same transaction as its events.
+  CREATE TABLE trace_ingest (
+    session_id  TEXT NOT NULL,
+    ingest_key  TEXT NOT NULL,
+    run_id      TEXT REFERENCES runs (run_id),
+    hook_event  TEXT NOT NULL,
+    observed_at TEXT,
+    received_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, ingest_key)
+  ) WITHOUT ROWID;
+  `,
 ];

@@ -2,9 +2,10 @@
  * HTTP + SSE contract between the local runtime and Studio. Studio imports
  * these types and never imports the runtime package itself.
  */
-import type { RunOutcome } from './payloads';
+import type { RunMode, RunOutcome } from './payloads';
 
-export const DEFAULT_RUNTIME_PORT = 4317;
+/** 4380, not 4317: 4317 is the OTLP/gRPC default (DL-005). */
+export const DEFAULT_RUNTIME_PORT = 4380;
 export const DEFAULT_RUNTIME_HOST = '127.0.0.1';
 
 export type RunStatus = 'running' | RunOutcome;
@@ -20,12 +21,30 @@ export interface RunSummary {
   lastSequence: number;
   adapterLabel: string;
   paused: boolean;
+  /** Always set by this runtime; optional so older payloads still type-check. Absent = executed. */
+  mode?: RunMode;
+  /** Traced runs: where the run came from. null for executed runs. */
+  source?: RunSourceSummary | null;
+  /** Timestamp of the last recorded event (null before any). */
+  lastEventAt?: string | null;
+}
+
+export interface RunSourceSummary {
+  kind: 'claude-code';
+  sessionId: string;
+  segment: number;
+  projectLabel: string;
 }
 
 export interface HealthResponse {
   ok: true;
   version: string;
+  /** The scripted (executed) run in progress. Traced runs never set it. */
   activeRunId: string | null;
+  /** Traced runs that are still open, newest first. */
+  tracedRunIds: string[];
+  /** Ingest endpoints this runtime accepts; null when tracing is turned off. */
+  ingest: { claudeCode: { protocol: 1 } } | null;
 }
 
 export interface ListRunsResponse {
@@ -60,6 +79,37 @@ export interface ErrorResponse {
 }
 
 /**
+ * One Claude Code hook invocation as the plugin sends it (protocol v1). `hook`
+ * is the hook's stdin JSON after the plugin slimmed and redacted it.
+ */
+export interface ClaudeCodeHookEnvelope {
+  v: 1;
+  /** Unique per hook invocation; spool retries reuse it, so ingest is idempotent. */
+  deliveryId: string;
+  /** When the hook process ran (ISO 8601). Used as the event time. */
+  observedAt: string;
+  /** Parent process id of the hook (the Claude Code process). */
+  ppid?: number;
+  plugin: { name: string; version: string };
+  hook: Record<string, unknown>;
+}
+
+/** POST /api/ingest/claude-code, with the `X-Runloop-Token` header. 1–100 envelopes. */
+export interface ClaudeCodeIngestRequest {
+  envelopes: ClaudeCodeHookEnvelope[];
+}
+
+/** 202. accepted = recorded; duplicates = already seen; ignored = not mapped (unknown hook, late, invalid). */
+export interface ClaudeCodeIngestResponse {
+  accepted: number;
+  duplicates: number;
+  ignored: number;
+}
+
+/** Header carrying the per-user ingest token. */
+export const INGEST_TOKEN_HEADER = 'X-Runloop-Token';
+
+/**
  * SSE stream (`GET /api/runs/:id/stream`):
  * - default `message` events carry one RunEvent JSON each, with `id: <sequence>`;
  * - resume with the `Last-Event-ID` header (or `?after=<sequence>`);
@@ -84,4 +134,5 @@ export const apiPaths = {
   resume: (runId: string) => `/api/runs/${encodeURIComponent(runId)}/resume`,
   artifact: (runId: string, artifactId: string) =>
     `/api/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`,
+  ingestClaudeCode: '/api/ingest/claude-code',
 } as const;

@@ -1,4 +1,4 @@
-import type { Envelope } from './envelope';
+import type { Envelope, Provenance } from './envelope';
 import type { EventType, PayloadOf } from './payloads';
 
 type EnvelopeFields = Omit<Envelope, 'type' | 'payload'>;
@@ -32,7 +32,12 @@ export function isUnknownEvent(e: AnyEvent): e is UnknownEvent {
   return (e as { unknown?: unknown }).unknown === true;
 }
 
-/** What an emitter supplies; the recorder fills in ids, sequence, timestamp and version. */
+/**
+ * What an emitter supplies; the recorder fills in ids, sequence, timestamp and version.
+ * `provenance` and `timestamp` are for traced runs only (the recorder rejects
+ * them on executed runs): the time the source observed the event, and whether
+ * it was reported or inferred.
+ */
 export type EventDraft<T extends EventType = EventType> = {
   [K in T]: {
     type: K;
@@ -41,6 +46,8 @@ export type EventDraft<T extends EventType = EventType> = {
     taskId?: string;
     parentEventId?: string;
     visibility?: Envelope['visibility'];
+    provenance?: Provenance;
+    timestamp?: string;
   };
 }[T];
 
@@ -66,7 +73,10 @@ export function deriveRefs(draft: EventDraft): { actorId?: string; taskId?: stri
     case 'tool.call_started':
       return { actorId: draft.payload.agentId, taskId: draft.payload.taskId };
     case 'tool.permission_requested':
+    case 'agent.usage_reported':
       return { actorId: draft.payload.agentId };
+    case 'run.marker':
+      return draft.payload.agentId ? { actorId: draft.payload.agentId } : {};
     default:
       return {};
   }

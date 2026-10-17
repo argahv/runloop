@@ -12,7 +12,7 @@ export function selectReadyTasks(s: ExecState): TaskExec[] {
 export function selectRecentActions(s: ExecState, agentId: string, n = 5): ToolCallExec[] {
   const out: ToolCallExec[] = [];
   for (let i = s.callOrder.length - 1; i >= 0 && out.length < n; i--) {
-    const c = s.toolCalls[s.callOrder[i]!]!;
+    const c = s.toolCalls.get(s.callOrder[i]!)!;
     if (c.agentId === agentId) out.push(c);
   }
   return out;

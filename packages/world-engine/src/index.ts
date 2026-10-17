@@ -12,6 +12,6 @@ export {
   redirectMotion,
   type MotionSample,
 } from './motion';
-export { deriveIntent, matchActivityRule, type Intent } from './intent';
+export { deriveIntent, matchActivityRule, workCategory, type Intent } from './intent';
 export { initialWorldState, reduceWorld } from './reduce-world';
 export { presentationAt, gridToScene, stationWorkCell, SUCCESS_DECAY_TICKS } from './presentation';

@@ -1,0 +1,28 @@
+{
+  "name": "runloop-tracer",
+  "version": "0.1.0",
+  "description": "Record Claude Code sessions (prompts, tool calls, subagents, permissions) into a local Runloop world and replay them. Observe-only: it never blocks or changes Claude Code.",
+  "author": { "name": "Runloop" },
+  "license": "Apache-2.0",
+  "keywords": ["observability", "tracing", "replay", "subagents"],
+  "userConfig": {
+    "runtime_url": {
+      "type": "string",
+      "title": "Runloop runtime URL",
+      "description": "Where the local Runloop runtime listens. Loopback addresses only; anything else is refused.",
+      "default": "http://127.0.0.1:4380"
+    },
+    "enabled": {
+      "type": "boolean",
+      "title": "Trace sessions",
+      "description": "Turn tracing off without uninstalling the plugin.",
+      "default": true
+    },
+    "trace_prompts": {
+      "type": "boolean",
+      "title": "Record prompt text",
+      "description": "Store your prompts (marked sensitive). Off stores a placeholder instead.",
+      "default": true
+    }
+  }
+}

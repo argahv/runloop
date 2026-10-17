@@ -17,8 +17,11 @@ demo   Run the coding mission headless and print one trace line per event.
        Also serves the API while it runs; exits after run.completed unless --keep.
 
 Environment:
-  RUNLOOP_DATA_DIR         data directory (default <repo>/.runloop)
-  RUNLOOP_ALLOWED_ORIGINS  extra comma-separated browser origins`;
+  RUNLOOP_DATA_DIR             data directory (default <repo>/.runloop)
+  RUNLOOP_ALLOWED_ORIGINS      extra comma-separated browser origins
+  RUNLOOP_TRACE=off            do not accept Claude Code hook events
+  RUNLOOP_TRACE_IDLE_MINUTES   close traced sessions after this long without events (default 120)
+  RUNLOOP_INGEST_TOKEN_FILE    ingest token file (default ~/.config/runloop/ingest-token)`;
 
 /**
  * One runtime process per data dir: boot recovery would otherwise mark
@@ -141,6 +144,11 @@ export async function main(argv: string[]): Promise<number> {
 
   if (command === 'serve') {
     console.log(`Runloop runtime ${server!.url}  (data: ${dataDir})`);
+    console.log(
+      rt.tracer
+        ? `Claude Code tracing on: POST ${server!.url}/api/ingest/claude-code (token: ${rt.ingestTokenFile})`
+        : 'Claude Code tracing off',
+    );
     return new Promise<number>(() => {}); // until a signal arrives
   }
 

@@ -11,6 +11,7 @@ import {
   type EventOf,
   type PayloadOf,
   type RunEvent,
+  type RunMode,
   type RunStatus,
   type RunSummary,
 } from '@runloop-world/events';
@@ -18,6 +19,25 @@ import { EventBus, type Listener, type Unsubscribe } from './bus';
 import { tx, type Db } from './store/db';
 
 export type RunManifest = PayloadOf<'run.started'>;
+
+/** A draft for recordBatch; `parentCallId` links it (parentEventId) to that call's tool.call_started. */
+export type BatchDraft = EventDraft & { parentCallId?: string };
+
+export interface RecordBatchInput {
+  runId: string;
+  /** Create the run first (run.started from this manifest is sequence 1). */
+  create?: { manifest: RunManifest; timestamp?: string; provenance?: 'reported' | 'inferred' };
+  drafts: readonly BatchDraft[];
+  /** Mark a hook delivery as processed, in the same transaction (see trace_ingest). */
+  ingest?: IngestMark;
+}
+
+export interface IngestMark {
+  sessionId: string;
+  key: string;
+  hookEvent: string;
+  observedAt: string | null;
+}
 
 export interface RecorderOptions {
   db: Db;
@@ -77,6 +97,21 @@ interface RunRow {
   created_at: string;
   ended_at: string | null;
   last_sequence: number;
+  mode: RunMode;
+  source_kind: string | null;
+  external_session_id: string | null;
+  segment: number | null;
+  project_label: string | null;
+  last_event_at: string | null;
+}
+
+/** Cached per-run write state. */
+interface RunWriteState {
+  lastSequence: number;
+  status: RunStatus;
+  mode: RunMode;
+  /** Timestamp of run.started (traced timestamps are clamped to it). */
+  startedMs: number;
 }
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -93,6 +128,12 @@ function toSummary(r: RunRow): RunSummary {
     lastSequence: r.last_sequence,
     adapterLabel: r.adapter_label,
     paused: r.paused === 1,
+    mode: r.mode,
+    source:
+      r.source_kind === 'claude-code' && r.external_session_id
+        ? { kind: 'claude-code', sessionId: r.external_session_id, segment: r.segment ?? 1, projectLabel: r.project_label ?? '' }
+        : null,
+    lastEventAt: r.last_event_at,
   };
 }
 
@@ -100,6 +141,11 @@ function toSummary(r: RunRow): RunSummary {
  * The single writer of the event log. `append` is synchronous and always:
  * redact → assign the next sequence → validate (strict) → persist in one
  * transaction → publish. Nothing is published that is not already durable.
+ *
+ * Run modes: executed runs get runtime timestamps and no provenance (the
+ * runtime observed everything itself). Traced runs carry the source's time
+ * (clamped to [run.started, now]) and a provenance, required on tool.* events,
+ * so `tool.*` in an executed run still means "Runloop ran it".
  */
 export class Recorder {
   readonly bus: EventBus;
@@ -109,7 +155,9 @@ export class Recorder {
   private readonly now: () => Date;
   private readonly newId: () => string;
   /** Cached per-run write state; the DB is the source of truth on a cache miss. */
-  private readonly runs = new Map<string, { lastSequence: number; status: RunStatus }>();
+  private readonly runs = new Map<string, RunWriteState>();
+  /** Open traced runs: callId → eventId of its tool.call_started (for parentCallId). */
+  private readonly callStarts = new Map<string, Map<string, string>>();
 
   constructor(opts: RecorderOptions) {
     this.db = opts.db;
@@ -129,28 +177,81 @@ export class Recorder {
   createRun(input: { runId?: string; manifest: RunManifest }): EventOf<'run.started'> {
     const runId = input.runId ?? this.newId();
     if (this.findRow(runId)) throw new Error(`Run ${runId} already exists`);
-    const event = this.build(runId, 1, { type: 'run.started', payload: input.manifest, actorId: 'system' });
-    if (event.type !== 'run.started') throw new EventValidationError('expected run.started');
+    const event = this.buildStarted(runId, { type: 'run.started', payload: input.manifest, actorId: 'system' });
     tx(this.db, () => {
-      this.db
-        .prepare(
-          `INSERT INTO runs (run_id, mission_id, world_id, title, adapter_label, status, paused, manifest_json, created_at, last_sequence)
-           VALUES (?, ?, ?, ?, ?, 'running', 0, ?, ?, 0)`,
-        )
-        .run(
-          runId,
-          event.payload.missionId,
-          event.payload.worldId,
-          event.payload.title,
-          event.payload.adapter.label,
-          JSON.stringify(event.payload),
-          event.timestamp,
-        );
+      this.insertRun(event);
       this.persist(event);
     });
-    this.runs.set(runId, { lastSequence: 1, status: 'running' });
+    this.runs.set(runId, this.writeStateOf(event));
     this.bus.publish(event);
     return event;
+  }
+
+  /**
+   * Record several drafts (optionally creating the run first, optionally
+   * marking a hook delivery as ingested) in ONE transaction: all of them, or
+   * none if any draft is invalid. Events are published after the commit.
+   */
+  recordBatch(input: RecordBatchInput): RunEvent[] {
+    const { runId } = input;
+    const events: RunEvent[] = [];
+    let state: RunWriteState;
+    if (input.create) {
+      if (this.findRow(runId)) throw new Error(`Run ${runId} already exists`);
+      const { manifest, timestamp, provenance } = input.create;
+      const started = this.buildStarted(runId, {
+        type: 'run.started',
+        payload: manifest,
+        actorId: 'system',
+        ...(timestamp !== undefined ? { timestamp } : {}),
+        ...(provenance !== undefined ? { provenance } : {}),
+      });
+      events.push(started);
+      state = this.writeStateOf(started);
+    } else {
+      state = { ...this.state(runId) };
+    }
+    const batchStarts = new Map<string, string>();
+    for (const { parentCallId, ...draft } of input.drafts) {
+      if (draft.type === 'run.started') throw new EventValidationError('run.started is only emitted when creating a run');
+      if (state.status !== 'running') throw new RunClosedError(runId, state.status);
+      if (parentCallId !== undefined) {
+        const parent = batchStarts.get(parentCallId) ?? this.findCallStart(runId, parentCallId);
+        if (parent) draft.parentEventId = parent;
+      }
+      const e = this.build(runId, state.lastSequence + 1, draft as EventDraft, state);
+      events.push(e);
+      state.lastSequence = e.sequence;
+      if (e.type === 'run.completed') state.status = e.payload.outcome;
+      if (e.type === 'tool.call_started') batchStarts.set(e.payload.callId, e.eventId);
+    }
+    tx(this.db, () => {
+      for (const e of events) {
+        if (e.type === 'run.started') this.insertRun(e);
+        this.persist(e);
+      }
+      if (input.ingest) this.insertIngest(input.ingest, runId);
+    });
+    this.runs.set(runId, state);
+    if (state.mode === 'traced') {
+      if (state.status === 'running') {
+        let map = this.callStarts.get(runId);
+        if (!map) this.callStarts.set(runId, (map = new Map()));
+        for (const [callId, eventId] of batchStarts) map.set(callId, eventId);
+      } else this.callStarts.delete(runId);
+    }
+    for (const e of events) this.bus.publish(e);
+    return events;
+  }
+
+  /** Mark a hook delivery as processed when it produced no events (e.g. SessionStart before any prompt). */
+  markIngested(mark: IngestMark, runId: string | null): void {
+    tx(this.db, () => this.insertIngest(mark, runId));
+  }
+
+  /** Whether a hook delivery with this key was already processed for the session. */
+  hasIngested(sessionId: string, key: string): boolean {
+    return this.db.prepare('SELECT 1 FROM trace_ingest WHERE session_id = ? AND ingest_key = ?').get(sessionId, key) !== undefined;
   }
 
   append<T extends RunEvent['type']>(runId: string, draft: EventDraft<T>): EventOf<T>;
@@ -162,7 +263,7 @@ export class Recorder {
     if (draft.type === 'run.started') throw new EventValidationError('run.started is only emitted by createRun()');
     const state = this.state(runId);
     if (state.status !== 'running') throw new RunClosedError(runId, state.status);
-    const event = this.build(runId, state.lastSequence + 1, draft, at);
+    const event = this.build(runId, state.lastSequence + 1, draft, state, at);
     tx(this.db, () => this.persist(event));
     state.lastSequence = event.sequence;
     if (event.type === 'run.completed') state.status = event.payload.outcome;
@@ -261,6 +362,11 @@ export class Recorder {
    * `tool.call_failed{runtime_restarted}`, then the run gets
    * `run.completed{interrupted}`. Returns the recovered run ids.
    *
+   * Traced runs are different: Runloop did not run their calls, which may well
+   * have finished while it was down. Their open calls close as `unobserved`
+   * and both events are marked inferred. The next hook for the session opens
+   * a continuation run.
+   *
    * The crash time is unknown, so these events are stamped with the run's last
    * recorded activity (the last moment it is known to have been alive), not
    * the restart time: otherwise a replay would span the whole downtime. The
@@ -271,60 +377,93 @@ export class Recorder {
       run_id: string;
     }[];
     const recoveredAt = this.now().toISOString();
-    for (const { run_id: runId } of rows) {
-      this.runs.delete(runId);
-      const open = new Map<string, EventOf<'tool.call_started'>>();
-      let lastSeenMs = 0;
-      for (const e of this.listAll(runId)) {
-        lastSeenMs = Math.max(lastSeenMs, Date.parse(e.timestamp));
-        if (e.type === 'tool.call_started') open.set(e.payload.callId, e);
-        else if (e.type === 'tool.call_completed' || e.type === 'tool.call_failed') open.delete(e.payload.callId);
-      }
-      const at = new Date(lastSeenMs);
-      for (const started of open.values()) {
-        this.write(
-          runId,
-          {
-            type: 'tool.call_failed',
-            payload: {
-              callId: started.payload.callId,
-              errorType: 'runtime_restarted',
-              message: 'The runtime stopped before this call finished',
-              // Known running time only (up to the last recorded event).
-              durationMs: Math.max(0, lastSeenMs - Date.parse(started.timestamp)),
-            },
-            actorId: started.payload.agentId,
-            ...(started.payload.taskId ? { taskId: started.payload.taskId } : {}),
-            parentEventId: started.eventId,
-          },
-          at,
-        );
-      }
+    for (const { run_id: runId } of rows) this.interruptRun(runId, recoveredAt);
+    return rows.map((r) => r.run_id);
+  }
+
+  /** Close one running run as interrupted (see recoverInterrupted). No-op if it is not running. */
+  interruptRun(runId: string, recoveredAt: string = this.now().toISOString()): void {
+    this.runs.delete(runId);
+    this.callStarts.delete(runId);
+    const row = this.findRow(runId);
+    if (!row || row.status !== 'running') return;
+    const traced = row.mode === 'traced';
+    const open = new Map<string, EventOf<'tool.call_started'>>();
+    let lastSeenMs = 0;
+    for (const e of this.listAll(runId)) {
+      lastSeenMs = Math.max(lastSeenMs, Date.parse(e.timestamp));
+      if (e.type === 'tool.call_started') open.set(e.payload.callId, e);
+      else if (e.type === 'tool.call_completed' || e.type === 'tool.call_failed') open.delete(e.payload.callId);
+    }
+    const at = new Date(lastSeenMs);
+    for (const started of open.values()) {
       this.write(
         runId,
         {
-          type: 'run.completed',
+          type: 'tool.call_failed',
           payload: {
-            outcome: 'interrupted',
-            summary: `The runtime stopped while this run was active (recovered at ${recoveredAt})`,
+            callId: started.payload.callId,
+            errorType: traced ? 'unobserved' : 'runtime_restarted',
+            message: traced
+              ? 'Runloop was not running when this call finished (inferred)'
+              : 'The runtime stopped before this call finished',
+            // Known running time only (up to the last recorded event).
+            durationMs: Math.max(0, lastSeenMs - Date.parse(started.timestamp)),
           },
-          actorId: 'system',
+          actorId: started.payload.agentId,
+          ...(started.payload.taskId ? { taskId: started.payload.taskId } : {}),
+          parentEventId: started.eventId,
+          ...(traced ? { provenance: 'inferred' as const } : {}),
         },
         at,
       );
     }
-    return rows.map((r) => r.run_id);
+    this.write(
+      runId,
+      {
+        type: 'run.completed',
+        payload: {
+          outcome: 'interrupted',
+          summary: traced
+            ? `Runloop stopped while this session was being traced (recovered at ${recoveredAt}); later events open a continuation run`
+            : `The runtime stopped while this run was active (recovered at ${recoveredAt})`,
+        },
+        actorId: 'system',
+        ...(traced ? { provenance: 'inferred' as const } : {}),
+      },
+      at,
+    );
   }
 
   // ── internals ───────────────────────────────────────────────────
 
-  private build(runId: string, sequence: number, draft: EventDraft, at: Date = this.now()): RunEvent {
+  /**
+   * Redact, stamp and strictly validate one draft. `run` is the run's write
+   * state (null for its run.started, whose manifest decides the mode).
+   */
+  private build(runId: string, sequence: number, draft: EventDraft, run: RunWriteState | null, at: Date = this.now()): RunEvent {
     const { event: d } = redactEvent(draft, { secrets: this.secrets });
+    const mode: RunMode = run?.mode ?? (d.type === 'run.started' ? (d.payload.mode ?? 'executed') : 'executed');
+    let timestamp = at.toISOString();
+    if (mode === 'executed') {
+      if (d.provenance !== undefined || d.timestamp !== undefined) {
+        throw new EventValidationError(`Invalid ${d.type} event: provenance and timestamp are only allowed on traced runs`);
+      }
+    } else {
+      if (/^tool\./.test(d.type) && d.provenance === undefined) {
+        throw new EventValidationError(`Invalid ${d.type} event: traced tool events need a provenance`);
+      }
+      if (d.timestamp !== undefined) {
+        const ms = Date.parse(d.timestamp);
+        if (!Number.isFinite(ms)) throw new EventValidationError(`Invalid ${d.type} event: bad timestamp ${d.timestamp}`);
+        timestamp = new Date(Math.min(at.getTime(), Math.max(run?.startedMs ?? -Infinity, ms))).toISOString();
+      }
+    }
     const raw = {
       eventId: this.newId(),
       runId,
       sequence,
-      timestamp: at.toISOString(),
+      timestamp,
       type: d.type,
       schemaVersion: SCHEMA_VERSION,
       ...deriveRefs(d),
@@ -332,11 +471,67 @@ export class Recorder {
       ...(d.taskId !== undefined ? { taskId: d.taskId } : {}),
       ...(d.parentEventId !== undefined ? { parentEventId: d.parentEventId } : {}),
       visibility: d.visibility ?? 'public',
+      ...(d.provenance !== undefined ? { provenance: d.provenance } : {}),
       payload: d.payload,
     };
     const parsed = parseKnownEvent(raw);
     if (!parsed.ok) throw new EventValidationError(`Invalid ${draft.type} event: ${parsed.error}`);
     return parsed.event;
+  }
+
+  private buildStarted(runId: string, draft: EventDraft<'run.started'>): EventOf<'run.started'> {
+    const event = this.build(runId, 1, draft, null);
+    if (event.type !== 'run.started') throw new EventValidationError('expected run.started');
+    return event;
+  }
+
+  private writeStateOf(started: EventOf<'run.started'>): RunWriteState {
+    return { lastSequence: 1, status: 'running', mode: started.payload.mode ?? 'executed', startedMs: Date.parse(started.timestamp) };
+  }
+
+  /** Insert the run row for its run.started event. Call inside tx(). */
+  private insertRun(e: EventOf<'run.started'>): void {
+    const p = e.payload;
+    this.db
+      .prepare(
+        `INSERT INTO runs (run_id, mission_id, world_id, title, adapter_label, status, paused, manifest_json, created_at, last_sequence,
+                           mode, source_kind, external_session_id, segment, project_label)
+         VALUES (?, ?, ?, ?, ?, 'running', 0, ?, ?, 0, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        e.runId,
+        p.missionId,
+        p.worldId,
+        p.title,
+        p.adapter.label,
+        JSON.stringify(p),
+        e.timestamp,
+        p.mode ?? 'executed',
+        p.source?.kind ?? null,
+        p.source?.sessionId ?? null,
+        p.source?.segment ?? null,
+        p.source?.projectLabel ?? null,
+      );
+  }
+
+  private insertIngest(mark: IngestMark, runId: string | null): void {
+    this.db
+      .prepare(
+        `INSERT INTO trace_ingest (session_id, ingest_key, run_id, hook_event, observed_at, received_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(mark.sessionId, mark.key, runId, mark.hookEvent, mark.observedAt, this.now().toISOString());
+  }
+
+  /** eventId of a call's tool.call_started in this run (cache, then the log). */
+  private findCallStart(runId: string, callId: string): string | undefined {
+    const cached = this.callStarts.get(runId)?.get(callId);
+    if (cached) return cached;
+    const row = this.db
+      .prepare(
+        `SELECT event_id FROM events WHERE run_id = ? AND type = 'tool.call_started' AND json_extract(envelope_json, '$.payload.callId') = ? LIMIT 1`,
+      )
+      .get(runId, callId) as { event_id: string } | undefined;
+    return row?.event_id;
   }
 
   /** Insert the event and apply its effect on the run row. Call inside tx(). */
@@ -358,7 +553,7 @@ export class Recorder {
         e.visibility,
         JSON.stringify(e),
       );
-    this.db.prepare('UPDATE runs SET last_sequence = ? WHERE run_id = ?').run(e.sequence, e.runId);
+    this.db.prepare('UPDATE runs SET last_sequence = ?, last_event_at = ? WHERE run_id = ?').run(e.sequence, e.timestamp, e.runId);
     switch (e.type) {
       case 'run.completed':
         this.db
@@ -395,12 +590,12 @@ export class Recorder {
     return this.db.prepare('SELECT * FROM runs WHERE run_id = ?').get(runId) as RunRow | undefined;
   }
 
-  private state(runId: string): { lastSequence: number; status: RunStatus } {
+  private state(runId: string): RunWriteState {
     let s = this.runs.get(runId);
     if (!s) {
       const row = this.findRow(runId);
       if (!row) throw new UnknownRunError(runId);
-      s = { lastSequence: row.last_sequence, status: row.status };
+      s = { lastSequence: row.last_sequence, status: row.status, mode: row.mode, startedMs: Date.parse(row.created_at) };
       this.runs.set(runId, s);
     }
     return s;

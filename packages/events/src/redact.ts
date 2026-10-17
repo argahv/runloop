@@ -2,15 +2,43 @@ import type { Visibility } from './envelope';
 
 export const REDACTED = '[REDACTED]';
 
-/** Well-known credential shapes. Replacements never re-match, so redaction is idempotent. */
+/**
+ * Credential shapes masked in every recorded string. Each pattern's first
+ * group is kept (a prefix such as `password=` or `Bearer `) and the rest of
+ * the match is the secret, replaced by `$1[REDACTED]`. A replacement never
+ * re-matches, so redaction is idempotent. Bounded quantifiers keep the cost
+ * linear on long strings.
+ */
 const PATTERNS: RegExp[] = [
-  /\bsk-[A-Za-z0-9_-]{16,}/g, // OpenAI / Anthropic style keys
-  /\bghp_[A-Za-z0-9]{20,}/g, // GitHub classic tokens
-  /\bgithub_pat_[A-Za-z0-9_]{20,}/g, // GitHub fine-grained tokens
-  /\bAKIA[0-9A-Z]{16}\b/g, // AWS access key ids
-  /\bxox[abprs]-[A-Za-z0-9-]{10,}/g, // Slack tokens
-  /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/g, // HTTP bearer credentials
+  // Well-known token formats (the whole match is the secret).
+  /()\bsk-[A-Za-z0-9_-]{16,}/g, // OpenAI / Anthropic keys
+  /()\b[rs]k_(?:live|test)_[A-Za-z0-9]{16,}/g, // Stripe keys
+  /()\bgh[opsur]_[A-Za-z0-9]{20,}/g, // GitHub tokens (classic, OAuth, app, user, refresh)
+  /()\bgithub_pat_[A-Za-z0-9_]{20,}/g, // GitHub fine-grained tokens
+  /()\bglpat-[A-Za-z0-9_-]{20,}/g, // GitLab tokens
+  /()\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, // AWS access key ids
+  /()\bxox[abprs]-[A-Za-z0-9-]{10,}/g, // Slack tokens
+  /(\bhooks\.slack\.com\/services\/)[A-Za-z0-9/_-]+/g, // Slack webhook URLs
+  /()\bAIza[0-9A-Za-z_-]{30,}/g, // Google API keys
+  /()\bnpm_[A-Za-z0-9]{30,}/g, // npm tokens
+  /()\bdckr_pat_[A-Za-z0-9_-]{20,}/g, // Docker Hub tokens
+  // Credentials by position: the value after a recognisable prefix.
+  /(\b[a-z][a-z0-9+.-]{0,20}:\/\/[^\s/:@'"]{0,200}:)(?!\[REDACTED\])[^\s/@'"]+(?=@)/gi, // URL passwords: scheme://user:<pw>@
+  /(\b(?:Proxy-)?Authorization["']?\s*[:=]\s*["']?(?:[A-Za-z][\w-]{0,30}\s+)?)(?!\[REDACTED\])(?![A-Za-z][\w-]{0,30}\s+\[REDACTED\])[^\s"',;]+/gi, // Authorization: <scheme> <value>
+  /(\bBearer\s+)[A-Za-z0-9._~+/=-]{8,}/g, // bearer credentials anywhere
+  /(\bX-[A-Za-z0-9-]{0,40}(?:key|token|secret|auth)[A-Za-z0-9-]{0,40}["']?\s*[:=]\s*["']?)(?!\[REDACTED\])[^\s"',;]+/gi, // X-…-Key / X-…-Token headers
+  // name=value / name: value where the name ends in key, token, secret, password, … (assignments, form data, query strings).
+  /([\w.-]{0,40}(?:key|token|secret|passw(?:or)?d|pwd|passphrase|credentials?)(?:[_.-][\w.-]{0,40})?["']?\s*[=:]\s*)(?!["']?\[REDACTED\])(?:"[^"\n]*"|'[^'\n]*'|[^\s"'&,;]+)/gi,
+  /((?:^|\s)(?:-u|--user)[\s=]{0,3}["']?[^\s:"']{1,100}:)(?!\[REDACTED\])[^\s"']+/g, // curl -u user:<pw>
+  /(\b(?:mysql|mysqldump|mysqladmin|mariadb)\b[^|;&\n]{0,200}?\s-p)(?!\[REDACTED\])[^\s-]\S*/g, // mysql -p<pw>
 ];
+
+/**
+ * The patterns as regex sources and flags. Copies that cannot import this
+ * package (the Claude Code plugin) are parity-tested against it.
+ */
+export const REDACTION_PATTERNS: readonly { source: string; flags: string }[] = PATTERNS.map((re) => ({ source: re.source, flags: re.flags }));
+export const REDACTION_PATTERN_SOURCES: readonly string[] = PATTERNS.map((re) => re.source);
 
 export interface RedactOptions {
   /** Literal secret values (e.g. from the environment). Values shorter than 8 chars are ignored. */
@@ -28,7 +56,23 @@ export function redactText(text: string, opts: RedactOptions = {}): string {
     if (secret.length < 8) continue;
     out = out.replace(new RegExp(escapeRegExp(secret), 'g'), REDACTED);
   }
-  for (const re of PATTERNS) out = out.replace(re, (m) => (m.startsWith('Bearer') ? `Bearer ${REDACTED}` : REDACTED));
+  for (const re of PATTERNS) out = out.replace(re, `$1${REDACTED}`);
+  return out;
+}
+
+/**
+ * The secret values (8+ characters) the patterns would mask in `text`. Used to
+ * mask the same values where no pattern can see them, e.g. a password from a
+ * command that the command's error output repeats.
+ */
+export function secretValuesIn(text: string): string[] {
+  const out: string[] = [];
+  for (const re of PATTERNS) {
+    for (const m of text.matchAll(re)) {
+      const value = m[0].slice((m[1] ?? '').length).replace(/^["']|["']$/g, '');
+      if (value.length >= 8 && !value.includes(REDACTED)) out.push(value);
+    }
+  }
   return out;
 }
 

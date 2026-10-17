@@ -1,9 +1,9 @@
 # @runloop-world/runtime
 
-The local runtime. It runs missions with real tools, records every event to SQLite, and serves the log over HTTP and SSE to Studio.
+The local runtime. It runs missions with real tools, records Claude Code sessions traced by the plugin, stores every event in SQLite, and serves the log over HTTP and SSE to Studio.
 
 ```sh
-pnpm serve                    # API on http://127.0.0.1:4317
+pnpm serve                    # API on http://127.0.0.1:4380
 pnpm demo                     # run the coding mission headless and print the trace
 pnpm demo -- --speed 0        # same, with no pacing delays
 pnpm demo -- --keep           # keep serving the API after the run ends
@@ -12,6 +12,11 @@ pnpm demo -- --keep           # keep serving the API after the run ends
 Environment variables:
 - **`RUNLOOP_DATA_DIR`** sets the data directory (default `<repo>/.runloop`). It holds `runloop.db`, `artifacts/<runId>/<artifactId>` and `workspaces/<runId>/`.
 - **`RUNLOOP_ALLOWED_ORIGINS`** adds browser origins to the defaults (`http://localhost:3000` and `http://127.0.0.1:3000`).
+- **`RUNLOOP_TRACE=off`** turns off Claude Code ingest (the route is not served).
+- **`RUNLOOP_TRACE_IDLE_MINUTES`** closes a traced session after this long without events (default 120).
+- **`RUNLOOP_INGEST_TOKEN_FILE`** overrides the ingest token file (default `$XDG_CONFIG_HOME/runloop/ingest-token`, else `~/.config/runloop/ingest-token`; `%APPDATA%\runloop\ingest-token` on Windows). The runtime creates it (32 random bytes, mode 0600) when it starts.
+
+The port is 4380 (not 4317, the OTLP/gRPC port; DL-005). Override it with `--port`.
 
 Only one runtime process may use a data dir at a time; `runtime.pid` acts as the lock.
 
@@ -65,19 +70,37 @@ Every `tool.call_started` gets exactly one terminal event, linked by `parentEven
 
 The decisions are scripted; the tool results are real. See `examples/coding-mission/README.md`.
 
+## Traced runs (Claude Code)
+
+The plugin in `integrations/claude-code-plugin` posts each Claude Code hook event to `POST /api/ingest/claude-code`. The plan is `docs/plans/claude-code-tracer.md`; the code is `src/tracers/claude-code/`.
+
+```
+envelope ─► dedupe (trace_ingest) ─► slimHook ─► mapHook (pure) ─► Recorder.recordBatch (one transaction) ─► EventBus ─► SSE
+```
+
+- **One run per session segment**, created lazily by the first prompt, tool, permission or subagent event. Run ids are UUIDv5 of `claude-code:<session_id>:<segment>`. Traced runs never use the scripted run slot, so they run alongside the demo.
+- **Agents:** `user` (no character), `main` (preset `claude`) and `sa-<agent_id>` for subagents. Hooks fired inside a subagent carry `agent_id`, so its calls are attributed to it. At most 8 subagents get a character (presets `subagent-1`..`subagent-8`, by order of appearance); the rest are traced without one.
+- **Provenance:** every traced event is `reported` (Claude Code said it) or `inferred` (Runloop reconstructed it, e.g. a permission that was never followed by a result is closed as denied at the next PostToolBatch, later PreToolUse of the same agent after its batch ended, Stop, prompt, SubagentStop, SessionEnd or idle sweep; a subagent linked to the `Agent` call that started it by matching description/type, and a delegated task's completion).
+- **Usage:** a subagent's tokens come from the `Agent` tool result (`agent.usage_reported`, source `claude-code.agent_result`). Hooks do not report the main agent's usage, so it has none (never zero).
+- **Out-of-order delivery** is tolerated: a result without a start synthesises the start (inferred); a late start is ignored; deliveries observed before the run closed are dropped.
+- **Restart:** boot recovery closes open traced runs with `tool.call_failed{unobserved}` and `run.completed{interrupted}`, both inferred. The next hook opens segment n+1 (`source.continuesRunId`).
+- **Idle sweep:** every 60 s, a session that delivered nothing for `RUNLOOP_TRACE_IDLE_MINUTES` of wall-clock time is closed as interrupted (inferred), stamped at its last observed event. Idleness counts from arrival, not from `observedAt`, so a spooled backlog flushed late is not swept as it arrives.
+- **Recorder guards:** executed runs reject drafts with `provenance` or `timestamp`; traced runs need a provenance on `tool.*` events, and their timestamps (the hook's `observedAt`) are clamped to `[run.started, now]`.
+
 ## HTTP API
 
 The contract is `packages/events/src/protocol.ts`. Every request needs a `localhost` or `127.0.0.1` Host header. POSTs need `Content-Type: application/json` and, when an `Origin` is sent, an allowed origin.
 
 | Route | Result |
 | --- | --- |
-| `GET /api/health` | `{ ok, version, activeRunId }` |
+| `GET /api/health` | `{ ok, version, activeRunId, tracedRunIds, ingest }`. `activeRunId` is the scripted run only. |
 | `GET /api/runs` | `{ runs }`, newest first |
 | `POST /api/runs` `{ missionId, speed? }` | 202 `{ runId }`. 409 if a run is active, 404 for an unknown mission. |
 | `GET /api/runs/:id` | `{ run, world }`, where `world` is `worlds/<worldId>/world.json`, validated |
 | `GET /api/runs/:id/events?after&limit` | `{ events, nextAfter, hasMore }` (limit ≤ 1000) |
 | `GET /api/runs/:id/stream` | SSE. Resume with `Last-Event-ID` or `?after`. Sends `: ping` every 15 s and an `end` event when the run is terminal. |
-| `POST /api/runs/:id/{stop,pause,resume}` | 202 `{ run }`, or 409 if the run is not active |
+| `POST /api/runs/:id/{stop,pause,resume}` | 202 `{ run }`, or 409 if the run is not active (always 409 for traced runs: Claude Code controls them) |
+| `POST /api/ingest/claude-code` `{ envelopes }` | 202 `{ accepted, duplicates, ignored }`. Needs `X-Runloop-Token`. 403 with any `Origin`, 413 over 1 MiB, 401 bad token, 400 invalid or unknown protocol version (`supported: [1]`), 429 over 100 events/s per session (burst 1000). |
 | `GET /api/runs/:id/artifacts/:artifactId` | The stored bytes, with their media type. 409 if they no longer match the recorded sha256. |
 
 ## Tests
@@ -88,3 +111,8 @@ pnpm --filter @runloop-world/runtime typecheck
 ```
 
 `test/coding-mission.int.test.ts` runs the real mission at speed 0 and checks the result against `@runloop-world/testkit`'s canonical fixture: the event types, envelope refs and payload fields must all match.
+
+Tracer tests use the hook payloads in `test/fixtures/claude-code/` (real probe sessions, sanitised, plus `synthetic-*` edge cases):
+- `claude-code-mapper.test.ts` folds each fixture into a run, compares it with `<fixture>.golden.txt`, and checks the invariants (no anomalies, one terminal event per call, subagent attribution, usage, no absolute paths, valid world placement). Update the goldens with `pnpm vitest run --project runtime -u` and review the diff.
+- `claude-code-plugin.e2e.test.ts` pipes every fixture line through the real plugin script into a live runtime, including an offline spool and flush.
+- `ingest.test.ts` covers the HTTP guards, dedupe, concurrent sessions, coexistence with the demo, restart and the idle sweep.

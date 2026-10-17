@@ -1,0 +1,24 @@
+# run 1
+#001 run.started system - reported public - {"title":"Claude Code · demo","missionId":"claude-code","worldId":"research-campus","adapter":{"id":"claude-code","kind":"external","label":"Claude Code (traced via hooks)"},"mode":"traced","source":{"kind":"claude-code","sessionId":"synthetic-permission-denied-then-stop","segment":1,"projectLabel":"demo","model":null,"permissionMode":"default","startSource":"startup","pluginVersion":"fixture"}}
+#002 agent.registered user - reported public - {"agentId":"user","name":"You","role":"user","model":null,"tools":[],"embodied":false}
+#003 agent.registered main - reported public - {"agentId":"main","name":"Claude","role":"main agent","model":null,"tools":[],"embodied":true,"characterPreset":"claude"}
+#004 task.created user turn-1 reported public - {"taskId":"turn-1","title":"Turn 1","kind":"turn","dependsOn":[]}
+#005 task.started main turn-1 reported public - {"taskId":"turn-1","agentId":"main"}
+#006 agent.message_sent user - reported sensitive - {"messageId":"msg-1","fromAgentId":"user","to":"main","text":"Write NOTES.md and push the branch."}
+#007 agent.state_changed main - reported public - {"agentId":"main","state":"working","reason":"Prompt received"}
+#008 tool.call_started main turn-1 reported public - {"callId":"toolu_syn_write1","agentId":"main","taskId":"turn-1","tool":"Write","category":"edit","inputSummary":"NOTES.md"}
+#009 tool.permission_requested main - reported public - {"permissionId":"perm-1","agentId":"main","callId":"toolu_syn_write1","action":"Write NOTES.md","scope":"default"}
+#010 tool.permission_resolved - - inferred public - {"permissionId":"perm-1","decision":"approved","by":"user"}
+#011 tool.call_completed main turn-1 reported public ^8 {"callId":"toolu_syn_write1","status":"success","durationMs":5,"outputSummary":"Created the file"}
+#012 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_syn_push1","agentId":"main","taskId":"turn-1","tool":"Bash","category":"deploy","inputSummary":"git push origin HEAD"}
+#013 tool.permission_requested main - reported sensitive - {"permissionId":"perm-2","agentId":"main","callId":"toolu_syn_push1","action":"Bash git push origin HEAD","scope":"default"}
+#014 run.marker main - reported public - {"kind":"compaction","label":"Compaction started (manual)","agentId":"main"}
+#015 run.marker main - reported public - {"kind":"compaction","label":"Compaction finished","detail":"Summary of 35 characters","agentId":"main"}
+#016 tool.permission_resolved - - inferred public - {"permissionId":"perm-2","decision":"denied","by":"unknown"}
+#017 tool.call_failed main turn-1 inferred public ^12 {"callId":"toolu_syn_push1","errorType":"denied","message":"No result was reported after the permission request; treated as denied (inferred)","durationMs":7540}
+#018 agent.message_sent main - reported sensitive - {"messageId":"msg-2","fromAgentId":"main","to":"user","text":"I wrote NOTES.md. The push was not approved, so the branch is not pushed."}
+#019 task.completed - turn-1 reported sensitive - {"taskId":"turn-1","summary":"I wrote NOTES.md. The push was not approved, so the branch is not pushed.","artifactIds":[]}
+#020 agent.state_changed main - reported public - {"agentId":"main","state":"idle","reason":"Turn finished"}
+#021 agent.state_changed main - reported public - {"agentId":"main","state":"waiting","reason":"Waiting for your input"}
+#022 agent.state_changed main - inferred public - {"agentId":"main","state":"idle","reason":"Session closed"}
+#023 run.completed system - reported public - {"outcome":"stopped","summary":"Session ended (prompt_input_exit)"}

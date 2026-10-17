@@ -1,5 +1,6 @@
 import { isUnknownEvent, type AnyEvent, type EventOf, type EventType } from '@runloop-world/events';
 import { SequenceGapError } from './errors';
+import { IdMap } from './id-map';
 import type { AgentExec, Anomaly, ExecState, Incident, TaskExec, ToolCallExec } from './types';
 
 export function initialExecState(): ExecState {
@@ -12,9 +13,11 @@ export function initialExecState(): ExecState {
       title: '',
       missionId: '',
       worldId: '',
-      seed: 0,
+      seed: null,
       adapter: null,
-      workspace: '',
+      workspace: null,
+      mode: 'executed',
+      source: null,
       startedAt: null,
       endedAt: null,
       summary: null,
@@ -23,20 +26,25 @@ export function initialExecState(): ExecState {
     agentOrder: [],
     tasks: {},
     taskOrder: [],
-    toolCalls: {},
+    toolCalls: IdMap.empty(),
     callOrder: [],
     permissions: {},
     artifacts: {},
     artifactOrder: [],
     messages: [],
+    markers: [],
+    usageReports: [],
     incidents: [],
+    openFailures: {},
     anomalies: [],
   };
 }
 
 /**
  * Fold one event into the execution state. Pure, with structural sharing:
- * untouched records keep their references.
+ * untouched records keep their references. Inside {@link transient} the
+ * collections a fold creates are updated in place, so folding many events
+ * costs O(1) per event instead of copying every record each time.
  *
  * - `seq ≤ lastSequence` returns `s` itself (idempotent redelivery).
  * - `seq ≠ lastSequence + 1` throws {@link SequenceGapError} (order upstream with SequenceBuffer).
@@ -60,9 +68,58 @@ export function reduceExecution(s: ExecState, e: AnyEvent): ExecState {
 }
 
 export function foldExecution(events: readonly AnyEvent[], from: ExecState = initialExecState()): ExecState {
-  let s = from;
-  for (const e of events) s = reduceExecution(s, e);
-  return s;
+  return transient(() => {
+    let s = from;
+    for (const e of events) s = reduceExecution(s, e);
+    return s;
+  });
+}
+
+// ── batch folds ────────────────────────────────────────────────────────
+
+/**
+ * Collections (records and arrays) created by the batch fold in progress.
+ * Nothing outside the batch can hold them yet, so they may change in place.
+ */
+let owned: WeakSet<object> | null = null;
+
+/**
+ * Run a fold of several events with in-place updates of the collections it
+ * creates. Only the state `fn` returns is published: states produced inside
+ * `fn` before its last event must not be kept (they share those collections).
+ * States from before the batch are never changed. Results equal the plain fold.
+ */
+export function transient<T>(fn: () => T): T {
+  const outer = owned;
+  owned = new WeakSet();
+  try {
+    return fn();
+  } finally {
+    owned = outer;
+  }
+}
+
+function own<T extends object>(x: T): T {
+  owned?.add(x);
+  return x;
+}
+
+/** `rec` with `key` set: in place when this batch created `rec`, else a copy. */
+function setKey<V>(rec: Record<string, V>, key: string, value: V): Record<string, V> {
+  if (owned?.has(rec)) {
+    rec[key] = value;
+    return rec;
+  }
+  return own({ ...rec, [key]: value });
+}
+
+/** `arr` plus `item`: in place when this batch created `arr`, else a copy. */
+function append<V>(arr: V[], item: V): V[] {
+  if (owned?.has(arr)) {
+    arr.push(item);
+    return arr;
+  }
+  return own([...arr, item]);
 }
 
 // ── helpers ────────────────────────────────────────────────────────────
@@ -70,29 +127,71 @@ export function foldExecution(events: readonly AnyEvent[], from: ExecState = ini
 type Handler<T extends EventType> = (s: ExecState, e: EventOf<T>) => ExecState;
 
 function anomaly(s: ExecState, seq: number, code: Anomaly['code'], detail: string): ExecState {
-  return { ...s, anomalies: [...s.anomalies, { seq, code, detail }] };
+  return { ...s, anomalies: append(s.anomalies, { seq, code, detail }) };
 }
 
 function patchAgent(s: ExecState, id: string, patch: Partial<AgentExec>): ExecState {
   const a = s.agents[id];
   if (!a) return s;
-  return { ...s, agents: { ...s.agents, [id]: { ...a, ...patch } } };
+  return { ...s, agents: setKey(s.agents, id, { ...a, ...patch }) };
 }
 
 function patchTask(s: ExecState, id: string, patch: Partial<TaskExec>): ExecState {
   const t = s.tasks[id];
   if (!t) return s;
-  return { ...s, tasks: { ...s.tasks, [id]: { ...t, ...patch } } };
+  return { ...s, tasks: setKey(s.tasks, id, { ...t, ...patch }) };
 }
 
 function patchCall(s: ExecState, id: string, patch: Partial<ToolCallExec>): ExecState {
-  const c = s.toolCalls[id];
+  const c = s.toolCalls.get(id);
   if (!c) return s;
-  return { ...s, toolCalls: { ...s.toolCalls, [id]: { ...c, ...patch } } };
+  return { ...s, toolCalls: s.toolCalls.set(id, { ...c, ...patch }, owned) };
 }
 
-function addIncident(s: ExecState, incident: Omit<Incident, 'resolvedSeq'>): ExecState {
-  return { ...s, incidents: [...s.incidents, { ...incident, resolvedSeq: null }] };
+function addIncident(s: ExecState, incident: Omit<Incident, 'resolvedSeq' | 'resolution'>, call?: ToolCallExec): ExecState {
+  const index = s.incidents.length;
+  const next: ExecState = { ...s, incidents: append(s.incidents, { ...incident, resolvedSeq: null, resolution: null }) };
+  if (!call || s.run.mode !== 'traced') return next;
+  const key = resolutionKey(call);
+  return { ...next, openFailures: setKey(next.openFailures, key, append(next.openFailures[key] ?? [], index)) };
+}
+
+/** Mark the open incidents at `indexes` (or those `match` accepts) as resolved at `seq`. */
+function resolveIncidents(
+  s: ExecState,
+  seq: number,
+  resolution: NonNullable<Incident['resolution']>,
+  which: readonly number[] | ((i: Incident) => boolean),
+): ExecState {
+  let incidents = s.incidents;
+  const indexes = typeof which === 'function' ? incidents.flatMap((i, k) => (which(i) ? [k] : [])) : which;
+  for (const k of indexes) {
+    const i = incidents[k];
+    if (!i || i.resolvedSeq !== null) continue;
+    if (!owned?.has(incidents)) incidents = own([...incidents]);
+    incidents[k] = { ...i, resolvedSeq: seq, resolution };
+  }
+  return incidents === s.incidents ? s : { ...s, incidents };
+}
+
+/**
+ * Traced runs: what a later success must share with a failed call to show it
+ * was dealt with. Any passing test run resolves earlier failing ones (same
+ * tool); other calls need the same tool and input. Runloop infers this; the
+ * source never says a failure was fixed.
+ */
+function resolutionKey(call: ToolCallExec): string {
+  return call.category === 'test' ? `test\u0000${call.tool}` : `same\u0000${call.tool}\u0000${call.inputSummary}`;
+}
+
+/** Traced runs: resolve the open failures a successful call answers (a test run only counts with no reported failures). */
+function resolveBySuccess(s: ExecState, seq: number, ok: ToolCallExec): ExecState {
+  if (ok.category === 'test' && ok.metrics !== null && ok.metrics.failed > 0) return s;
+  const key = resolutionKey(ok);
+  const open = s.openFailures[key];
+  if (!open || open.length === 0) return s;
+  const next = resolveIncidents(s, seq, 'later_success', open);
+  return { ...next, openFailures: setKey(next.openFailures, key, []) };
 }
 
 /** Clear `currentTaskId` on an agent if it points at `taskId`. */
@@ -143,9 +242,11 @@ const handlers: { [T in EventType]: Handler<T> } = {
         title: p.title,
         missionId: p.missionId,
         worldId: p.worldId,
-        seed: p.seed,
+        seed: p.seed ?? null,
         adapter: p.adapter,
-        workspace: p.workspace,
+        workspace: p.workspace ?? null,
+        mode: p.mode ?? 'executed',
+        source: p.source ?? null,
         startedAt: e.timestamp,
       },
     };
@@ -182,6 +283,24 @@ const handlers: { [T in EventType]: Handler<T> } = {
     });
   },
 
+  'run.marker': (s, e) => {
+    const p = e.payload;
+    const next: ExecState = {
+      ...s,
+      markers: append(s.markers, {
+        seq: e.sequence,
+        eventId: e.eventId,
+        timestamp: e.timestamp,
+        kind: p.kind,
+        label: p.label,
+        detail: p.detail ?? null,
+        agentId: p.agentId ?? null,
+        provenance: e.provenance ?? null,
+      }),
+    };
+    return p.agentId && !s.agents[p.agentId] ? anomaly(next, e.sequence, 'unknown_agent', p.agentId) : next;
+  },
+
   'agent.registered': (s, e) => {
     const p = e.payload;
     if (s.agents[p.agentId]) return anomaly(s, e.sequence, 'duplicate_id', `agent ${p.agentId} registered twice`);
@@ -199,9 +318,11 @@ const handlers: { [T in EventType]: Handler<T> } = {
       activeCallId: null,
       pendingPermissionId: null,
       lastTaskOutcome: null,
+      lastCategory: null,
+      usage: null,
       registeredSeq: e.sequence,
     };
-    return { ...s, agents: { ...s.agents, [p.agentId]: agent }, agentOrder: [...s.agentOrder, p.agentId] };
+    return { ...s, agents: setKey(s.agents, p.agentId, agent), agentOrder: append(s.agentOrder, p.agentId) };
   },
 
   'agent.state_changed': (s, e) => {
@@ -214,9 +335,17 @@ const handlers: { [T in EventType]: Handler<T> } = {
     const p = e.payload;
     const next: ExecState = {
       ...s,
-      messages: [...s.messages, { ...p, seq: e.sequence, eventId: e.eventId, timestamp: e.timestamp }],
+      messages: append(s.messages, { ...p, seq: e.sequence, eventId: e.eventId, timestamp: e.timestamp }),
     };
     return s.agents[p.fromAgentId] ? next : anomaly(next, e.sequence, 'unknown_agent', p.fromAgentId);
+  },
+
+  'agent.usage_reported': (s, e) => {
+    const p = e.payload;
+    const report = { ...p, seq: e.sequence, eventId: e.eventId, provenance: e.provenance ?? null };
+    const next: ExecState = { ...s, usageReports: append(s.usageReports, report) };
+    if (!s.agents[p.agentId]) return anomaly(next, e.sequence, 'unknown_agent', p.agentId);
+    return patchAgent(next, p.agentId, { usage: report });
   },
 
   'task.created': (s, e) => {
@@ -244,7 +373,7 @@ const handlers: { [T in EventType]: Handler<T> } = {
       callIds: [],
       stepsDoneThisAttempt: 0,
     };
-    let next: ExecState = { ...s, tasks: { ...s.tasks, [p.taskId]: task }, taskOrder: [...s.taskOrder, p.taskId] };
+    let next: ExecState = { ...s, tasks: setKey(s.tasks, p.taskId, task), taskOrder: append(s.taskOrder, p.taskId) };
     for (const dep of p.dependsOn) {
       if (!s.tasks[dep] && dep !== p.taskId) next = anomaly(next, e.sequence, 'unknown_dependency', `${p.taskId} → ${dep}`);
     }
@@ -305,13 +434,10 @@ const handlers: { [T in EventType]: Handler<T> } = {
     if (t.ownerId && next.agents[t.ownerId]) {
       next = patchAgent(next, t.ownerId, { lastTaskOutcome: { taskId: p.taskId, status: 'completed', seq: e.sequence } });
     }
-    if (next.incidents.some((i) => i.taskId === p.taskId && i.resolvedSeq === null)) {
-      next = {
-        ...next,
-        incidents: next.incidents.map((i) =>
-          i.taskId === p.taskId && i.resolvedSeq === null ? { ...i, resolvedSeq: e.sequence } : i,
-        ),
-      };
+    // Executed runs: a task that finished after a failure dealt with it. A traced turn
+    // "completes" whenever Claude stops (or the session ends), which says nothing about its failures.
+    if (s.run.mode !== 'traced' && e.provenance !== 'inferred' && next.incidents.some((i) => i.taskId === p.taskId && i.resolvedSeq === null)) {
+      next = resolveIncidents(next, e.sequence, 'task_completed', (i) => i.taskId === p.taskId);
     }
     return next;
   },
@@ -343,12 +469,13 @@ const handlers: { [T in EventType]: Handler<T> } = {
 
   'tool.call_started': (s, e) => {
     const p = e.payload;
-    if (s.toolCalls[p.callId]) return anomaly(s, e.sequence, 'duplicate_id', `call ${p.callId} started twice`);
+    if (s.toolCalls.has(p.callId)) return anomaly(s, e.sequence, 'duplicate_id', `call ${p.callId} started twice`);
     const call: ToolCallExec = {
       id: p.callId,
       agentId: p.agentId,
       taskId: p.taskId ?? null,
       tool: p.tool,
+      category: p.category ?? null,
       inputSummary: p.inputSummary,
       status: 'running',
       startedSeq: e.sequence,
@@ -365,13 +492,19 @@ const handlers: { [T in EventType]: Handler<T> } = {
       outputArtifactIds: [],
       errorType: null,
       message: null,
+      startProvenance: e.provenance ?? null,
+      endProvenance: null,
     };
-    let next: ExecState = { ...s, toolCalls: { ...s.toolCalls, [p.callId]: call }, callOrder: [...s.callOrder, p.callId] };
-    if (next.agents[p.agentId]) next = patchAgent(next, p.agentId, { activeCallId: p.callId });
-    else next = anomaly(next, e.sequence, 'unknown_agent', p.agentId);
+    let next: ExecState = { ...s, toolCalls: s.toolCalls.set(p.callId, call, owned), callOrder: append(s.callOrder, p.callId) };
+    if (next.agents[p.agentId]) {
+      next = patchAgent(next, p.agentId, {
+        activeCallId: p.callId,
+        ...(p.category ? { lastCategory: { category: p.category, taskId: p.taskId ?? null } } : {}),
+      });
+    } else next = anomaly(next, e.sequence, 'unknown_agent', p.agentId);
     if (p.taskId) {
       const t = next.tasks[p.taskId];
-      if (t) next = patchTask(next, p.taskId, { callIds: [...t.callIds, p.callId] });
+      if (t) next = patchTask(next, p.taskId, { callIds: append(t.callIds, p.callId) });
       else next = anomaly(next, e.sequence, 'unknown_task', p.taskId);
     }
     return next;
@@ -379,7 +512,7 @@ const handlers: { [T in EventType]: Handler<T> } = {
 
   'tool.call_completed': (s, e) => {
     const p = e.payload;
-    const c = s.toolCalls[p.callId];
+    const c = s.toolCalls.get(p.callId);
     if (!c) return anomaly(s, e.sequence, 'unknown_call', p.callId);
     if (c.status !== 'running') return anomaly(s, e.sequence, 'invalid_transition', `call ${p.callId} already ${c.status}`);
     let next = patchCall(s, p.callId, {
@@ -394,23 +527,20 @@ const handlers: { [T in EventType]: Handler<T> } = {
       failingTests: p.failingTests ?? [],
       outputArtifactIds: p.outputArtifactIds ?? [],
       errorType: p.errorType ?? null,
+      endProvenance: e.provenance ?? null,
     });
     next = finishCall(next, c);
-    if (p.status !== 'error') return next;
-    return addIncident(next, {
-      seq: e.sequence,
-      eventId: e.eventId,
-      kind: 'tool_error',
-      refId: p.callId,
-      agentId: c.agentId,
-      taskId: c.taskId,
-      message: p.outputSummary,
-    });
+    if (p.status !== 'error') return next.run.mode === 'traced' ? resolveBySuccess(next, e.sequence, next.toolCalls.get(p.callId)!) : next;
+    return addIncident(
+      next,
+      { seq: e.sequence, eventId: e.eventId, kind: 'tool_error', refId: p.callId, agentId: c.agentId, taskId: c.taskId, message: p.outputSummary },
+      c,
+    );
   },
 
   'tool.call_failed': (s, e) => {
     const p = e.payload;
-    const c = s.toolCalls[p.callId];
+    const c = s.toolCalls.get(p.callId);
     if (!c) return anomaly(s, e.sequence, 'unknown_call', p.callId);
     if (c.status !== 'running') return anomaly(s, e.sequence, 'invalid_transition', `call ${p.callId} already ${c.status}`);
     let next = patchCall(s, p.callId, {
@@ -421,17 +551,14 @@ const handlers: { [T in EventType]: Handler<T> } = {
       durationMs: p.durationMs,
       errorType: p.errorType,
       message: p.message,
+      endProvenance: e.provenance ?? null,
     });
     next = finishCall(next, c);
-    return addIncident(next, {
-      seq: e.sequence,
-      eventId: e.eventId,
-      kind: 'tool_failed',
-      refId: p.callId,
-      agentId: c.agentId,
-      taskId: c.taskId,
-      message: `${p.errorType}: ${p.message}`,
-    });
+    return addIncident(
+      next,
+      { seq: e.sequence, eventId: e.eventId, kind: 'tool_failed', refId: p.callId, agentId: c.agentId, taskId: c.taskId, message: `${p.errorType}: ${p.message}` },
+      c,
+    );
   },
 
   'tool.permission_requested': (s, e) => {
@@ -441,20 +568,18 @@ const handlers: { [T in EventType]: Handler<T> } = {
     }
     const next: ExecState = {
       ...s,
-      permissions: {
-        ...s.permissions,
-        [p.permissionId]: {
-          id: p.permissionId,
-          agentId: p.agentId,
-          callId: p.callId ?? null,
-          action: p.action,
-          scope: p.scope,
-          status: 'pending',
-          requestedSeq: e.sequence,
-          resolvedSeq: null,
-          resolvedBy: null,
-        },
-      },
+      permissions: setKey(s.permissions, p.permissionId, {
+        id: p.permissionId,
+        agentId: p.agentId,
+        callId: p.callId ?? null,
+        action: p.action,
+        scope: p.scope,
+        status: 'pending',
+        requestedSeq: e.sequence,
+        resolvedSeq: null,
+        resolvedBy: null,
+        resolvedProvenance: null,
+      }),
     };
     if (!next.agents[p.agentId]) return anomaly(next, e.sequence, 'unknown_agent', p.agentId);
     return patchAgent(next, p.agentId, { pendingPermissionId: p.permissionId });
@@ -469,10 +594,13 @@ const handlers: { [T in EventType]: Handler<T> } = {
     }
     let next: ExecState = {
       ...s,
-      permissions: {
-        ...s.permissions,
-        [p.permissionId]: { ...perm, status: p.decision, resolvedSeq: e.sequence, resolvedBy: p.by },
-      },
+      permissions: setKey(s.permissions, p.permissionId, {
+        ...perm,
+        status: p.decision,
+        resolvedSeq: e.sequence,
+        resolvedBy: p.by,
+        resolvedProvenance: e.provenance ?? null,
+      }),
     };
     if (next.agents[perm.agentId]?.pendingPermissionId === p.permissionId) {
       next = patchAgent(next, perm.agentId, { pendingPermissionId: null });
@@ -483,21 +611,18 @@ const handlers: { [T in EventType]: Handler<T> } = {
   'artifact.created': (s, e) => {
     const p = e.payload;
     if (s.artifacts[p.artifactId]) return anomaly(s, e.sequence, 'duplicate_id', `artifact ${p.artifactId} created twice`);
-    const call = p.producedByCallId ? s.toolCalls[p.producedByCallId] : undefined;
+    const call = p.producedByCallId ? s.toolCalls.get(p.producedByCallId) : undefined;
     const next: ExecState = {
       ...s,
-      artifacts: {
-        ...s.artifacts,
-        [p.artifactId]: {
-          ...p,
-          seq: e.sequence,
-          eventId: e.eventId,
-          agentId: e.actorId ?? call?.agentId ?? null,
-          taskId: e.taskId ?? call?.taskId ?? null,
-          createdAt: e.timestamp,
-        },
-      },
-      artifactOrder: [...s.artifactOrder, p.artifactId],
+      artifacts: setKey(s.artifacts, p.artifactId, {
+        ...p,
+        seq: e.sequence,
+        eventId: e.eventId,
+        agentId: e.actorId ?? call?.agentId ?? null,
+        taskId: e.taskId ?? call?.taskId ?? null,
+        createdAt: e.timestamp,
+      }),
+      artifactOrder: append(s.artifactOrder, p.artifactId),
     };
     if (p.producedByCallId && !call) return anomaly(next, e.sequence, 'unknown_call', p.producedByCallId);
     return next;

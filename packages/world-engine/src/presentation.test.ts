@@ -13,6 +13,7 @@ function character(patch: Partial<CharacterWorld>): CharacterWorld {
     activity: 'idle',
     taskId: null,
     stationId: null,
+    stationKind: null,
     target: { kind: 'home' },
     motion: { path: [[13, 8]], startTick: 0 },
     sinceTick: 0,

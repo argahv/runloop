@@ -1,0 +1,12 @@
+{
+  "name": "@runloop-world/claude-code-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Claude Code plugin that traces sessions into a local Runloop runtime (observe-only).",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "doctor": "node scripts/runloop-hook.mjs --doctor"
+  }
+}

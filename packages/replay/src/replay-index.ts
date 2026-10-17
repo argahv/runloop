@@ -1,4 +1,4 @@
-import { SequenceGapError } from '@runloop-world/core';
+import { SequenceGapError, transient } from '@runloop-world/core';
 import type { AnyEvent } from '@runloop-world/events';
 import { msToTick, type CompiledWorld } from '@runloop-world/world-engine';
 import { initialRunState, reduceRun } from './reduce-run';
@@ -33,17 +33,30 @@ export class ReplayIndex {
    * throws SequenceGapError (order and dedupe upstream with SequenceBuffer).
    */
   append(events: readonly AnyEvent[]): void {
-    for (const e of events) {
-      const last = this.list.length;
-      if (e.sequence <= last) continue;
-      if (e.sequence !== last + 1) throw new SequenceGapError(last + 1, e.sequence);
-      const ms = Date.parse(e.timestamp);
-      this.startMs ??= ms;
-      const prev = this.times[last - 1] ?? 0;
-      this.list.push(e);
-      this.times.push(Math.max(prev, ms - this.startMs));
-      this.head = reduceRun(this.head, e, this.world);
-      if (e.sequence % SNAPSHOT_EVERY === 0) this.snapshots.set(e.sequence, this.head);
+    // Fold in batches that end at each snapshot: a batch updates the state it
+    // builds in place, and only its last state (head or snapshot) is kept.
+    let i = 0;
+    while (i < events.length) {
+      i = transient(() => {
+        let k = i;
+        for (; k < events.length; k++) {
+          const e = events[k]!;
+          const last = this.list.length;
+          if (e.sequence <= last) continue;
+          if (e.sequence !== last + 1) throw new SequenceGapError(last + 1, e.sequence);
+          const ms = Date.parse(e.timestamp);
+          this.startMs ??= ms;
+          const prev = this.times[last - 1] ?? 0;
+          this.list.push(e);
+          this.times.push(Math.max(prev, ms - this.startMs));
+          this.head = reduceRun(this.head, e, this.world);
+          if (e.sequence % SNAPSHOT_EVERY === 0) {
+            this.snapshots.set(e.sequence, this.head);
+            return k + 1;
+          }
+        }
+        return k;
+      });
     }
   }
 
@@ -77,7 +90,11 @@ export class ReplayIndex {
     let from = Math.floor(n / SNAPSHOT_EVERY) * SNAPSHOT_EVERY;
     for (const k of this.memo.keys()) if (k < n && k > from) from = k;
     let s = this.snapshots.get(from) ?? this.memo.get(from)!;
-    for (let i = from; i < n; i++) s = reduceRun(s, this.list[i]!, this.world);
+    s = transient(() => {
+      let t = s;
+      for (let i = from; i < n; i++) t = reduceRun(t, this.list[i]!, this.world);
+      return t;
+    });
 
     this.memo.set(n, s);
     if (this.memo.size > MEMO_SIZE) this.memo.delete(this.memo.keys().next().value!);

@@ -3,10 +3,16 @@ import type {
   AgentRuntimeState,
   ArtifactKind,
   PayloadOf,
+  Provenance,
+  RunMarkerKind,
+  RunMode,
   TaskKind,
   TestMetrics,
+  ToolCategory,
   ToolFailureType,
+  TraceSource,
 } from '@runloop-world/events';
+import type { IdMap } from './id-map';
 
 /** Layer 1 — execution truth, folded from recorded events only. */
 
@@ -17,9 +23,15 @@ export interface RunExec {
   title: string;
   missionId: string;
   worldId: string;
-  seed: number;
+  /** Executed runs only (null for traced runs and before run.started). */
+  seed: number | null;
   adapter: AdapterInfo | null;
-  workspace: string;
+  /** Executed runs only. */
+  workspace: string | null;
+  /** executed: Runloop ran the tools. traced: recorded from an external agent's reports. */
+  mode: RunMode;
+  /** Traced runs: where the run came from. */
+  source: TraceSource | null;
   startedAt: string | null;
   endedAt: string | null;
   summary: string | null;
@@ -42,7 +54,33 @@ export interface AgentExec {
   pendingPermissionId: string | null;
   /** Most recent task outcome for this agent (drives brief success/failure reactions). */
   lastTaskOutcome: { taskId: string; status: 'completed' | 'failed'; seq: number } | null;
+  /**
+   * Category of the agent's most recent categorised tool call and the task it
+   * was made for. Keeps the world station sticky between calls of one task.
+   */
+  lastCategory: { category: ToolCategory; taskId: string | null } | null;
+  /** Latest usage the source reported for this agent; null = not reported (never zero). */
+  usage: UsageExec | null;
   registeredSeq: number;
+}
+
+/** One agent.usage_reported event (numbers exactly as the source reported them). */
+export type UsageExec = PayloadOf<'agent.usage_reported'> & {
+  seq: number;
+  eventId: string;
+  provenance: Provenance | null;
+};
+
+/** A run.marker event (compaction, notification, API error, ...). */
+export interface MarkerExec {
+  seq: number;
+  eventId: string;
+  timestamp: string;
+  kind: RunMarkerKind;
+  label: string;
+  detail: string | null;
+  agentId: string | null;
+  provenance: Provenance | null;
 }
 
 export type TaskStatus = 'pending' | 'assigned' | 'in_progress' | 'blocked' | 'completed' | 'failed';
@@ -81,6 +119,8 @@ export interface ToolCallExec {
   agentId: string;
   taskId: string | null;
   tool: string;
+  /** Traced runs: the call's category; null when not given (executed runs). */
+  category: ToolCategory | null;
   inputSummary: string;
   status: ToolCallStatus;
   startedSeq: number;
@@ -99,6 +139,9 @@ export interface ToolCallExec {
   errorType: string | ToolFailureType | null;
   /** tool.call_failed message. */
   message: string | null;
+  /** Provenance of the start and of the terminal event (null = observed by the runtime). */
+  startProvenance: Provenance | null;
+  endProvenance: Provenance | null;
 }
 
 export interface PermissionExec {
@@ -111,6 +154,8 @@ export interface PermissionExec {
   requestedSeq: number;
   resolvedSeq: number | null;
   resolvedBy: string | null;
+  /** Provenance of the resolution (inferred e.g. for a denial no hook reported). */
+  resolvedProvenance: Provenance | null;
 }
 
 export type ArtifactExec = PayloadOf<'artifact.created'> & {
@@ -140,8 +185,14 @@ export interface Incident {
   agentId: string | null;
   taskId: string | null;
   message: string;
-  /** Sequence at which the related task later completed (marker greys out), if it did. */
+  /** Sequence at which the failure was resolved (the marker greys out), if it was. */
   resolvedSeq: number | null;
+  /**
+   * How: `task_completed` — its task finished afterwards (executed runs);
+   * `later_success` — a later call of the same kind succeeded (traced runs;
+   * inferred by Runloop). null while open.
+   */
+  resolution: 'task_completed' | 'later_success' | null;
 }
 
 /** Something in the log this version could not interpret or that contradicts earlier events. */
@@ -171,13 +222,23 @@ export interface ExecState {
   agentOrder: string[];
   tasks: Record<string, TaskExec>;
   taskOrder: string[];
-  toolCalls: Record<string, ToolCallExec>;
+  /** Every tool call by id (an IdMap: cheap to update in long runs; `callOrder` gives the order). */
+  toolCalls: IdMap<ToolCallExec>;
   callOrder: string[];
   permissions: Record<string, PermissionExec>;
   artifacts: Record<string, ArtifactExec>;
   artifactOrder: string[];
   messages: MessageExec[];
+  /** run.marker events in order. */
+  markers: MarkerExec[];
+  /** Every agent.usage_reported event in order. */
+  usageReports: UsageExec[];
   incidents: Incident[];
+  /**
+   * Traced runs: open tool failures (indexes into `incidents`) by what a later
+   * success must match to resolve them. An index, kept so resolving is O(1).
+   */
+  openFailures: Record<string, number[]>;
   anomalies: Anomaly[];
 }
 

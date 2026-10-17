@@ -1,4 +1,4 @@
-import { TaskKindSchema } from '@runloop-world/events';
+import { TaskKindSchema, ToolCategorySchema } from '@runloop-world/events';
 import * as z from 'zod';
 
 /** A grid cell as [x, y]: x = column (left→right), y = row (top→bottom). */
@@ -55,6 +55,11 @@ export type Prop = z.infer<typeof PropSchema>;
 export const ActivityRuleSchema = z.object({
   when: z.object({
     taskKind: z.array(TaskKindSchema).optional(),
+    /**
+     * Matches the category of the agent's current tool call (or, between calls
+     * of the same task, its last one). Calls without a category never match.
+     */
+    toolCategory: z.array(ToolCategorySchema).optional(),
     /** Matches when the agent has a pending permission request. */
     permission: z.literal(true).optional(),
   }),

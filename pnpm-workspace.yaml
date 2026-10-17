@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - integrations/*
 
 # esbuild ships its binary through optional platform packages, so its postinstall is not needed.
 ignoredBuiltDependencies:

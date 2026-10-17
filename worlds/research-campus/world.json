@@ -2,7 +2,7 @@
   "id": "research-campus",
   "version": 1,
   "name": "Research Campus",
-  "description": "Four cutaway rooms around a central hub: Research, Build, Test and Deploy.",
+  "description": "Four cutaway rooms around the Atrium: the Observatory (reading and research), the Workshop (editing and commands), the Test Chamber and the Launch Bay (deploys and external actions). Presets subagent-1..subagent-8 give traced subagents a stable identity by their order of appearance.",
   "tickHz": 10,
   "ticksPerCell": 2,
   "grid": [
@@ -30,7 +30,7 @@
   "zones": [
     {
       "id": "research",
-      "label": "Research",
+      "label": "Observatory",
       "kind": "research",
       "rect": [1, 1, 9, 7],
       "color": "#38bdf8",
@@ -38,7 +38,7 @@
     },
     {
       "id": "build",
-      "label": "Build",
+      "label": "Workshop",
       "kind": "build",
       "rect": [14, 1, 9, 7],
       "color": "#818cf8",
@@ -46,7 +46,7 @@
     },
     {
       "id": "test",
-      "label": "Test",
+      "label": "Test Chamber",
       "kind": "test",
       "rect": [1, 12, 9, 7],
       "color": "#34d399",
@@ -54,7 +54,7 @@
     },
     {
       "id": "deploy",
-      "label": "Deploy",
+      "label": "Launch Bay",
       "kind": "deploy",
       "rect": [14, 12, 9, 7],
       "color": "#c084fc",
@@ -62,7 +62,7 @@
     },
     {
       "id": "hub",
-      "label": "Hub",
+      "label": "Atrium",
       "kind": "hub",
       "rect": [10, 8, 4, 4],
       "color": "#f59e0b"
@@ -177,6 +177,30 @@
     },
     {
       "when": {
+        "toolCategory": ["read", "search", "web"]
+      },
+      "stationKind": "library"
+    },
+    {
+      "when": {
+        "toolCategory": ["edit", "execute"]
+      },
+      "stationKind": "build"
+    },
+    {
+      "when": {
+        "toolCategory": ["test"]
+      },
+      "stationKind": "test"
+    },
+    {
+      "when": {
+        "toolCategory": ["deploy", "mcp"]
+      },
+      "stationKind": "ops"
+    },
+    {
+      "when": {
         "taskKind": [
           "research"
         ]
@@ -245,6 +269,69 @@
       "color": "#c084fc",
       "icon": "rocket",
       "home": [13, 11]
+    },
+    {
+      "id": "claude",
+      "label": "Claude",
+      "color": "#e8b48a",
+      "icon": "bot",
+      "home": [11, 8]
+    },
+    {
+      "id": "subagent-1",
+      "label": "Subagent 1",
+      "color": "#7aa2f7",
+      "icon": "bot",
+      "home": [9, 9]
+    },
+    {
+      "id": "subagent-2",
+      "label": "Subagent 2",
+      "color": "#bb9af7",
+      "icon": "bot",
+      "home": [14, 9]
+    },
+    {
+      "id": "subagent-3",
+      "label": "Subagent 3",
+      "color": "#2ac3de",
+      "icon": "bot",
+      "home": [9, 10]
+    },
+    {
+      "id": "subagent-4",
+      "label": "Subagent 4",
+      "color": "#e27fd3",
+      "icon": "bot",
+      "home": [14, 10]
+    },
+    {
+      "id": "subagent-5",
+      "label": "Subagent 5",
+      "color": "#c0a36e",
+      "icon": "bot",
+      "home": [9, 8]
+    },
+    {
+      "id": "subagent-6",
+      "label": "Subagent 6",
+      "color": "#a9b1d6",
+      "icon": "bot",
+      "home": [14, 8]
+    },
+    {
+      "id": "subagent-7",
+      "label": "Subagent 7",
+      "color": "#f29e74",
+      "icon": "bot",
+      "home": [9, 11]
+    },
+    {
+      "id": "subagent-8",
+      "label": "Subagent 8",
+      "color": "#5fb3b3",
+      "icon": "bot",
+      "home": [14, 11]
     }
   ],
   "defaultPreset": "operator"

@@ -28,14 +28,15 @@ describe('HTTP API', () => {
     const { app } = runtime();
     const res = await app.request(apiPaths.health);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, version: expect.any(String), activeRunId: null });
+    // env {} names no config dir, so there is no ingest token and tracing is off.
+    expect(await res.json()).toEqual({ ok: true, version: expect.any(String), activeRunId: null, tracedRunIds: [], ingest: null });
   });
 
   it('only answers for localhost hosts (any port)', async () => {
     const { app } = runtime();
     expect((await app.request(apiPaths.health, { headers: { host: 'evil.example' } })).status).toBe(403);
-    expect((await app.request(apiPaths.health, { headers: { host: 'localhost.evil.example:4317' } })).status).toBe(403);
-    expect((await app.request(apiPaths.health, { headers: { host: '127.0.0.1:4317' } })).status).toBe(200);
+    expect((await app.request(apiPaths.health, { headers: { host: 'localhost.evil.example:4380' } })).status).toBe(403);
+    expect((await app.request(apiPaths.health, { headers: { host: '127.0.0.1:4380' } })).status).toBe(200);
     expect((await app.request(apiPaths.health, { headers: { host: 'localhost:9999' } })).status).toBe(200);
   });
 

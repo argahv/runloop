@@ -23,7 +23,18 @@ describe('parseEvent', () => {
   it('covers most event types with the fixture', () => {
     const seen = new Set(fixture.map((e) => e.type));
     const missing = EVENT_TYPES.filter((t) => !seen.has(t));
-    expect(missing.sort()).toEqual(['run.paused', 'run.resumed', 'task.failed', 'tool.call_failed', 'tool.permission_requested', 'tool.permission_resolved'].sort());
+    expect(missing.sort()).toEqual(
+      [
+        'run.paused',
+        'run.resumed',
+        'run.marker',
+        'agent.usage_reported',
+        'task.failed',
+        'tool.call_failed',
+        'tool.permission_requested',
+        'tool.permission_resolved',
+      ].sort(),
+    );
   });
 
   it.each([
@@ -73,6 +84,59 @@ describe('parseEvent', () => {
     const completed = fixture.find((e) => e.type === 'tool.call_completed' && e.payload.metrics)!;
     const bad = { ...completed, payload: { ...completed.payload, metrics: { tests: 12, passed: -1, failed: 2 } } };
     expect(parseKnownEvent(bad).ok).toBe(false);
+  });
+});
+
+describe('traced runs (additive schema)', () => {
+  const traced = {
+    title: 'Claude Code · demo',
+    missionId: 'claude-code',
+    worldId: 'research-campus',
+    adapter: { id: 'claude-code', kind: 'external', label: 'Claude Code (traced via hooks)' },
+    mode: 'traced',
+    source: { kind: 'claude-code', sessionId: 's-1', segment: 1, projectLabel: 'demo', model: null },
+  };
+  const withPayload = (type: string, payload: unknown, extra: Record<string, unknown> = {}) => ({ ...sample(), type, payload, ...extra });
+
+  it('accepts a traced run.started without seed or workspace', () => {
+    expect(parseKnownEvent(withPayload('run.started', traced)).ok).toBe(true);
+  });
+
+  it('requires mode, source and an external adapter together', () => {
+    const { mode: _m, ...noMode } = traced;
+    const { source: _s, ...noSource } = traced;
+    for (const bad of [noMode, noSource, { ...traced, adapter: { ...traced.adapter, kind: 'scripted' } }]) {
+      expect(parseKnownEvent(withPayload('run.started', bad)).ok).toBe(false);
+    }
+  });
+
+  it('still requires seed and workspace on executed runs', () => {
+    const executed = sample().payload as Record<string, unknown>;
+    const { seed: _seed, ...noSeed } = executed;
+    expect(parseKnownEvent(withPayload('run.started', executed)).ok).toBe(true);
+    expect(parseKnownEvent(withPayload('run.started', noSeed)).ok).toBe(false);
+  });
+
+  it('parses provenance, markers, usage, tool categories and the new kinds', () => {
+    const marker = parseKnownEvent(withPayload('run.marker', { kind: 'compaction', label: 'Compaction', agentId: 'main' }, { provenance: 'reported' }));
+    expect(marker.ok && marker.event.provenance).toBe('reported');
+    const usage = { agentId: 'sa-1', model: 'claude-haiku-5-5', inputTokens: 2, outputTokens: 193, cacheReadTokens: 19620, source: 'claude-code.agent_result' };
+    expect(parseKnownEvent(withPayload('agent.usage_reported', usage)).ok).toBe(true);
+    expect(parseKnownEvent(withPayload('agent.usage_reported', { ...usage, inputTokens: -1 })).ok).toBe(false);
+    const call = { callId: 'c', agentId: 'main', tool: 'Bash', category: 'test', inputSummary: 'npm test' };
+    expect(parseKnownEvent(withPayload('tool.call_started', call)).ok).toBe(true);
+    expect(parseKnownEvent(withPayload('tool.call_started', { ...call, category: 'dance' })).ok).toBe(false);
+    expect(parseKnownEvent(withPayload('task.created', { taskId: 't', title: 'Turn 1', kind: 'turn', dependsOn: [] })).ok).toBe(true);
+    expect(parseKnownEvent(withPayload('tool.call_failed', { callId: 'c', errorType: 'unobserved', message: 'x', durationMs: 0 })).ok).toBe(true);
+    expect(parseEvent({ ...sample(), provenance: 'guessed' }).ok).toBe(false);
+  });
+
+  it('derives the actor of markers and usage reports', () => {
+    expect(deriveRefs({ type: 'run.marker', payload: { kind: 'other', label: 'x', agentId: 'main' } })).toEqual({ actorId: 'main' });
+    expect(deriveRefs({ type: 'run.marker', payload: { kind: 'other', label: 'x' } })).toEqual({});
+    expect(
+      deriveRefs({ type: 'agent.usage_reported', payload: { agentId: 'sa-1', model: null, inputTokens: 1, outputTokens: 1, source: 's' } }),
+    ).toEqual({ actorId: 'sa-1' });
   });
 });
 

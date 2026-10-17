@@ -212,3 +212,74 @@ describe('ReplayIndex time mapping', () => {
     }
   });
 });
+
+/** A synthetic traced run of about 20k events: 9,000 calls (1 in 10 failing), a turn every 600 calls. */
+function bigTracedRun(): RunEvent[] {
+  const b = runBuilder({ startIso: '2026-10-17T12:00:00.000Z', namespace: 0xb1 });
+  const meta = { provenance: 'reported' as const };
+  b.add(
+    'run.started',
+    {
+      title: 'Claude Code · synthetic',
+      missionId: 'claude-code',
+      worldId: 'research-campus',
+      adapter: { id: 'claude-code', kind: 'external', label: 'Claude Code' },
+      mode: 'traced',
+      source: { kind: 'claude-code', sessionId: 'big', segment: 1, projectLabel: 'synthetic', model: null },
+    },
+    meta,
+  );
+  b.add('agent.registered', { agentId: 'main', name: 'Claude', role: 'main', model: null, tools: [], embodied: true, characterPreset: 'claude' }, meta);
+  const categories = ['read', 'edit', 'test'] as const;
+  let turn = 0;
+  for (let i = 0; i < 9000; i++) {
+    if (i % 600 === 0) {
+      if (turn > 0) b.wait(10).add('task.completed', { taskId: `turn-${turn}`, summary: 'x', artifactIds: [] }, meta);
+      turn += 1;
+      b.wait(10).add('task.created', { taskId: `turn-${turn}`, title: `Turn ${turn}`, kind: 'turn', dependsOn: [] }, meta);
+      b.wait(10).add('task.started', { taskId: `turn-${turn}`, agentId: 'main' }, meta);
+    }
+    const category = categories[i % 3]!;
+    b.wait(20).add('tool.call_started', { callId: `c${i}`, agentId: 'main', taskId: `turn-${turn}`, tool: 'Bash', category, inputSummary: `cmd ${i % 50}` }, meta);
+    const failed = i % 10 === 9;
+    b.wait(20).add('tool.call_completed', { callId: `c${i}`, status: failed ? 'error' : 'success', durationMs: 20, outputSummary: failed ? 'Exit code 1' : 'ok' }, meta);
+  }
+  b.wait(10).add('run.completed', { outcome: 'stopped' }, meta);
+  return b.events;
+}
+
+describe('ReplayIndex cost on a large trace', () => {
+  const events = bigTracedRun();
+
+  it('folds about 20k events in about linear time, at once and one by one (live)', () => {
+    expect(events.length).toBeGreaterThan(18_000);
+    let t = performance.now();
+    const all = new ReplayIndex(world, events);
+    const once = performance.now() - t;
+    t = performance.now();
+    const live = new ReplayIndex(world);
+    const perBlock: number[] = [];
+    for (let i = 0; i < events.length; i += 2000) {
+      const tb = performance.now();
+      for (const e of events.slice(i, i + 2000)) live.append([e]);
+      perBlock.push(performance.now() - tb);
+    }
+    const oneByOne = performance.now() - t;
+    // Quadratic folds took ~47 s here; these bounds leave room for slow machines.
+    expect(once).toBeLessThan(5000);
+    expect(oneByOne).toBeLessThan(8000);
+    // Late appends cost about what early ones did (copying every record per event made them ~50x slower).
+    expect(perBlock.at(-2)!).toBeLessThan(Math.max(perBlock[0]! * 6, 400));
+    expect(live.latest()).toEqual(all.latest());
+  });
+
+  it('gives the same states as the event-by-event fold', () => {
+    const idx = new ReplayIndex(world, events);
+    let s = initialRunState();
+    const checks = new Set([1, 777, 5_000, 12_345, events.length - 1, events.length]);
+    for (const e of events) {
+      s = reduceRun(s, e, world);
+      if (checks.has(e.sequence)) expect(idx.stateAt(e.sequence)).toEqual(s);
+    }
+  });
+});
