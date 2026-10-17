@@ -4,6 +4,23 @@ Short records of consequential decisions. Newest first. Each entry gives the pro
 
 ---
 
+## DL-007 · Never override a status the source reported (2026-10-17)
+
+**Problem.** In a real session, Haiku ran `node --test 2>&1 | tail -n 80`. The pipeline exits 0, so Claude Code reported the call as a success, while its output said "12 tests: 10 passed, 2 failed".
+
+**Options.**
+- Mark the call failed from the parsed counts.
+- Keep the reported status and surface the counts.
+- Add a separate *inferred* "tests failed" signal.
+
+**Choice.** Keep `status: success` as reported and record the parsed counts in the call's metrics. The Metrics panel and timeline show 10/12 failing. No incident is created.
+
+**Why.** Rewriting a reported fact would make provenance meaningless, and compare (Milestone C) needs to diff what really happened.
+
+**Trade-off.** A failing suite behind a pipe shows no incident in the world.
+
+**Reverse.** Add an inferred marker or incident derived from reported test counts, labelled *inferred*. The original event stays unchanged.
+
 ## DL-006 · Claude Code subagent usage comes from the `Agent` tool result (2026-10-17)
 
 **Problem.** Show tokens, model and cost per agent without guessing.
