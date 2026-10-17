@@ -1,6 +1,7 @@
 node_modules/
 .runloop/
 .next/
+.next-*/
 out/
 coverage/
 *.tsbuildinfo

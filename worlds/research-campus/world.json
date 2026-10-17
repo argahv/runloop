@@ -1,0 +1,251 @@
+{
+  "id": "research-campus",
+  "version": 1,
+  "name": "Research Campus",
+  "description": "Four cutaway rooms around a central hub: Research, Build, Test and Deploy.",
+  "tickHz": 10,
+  "ticksPerCell": 3,
+  "grid": [
+    "........................",
+    ".#########....#########.",
+    ".#.......#....#.......#.",
+    ".#.......#....#.......#.",
+    ".#.......#....#.......#.",
+    ".#.......#....#.......#.",
+    ".#.......#....#.......#.",
+    ".######..#....#..######.",
+    "........................",
+    "........................",
+    "........................",
+    "........................",
+    ".######..#....#..######.",
+    ".#.......#....#.......#.",
+    ".#.......#....#.......#.",
+    ".#.......#....#.......#.",
+    ".#.......#....#.......#.",
+    ".#.......#....#.......#.",
+    ".#########....#########.",
+    "........................"
+  ],
+  "zones": [
+    {
+      "id": "research",
+      "label": "Research",
+      "kind": "research",
+      "rect": [1, 1, 9, 7],
+      "color": "#38bdf8",
+      "door": [7, 7]
+    },
+    {
+      "id": "build",
+      "label": "Build",
+      "kind": "build",
+      "rect": [14, 1, 9, 7],
+      "color": "#818cf8",
+      "door": [15, 7]
+    },
+    {
+      "id": "test",
+      "label": "Test",
+      "kind": "test",
+      "rect": [1, 12, 9, 7],
+      "color": "#34d399",
+      "door": [7, 12]
+    },
+    {
+      "id": "deploy",
+      "label": "Deploy",
+      "kind": "deploy",
+      "rect": [14, 12, 9, 7],
+      "color": "#c084fc",
+      "door": [15, 12]
+    },
+    {
+      "id": "hub",
+      "label": "Hub",
+      "kind": "hub",
+      "rect": [10, 8, 4, 4],
+      "color": "#f59e0b"
+    }
+  ],
+  "hub": {
+    "center": [11.5, 9.5],
+    "core": [[11, 9], [12, 9], [11, 10], [12, 10]]
+  },
+  "stations": [
+    {
+      "id": "archive",
+      "zoneId": "research",
+      "kind": "library",
+      "label": "Archive Terminal",
+      "cell": [3, 3],
+      "facing": "s",
+      "slots": [[3, 4]],
+      "overflow": [4, 5]
+    },
+    {
+      "id": "datawall",
+      "zoneId": "research",
+      "kind": "library",
+      "label": "Data Wall",
+      "cell": [6, 3],
+      "facing": "s",
+      "slots": [[6, 4]],
+      "overflow": [5, 5]
+    },
+    {
+      "id": "forge",
+      "zoneId": "build",
+      "kind": "build",
+      "label": "Build Bench",
+      "cell": [17, 3],
+      "facing": "s",
+      "slots": [[17, 4]],
+      "overflow": [18, 5]
+    },
+    {
+      "id": "assembler",
+      "zoneId": "build",
+      "kind": "build",
+      "label": "Assembler",
+      "cell": [20, 3],
+      "facing": "s",
+      "slots": [[20, 4]],
+      "overflow": [19, 5]
+    },
+    {
+      "id": "testrig",
+      "zoneId": "test",
+      "kind": "test",
+      "label": "Test Rig",
+      "cell": [3, 16],
+      "facing": "n",
+      "slots": [[3, 15]],
+      "overflow": [4, 14]
+    },
+    {
+      "id": "probe",
+      "zoneId": "test",
+      "kind": "test",
+      "label": "Probe Bench",
+      "cell": [6, 16],
+      "facing": "n",
+      "slots": [[6, 15]],
+      "overflow": [5, 14]
+    },
+    {
+      "id": "launchpad",
+      "zoneId": "deploy",
+      "kind": "ops",
+      "label": "Launch Pad",
+      "cell": [18, 16],
+      "facing": "n",
+      "slots": [[18, 15]],
+      "overflow": [17, 14]
+    },
+    {
+      "id": "gate",
+      "zoneId": "hub",
+      "kind": "gate",
+      "label": "Approval Gate",
+      "cell": [11, 16],
+      "facing": "n",
+      "slots": [[11, 15]],
+      "overflow": [12, 14]
+    }
+  ],
+  "props": [
+    {"kind": "rack", "cell": [2, 2]},
+    {"kind": "rack", "cell": [8, 2]},
+    {"kind": "console", "cell": [15, 2]},
+    {"kind": "rack", "cell": [21, 2]},
+    {"kind": "crate", "cell": [2, 17]},
+    {"kind": "plant", "cell": [8, 17]},
+    {"kind": "rack", "cell": [21, 17]},
+    {"kind": "plant", "cell": [15, 17]},
+    {"kind": "plant", "cell": [0, 9]},
+    {"kind": "crate", "cell": [23, 10]},
+    {"kind": "lamp", "cell": [10, 13]},
+    {"kind": "lamp", "cell": [13, 6]}
+  ],
+  "activityRules": [
+    {
+      "when": {
+        "permission": true
+      },
+      "stationKind": "gate"
+    },
+    {
+      "when": {
+        "taskKind": [
+          "research"
+        ]
+      },
+      "stationKind": "library"
+    },
+    {
+      "when": {
+        "taskKind": [
+          "code",
+          "fix"
+        ]
+      },
+      "stationKind": "build"
+    },
+    {
+      "when": {
+        "taskKind": [
+          "test"
+        ]
+      },
+      "stationKind": "test"
+    },
+    {
+      "when": {
+        "taskKind": [
+          "approval"
+        ]
+      },
+      "stationKind": "gate"
+    },
+    {
+      "when": {
+        "taskKind": [
+          "deploy"
+        ]
+      },
+      "stationKind": "ops"
+    }
+  ],
+  "characterPresets": [
+    {
+      "id": "researcher",
+      "label": "Researcher",
+      "color": "#38bdf8",
+      "icon": "search",
+      "home": [10, 8]
+    },
+    {
+      "id": "builder",
+      "label": "Builder",
+      "color": "#f59e0b",
+      "icon": "hammer",
+      "home": [13, 8]
+    },
+    {
+      "id": "tester",
+      "label": "Tester",
+      "color": "#34d399",
+      "icon": "flask",
+      "home": [10, 11]
+    },
+    {
+      "id": "operator",
+      "label": "Operator",
+      "color": "#c084fc",
+      "icon": "rocket",
+      "home": [13, 11]
+    }
+  ],
+  "defaultPreset": "operator"
+}
