@@ -16,10 +16,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r typecheck",
-    "build": "pnpm --filter @runloop-world/studio build"
+    "build": "pnpm --filter @runloop-world/studio build",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
+    "playwright": "1.56.1",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vite": "8.3.4",

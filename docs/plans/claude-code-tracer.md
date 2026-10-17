@@ -1,11 +1,11 @@
 # Claude Code tracer mode: implementation plan
 
-> Status: proposed (2026-10-17) · Target: Runloop 0.1.x · File: `docs/plans/claude-code-tracer.md`
+> Status: implemented and verified end to end with real Claude Code (2026-10-17; see `docs/status/verification-report.md`) · Target: Runloop 0.1.x · File: `docs/plans/claude-code-tracer.md`
 > Paths are relative to the repo root. Items marked **[unverified]** are not confirmed by the Claude Code docs or the repo, and milestone M0 settles them. Sources are in Appendix A.
 
 ## 1. Summary, goals, non-goals, v1 scope
 
-**Summary.** Tracer mode records a normal Claude Code session in Runloop and shows it live, subagents included. A small plugin (`integrations/claude-code-plugin/`) registers command hooks for session, prompt, tool, permission, subagent, notification and compaction events. Each hook runs a dependency-free Node script that writes the event to a local spool and forwards it to the runtime on `127.0.0.1:4317`. The runtime maps each event to ordinary Runloop events and records them through the existing `Recorder`. Each session becomes one run, each embodied agent one robot, and each `tool_use_id` one tool call. Studio streams the run over SSE and can replay it like any other run.
+**Summary.** Tracer mode records a normal Claude Code session in Runloop and shows it live, subagents included. A small plugin (`integrations/claude-code-plugin/`) registers command hooks for session, prompt, tool, permission, subagent, notification and compaction events. Each hook runs a dependency-free Node script that writes the event to a local spool and forwards it to the runtime on `127.0.0.1:4380`. The runtime maps each event to ordinary Runloop events and records them through the existing `Recorder`. Each session becomes one run, each embodied agent one robot, and each `tool_use_id` one tool call. Studio streams the run over SSE and can replay it like any other run.
 
 ### 1.1 Goals
 
@@ -40,7 +40,7 @@
 
 **Install (local dev)**
 ```sh
-pnpm dev                                                     # runtime :4317 + Studio :3000; runtime writes the ingest token on boot
+pnpm dev                                                     # runtime :4380 + Studio :3000; runtime writes the ingest token on boot
 claude --plugin-dir ~/code/runloop/integrations/claude-code-plugin
 ```
 After editing the plugin, run `/reload-plugins` inside Claude Code.
@@ -81,16 +81,16 @@ Claude Code (unchanged)
   │ fires hook: command, exec form, async (SessionEnd is synchronous)
   ▼
 node scripts/runloop-hook.mjs
-  │ read stdin (≤ 64 MiB) → parse → slim (drop tool_response, keep sizes)
-  │   → redact (shared patterns + Claude Code's env secrets)
+  │ read stdin (≤ 64 MiB) → parse → redact (shared + shell patterns, env secrets, values found in the hook)
+  │   → slim (drop tool_response, keep sizes; long strings cut after redaction)
   │ envelope {v:1, deliveryId, observedAt, ppid, plugin, hook}
-  │ write spool/<session>/<observedAt>-<deliveryId>.json   (before any network call)
-  │ POST /api/ingest/claude-code  (X-Runloop-Token; 1 s, or 800 ms for SessionEnd)
-  │   2xx → delete own spool entry, then flush up to 20 older entries (any session)
-  │   network/5xx → keep entry;  400/413 → drop;  401/403 → keep
+  │ write spool/<session>/<observedAt>-<deliveryId>.json   (before any network call; if it fails, send directly)
+  │ POST /api/ingest/claude-code  (X-Runloop-Token; budget from process start: 1.5 s, or 1 s for --sync)
+  │   the whole spool oldest first (this event last), ≤ 100 envelopes / 512 KiB per request, until done or out of time
+  │   2xx → delete what was sent;  network/5xx/429/401/403 → keep;  400/413 → drop only the invalid envelopes
   │ always exit 0 · never write stdout
   ▼
-Runloop runtime 127.0.0.1:4317
+Runloop runtime 127.0.0.1:4380
   POST /api/ingest/claude-code
     guards in order: Host (existing) → no Origin → JSON → bodyLimit 1 MiB → token → zod → rate cap
     per envelope, synchronously, one SQLite transaction:
@@ -111,7 +111,7 @@ Studio: SequenceBuffer → ReplayIndex → reduceExecution (L1) → reduceWorld 
 - SessionEnd: the docs give SessionEnd a 1.5 s budget, which a longer per-hook `timeout` in settings raises up to 60 s. Whether a plugin's `hooks.json` timeout counts is **[unverified]** (M0). The design assumes 1.5 s.
 - `node` must be on the PATH that Claude Code sees. If it is not, hooks fail silently. The README documents the check.
 
-**D2. Fail open.** The script exits 0 on every path and writes nothing to stdout. Plain stdout would be injected into Claude's context for SessionStart and UserPromptSubmit. Errors go to `${CLAUDE_PLUGIN_DATA}/last-error.json`, and to stderr only with `RUNLOOP_TRACE_DEBUG=1`. A self-timeout of 1.5 s bounds the run.
+**D2. Fail open.** The script exits 0 on every path and writes nothing to stdout. Plain stdout would be injected into Claude's context for SessionStart and UserPromptSubmit. Errors go to `${CLAUDE_PLUGIN_DATA}/last-error.json`, and to stderr only with `RUNLOOP_TRACE_DEBUG=1`. The time budget counts from process start (Node's start-up included): 1.5 s for async hooks, 1 s for `--sync`; with too little left the event is only spooled. Measured worst cases are in the plugin README.
 
 **D3. Spool first, then send.** Each event is written to its own file before any network call, so an event survives if Claude Code exits while the hook is still running. Any later hook flushes the spool, across sessions. There is no lock: duplicates are harmless because ingest is idempotent. Bounds: 50 MiB total, 7-day TTL, oldest dropped first.
 
@@ -146,20 +146,21 @@ Studio: SequenceBuffer → ReplayIndex → reduceExecution (L1) → reduceWorld 
 | PostToolUse | `tool_use_id`, `tool_input`, `tool_response` (dropped), `duration_ms?` | If a permission is pending on this call: `tool.permission_resolved approved by 'user'` (inferred). If the call is unknown, synthesize its start (inferred). Then `tool.call_completed {status:'success', durationMs, outputSummary}`. | `tool_use_id` appears in the docs example; whether every PostToolUse carries it is **[unverified]**. Key `post:<tool_use_id>`. |
 | PostToolUseFailure | `tool_use_id?`, `error`, `is_interrupt?`, `duration_ms?` | Interrupt → `tool.call_failed {errorType:'aborted'}`. Otherwise `tool.call_completed {status:'error', errorType:'tool_error', outputSummary: error}`. | `is_interrupt` is **[unverified]**. This hook does not fire for permission denials, so denials are handled separately (below). |
 | PermissionDenied (auto mode only) | `tool_use_id?` | `permission_resolved denied by 'auto mode'`, then `tool.call_failed {errorType:'denied'}` | Auto mode only (documented). The only deterministic denial signal. |
-| SubagentStart | `agent_id`, `agent_type` | `agent.registered {sa-…, name:'<type> #k', role:type, model:null, tools:[], embodied (within cap), characterPreset:'builder'}`, then `task.created {delegate-k, kind:'delegated', title}`, `task.assigned`, `task.started`, `state_changed working` | Link to the parent's newest `Agent` call that has no subagent yet. The `Agent` input field names (`subagent_type`, `description`) are **[unverified]**; the title falls back to the agent type. Subagents beyond the cap get no robot but are still traced. |
+| SubagentStart | `agent_id`, `agent_type` | `agent.registered {sa-…, name:'<type> #k', role:type, model:null, tools:[], embodied (within cap), characterPreset:'builder'}`, then `task.created {delegate-k, kind:'delegated', title}`, `task.assigned`, `task.started`, `state_changed working` | Link to the oldest open `Agent` call of the same type that has no subagent yet; `task.created`/`task.assigned` (title, parent) are then *inferred*. `PostToolUse(Agent).tool_response.agentId` names the subagent: a wrong guess gets a reported `run.marker` "Delegation corrected". A subagent seen before its `Agent` call is linked when the call arrives. Subagents beyond the cap get no robot but are still traced. |
 | SubagentStop | `agent_id`, `last_assistant_message` | Close its open calls as `tool.call_failed {errorType:'unobserved'}` (inferred). Close its pending permissions as denied (inferred). `agent.message_sent sa→main` (2 KB). `task.completed {delegate-k, summary, artifactIds:[]}`. `state_changed done`. | `last_assistant_message` is documented. A background subagent can outlive its parent's turn, so late events attach to the delegate task, not to the turn. |
 | Stop | `last_assistant_message`, `stop_hook_active?` | Close main's pending permissions and their calls as denied (inferred). `agent.message_sent main→user`. `task.completed {turn-n, summary, artifactIds:[]}`. `state_changed main idle`. If `stop_hook_active` is true, do not close the turn. | Key is `deliveryId`, because Stop can repeat. `stop_hook_active` is **[unverified]**. Whether Stop fires on Esc is **[unverified]** (M0). |
 | StopFailure | `error?`, `error_details?` | `task.failed {turn-n, reason, errorType:'api_error'}`, `state_changed main failed`, `run.marker api_error` | `error` fields are **[unverified]**. |
-| Notification (matcher `idle_prompt\|permission_prompt`) | `notification_type`, `message` | `idle_prompt` → `state_changed main waiting`. `permission_prompt` with no pending permission → `tool.permission_requested` fallback (inferred). | The matcher stops other notification types from spawning processes. Notification type names are documented. |
+| Notification (matcher `idle_prompt\|permission_prompt`) | `notification_type`, `message` | `idle_prompt` → `state_changed main waiting`. `permission_prompt` with no pending permission → `tool.permission_requested` fallback (inferred). | The matcher stops other notification types from spawning processes. A `PermissionRequest` arriving after it is the same request (no second one). |
+| PostToolBatch | `tool_calls[].tool_use_id` (only ids are kept) | none by itself | A pending permission whose call was in the batch got no result: it is denied (inferred) at the agent's next step (its next PreToolUse or PostToolBatch, or a boundary below). |
 | PreCompact / PostCompact | `trigger?` | `run.marker compaction` (start and end). Only the summary length is recorded. | `trigger` and `compact_summary` are **[unverified]**. |
 | SessionEnd (synchronous) | `reason` | Close open calls (`unobserved`), pending permissions (denied), and open tasks (`task.completed`, "ended with session", inferred). Subagents → `done`. Then `run.completed {outcome:'stopped', summary:'Session ended (<reason>)'}`. | Reason values beyond `clear` and `resume` are **[unverified]**. |
 
-**Not registered in v1:** PostToolBatch, Setup, UserPromptExpansion, TaskCreated, TaskCompleted, TeammateIdle, Pre/PostModelSwitch (v1.1), MessageDisplay, InstructionsLoaded, ConfigChange, CwdChanged, DirectoryAdded, FileChanged, Worktree*, Elicitation*.
+**Not registered in v1:** Setup, UserPromptExpansion, TaskCreated, TaskCompleted, TeammateIdle, Pre/PostModelSwitch (v1.1), MessageDisplay, InstructionsLoaded, ConfigChange, CwdChanged, DirectoryAdded, FileChanged, Worktree*, Elicitation*.
 
 **Edge cases**
 - **Parallel tool calls.** Each `tool_use_id` is its own call. Core keeps one `activeCallId` (the last started call), and `finishCall` clears it when that call finishes, even while an earlier sibling still runs. In v1 the robot then falls back to the turn's task rule until the siblings finish. This is cosmetic. `openCallIds` is v1.1.
 - **Subagent attribution.** Documented: plugin hooks run inside subagents; `agent_type` is documented as present for hooks that fire inside a subagent; `agent_id` appears in the common fields. Whether every tool event in a subagent carries `agent_id` is **[unverified]** (M0). Fallback: if exactly one subagent is open, attribute the call to it (inferred). Otherwise attribute it to `main` and record a one-time marker: "subagent attribution unavailable".
-- **Denied permission.** In default mode, a denial fires no hook: PostToolUseFailure does not cover denials, and PermissionDenied is auto-mode only. The denial is inferred at the agent's next Stop, UserPromptSubmit, SubagentStop, SessionEnd, or idle sweep, and the call closes as `denied`. Late results for an already-closed call are dropped and counted.
+- **Denied permission.** In default mode, a denial fires no hook: PostToolUseFailure does not cover denials, and PermissionDenied is auto-mode only. The denial is inferred at the agent's next step after its batch ended (PostToolBatch), or at its next Stop, UserPromptSubmit, SubagentStop, SessionEnd, or idle sweep, and the call closes as `denied`. A `PermissionRequest` delivered after its call's result is approved (inferred) at once. Late results for a call closed in an open run are dropped and counted; a result for a call the idle sweep closed goes into the continuation segment.
 - **Esc interrupt.** `is_interrupt` maps to `aborted` **[unverified field]**. The open turn closes at the next prompt or at SessionEnd, with an inferred summary, and is not marked failed.
 - **Work without a prompt.** A background task finishing or a scheduled task running can produce main-agent tool events with no open turn. The mapper opens an implicit turn with an inferred title.
 - **No SessionEnd** (kill -9, terminal closed). The idle sweep closes the run as `interrupted` after `RUNLOOP_TRACE_IDLE_MINUTES` (default 120), inferred. If the recorded Claude Code pid is gone, close on the next sweep instead **[unverified]**: it depends on `ppid` being the Claude Code process. A later hook for the same session opens a continuation segment.
@@ -320,14 +321,14 @@ The existing `/api/*` middleware applies CORS and the JSON check, and rejects a 
 
 - **Boot (v1).** `Recorder.recoverInterrupted()` marks every `running` run interrupted, including traced runs, and adds `tool.call_failed{runtime_restarted}` for open calls. For traced calls that is false: they may well have finished. The change is mode-aware. Traced runs get `tool.call_failed{errorType:'unobserved', message:'Runloop was not running when this call finished (inferred)'}` and `run.completed{interrupted}`.
 - **After a restart (v1).** The next hook for the same session finds the run closed and opens a continuation segment with `continuesRunId`. The turn counter continues from the closed run's count. Rebuilding in-memory state from events is v1.1.
-- **Idle sweep (v1).** Runs every 60 s on an unref'd timer. A session with no envelope for `RUNLOOP_TRACE_IDLE_MINUTES` (default 120) gets its open items closed as inferred `unobserved`, then `run.completed{interrupted, "No events from Claude Code for N min"}`.
+- **Idle sweep (v1).** Runs every 60 s on an unref'd timer. A session that delivered no envelope for `RUNLOOP_TRACE_IDLE_MINUTES` (default 120) of wall-clock time gets its open items closed as inferred `unobserved`, then `run.completed{interrupted, "No events from Claude Code for N min"}`. Idleness is measured from when envelopes arrived, not from their `observedAt`, so an old spooled backlog is not split.
 
 ### 6.8 Limits, redaction and capture
 
 - **Plugin side.** Read stdin up to 64 MiB. Drop `tool_response` and keep `derived.bytes` and `derived.lines`. Truncate each string field to 4 KB before sending. The server truncates again: prompts and messages to 2 KB, tool summaries to the caps in §6.2.
 - **Secrets.**
-  - Client side: the shared pattern list (a copy, parity-tested against `REDACTION_PATTERN_SOURCES`), plus a port of `collectEnvSecrets` applied to Claude Code's environment.
-  - Bash and PowerShell only: `(KEY|TOKEN|SECRET|PASSWORD|PASS)\w*=\S+` and `--(password|token|secret|api-key)[= ]\S+`. Values are masked.
+  - Client side: the shared pattern list (a copy, parity-tested against `REDACTION_PATTERNS`), plus a port of `collectEnvSecrets` applied to Claude Code's environment, plus every value a pattern found anywhere in the same hook (a password repeated by an error). Strings are redacted before they are cut. The runtime's `redactHook` does the same to every envelope it receives.
+  - Bash and PowerShell only (case-insensitive): `NAME_KEY=value` style assignments, `--password|--token|--secret|--api-key` values, `login … -p <value>`, and a long value after a credential-like word. Values are masked. The full list is in the plugin README; shell commands are marked `sensitive`.
   - Recorder side: `Recorder.build()` redacts again with the runtime's own environment. `redactEvent` changes visibility to `redacted` when it masks something.
 - **Visibility.** Prompts and messages are `sensitive`.
 - **Paths.** Relative to `cwd`. Paths outside `cwd` appear as `~/…` or `…/<last two segments>`. No absolute path appears in any event.
@@ -423,7 +424,7 @@ integrations/claude-code-plugin/
   "description": "Record and visualise Claude Code sessions in a local Runloop world. Observe-only.",
   "license": "Apache-2.0",
   "userConfig": {
-    "runtime_url":  { "type": "string",  "title": "Runloop runtime URL", "description": "Loopback only", "default": "http://127.0.0.1:4317" },
+    "runtime_url":  { "type": "string",  "title": "Runloop runtime URL", "description": "Loopback only", "default": "http://127.0.0.1:4380" },
     "enabled":      { "type": "boolean", "title": "Trace sessions", "description": "Turn tracing off without uninstalling", "default": true },
     "trace_prompts":{ "type": "boolean", "title": "Record prompt text", "description": "Stored as sensitive", "default": true }
   }
@@ -446,8 +447,8 @@ The `version` pins the installed plugin until it changes, so bump it on every re
 4. Build the envelope with `deliveryId` (UUID), `observedAt`, and `ppid`.
 5. Write the spool file (`${CLAUDE_PLUGIN_DATA}/spool/<session>/<observedAt>-<deliveryId>.json`) atomically with tmp-then-rename.
 6. Read the token; refuse non-loopback URLs.
-7. POST with `AbortSignal.timeout` (1 s; 800 ms with `--sync`).
-8. On 2xx: delete the own spool file, then POST up to 20 older spool entries in one batch, oldest first, across all sessions. On network failure or 5xx: keep the file. On 400 or 413: drop it and record in `last-error.json`. On 401 or 403: keep it and record.
+7. POST the spool oldest first, across all sessions, this event last, in requests of at most 100 envelopes and 512 KiB (`AbortSignal.timeout` 1 s; 500 ms with `--sync`), while the budget lasts. An envelope is never sent before an older one that is still waiting.
+8. On 2xx: delete what was sent. On network failure, 5xx, 401, 403 or 429: keep the files and record. On 400 or 413: split the request to find the invalid envelopes, drop only those, and record.
 9. Exit 0. Never write stdout.
 
 `--doctor` runs the same token and reachability checks and reads `last-error.json` and the spool. It also flushes the spool when the runtime is reachable.
@@ -456,7 +457,7 @@ The `version` pins the installed plugin until it changes, so bump it on every re
 
 | Setting | Env | Plugin option | Default |
 |---|---|---|---|
-| Runtime URL | `RUNLOOP_URL` | `runtime_url` | `http://127.0.0.1:4317` (loopback only; anything else is refused) |
+| Runtime URL | `RUNLOOP_URL` | `runtime_url` | `http://127.0.0.1:4380` (loopback only; anything else is refused) |
 | Token file | `RUNLOOP_INGEST_TOKEN_FILE` | none | per-user path (D6) |
 | Enabled | `RUNLOOP_TRACE=0` | `enabled` | on |
 | Prompt text | `RUNLOOP_TRACE_PROMPTS=0` | `trace_prompts` | on (sensitive) |
@@ -637,7 +638,7 @@ Core v1 (M0–M6): about 11–14 working days.
 - `packages/runtime/src/cli.ts`: `runtime.pid` lock; commands are `serve` and `demo` only.
 - `packages/runtime/src/store/migrations.ts`: one migration. `store/db.ts`: WAL, `synchronous = FULL`, foreign keys on, migrations in transactions, `tx()` not re-entrant.
 - `packages/events/src/payloads.ts`: the required fields listed in §5; `AdapterInfo.kind` is `scripted | llm`.
-- `packages/events/src/parse.ts`: `parseKnownEvent` rejects unknown types. `redact.ts`: pattern list is not exported. `protocol.ts`: port 4317, host 127.0.0.1.
+- `packages/events/src/parse.ts`: `parseKnownEvent` rejects unknown types. `redact.ts`: pattern list is not exported. `protocol.ts`: port 4317 (since moved to 4380, DL-005), host 127.0.0.1.
 - `packages/runtime/src/adapter.ts`: `run.*`, `tool.*`, `artifact.*` are runtime-only.
 - `packages/core/src/reduce-execution.ts`: `finishCall` and the exhaustive handler map. `packages/world-engine/src/intent.ts`: priority order. `reduce-world.ts`: `updateIntents` compares activity and task only, `homeFor` BFS, `reserve` overflow queuing. `definition.ts`: `ActivityRuleSchema` has no category yet.
 - `worlds/research-campus/world.json`: activity rules begin at about line 171 with the permission rule; `defaultPreset` is `operator`; stations are library×2, build×2, test×2, ops×1, gate×1.
@@ -672,3 +673,23 @@ Two real headless sessions (`claude -p`, model Haiku, Claude Code 2.1.302) ran w
 **Still unverified (needs an interactive session):** Esc interrupts, `Notification`, approving a permission, compaction, `/clear`, resume, and async-hook delivery at exit. The mapper keeps its defensive fallbacks for these.
 
 **Probe gotcha:** a nested `claude` inherits `CLAUDE_CODE_SESSION_ID` from its parent session. Pass `--session-id <uuid>` to probe or test sessions.
+
+## Appendix D: end-to-end results with the plugin (2026-10-17)
+
+Three real `claude -p` sessions (Haiku, Claude Code 2.1.302, $0.032 in total) ran through the real plugin into a runtime on 4380. Details are in `docs/status/verification-report.md`.
+- **Live view and attribution.** Live runs appeared in Studio with the main agent and two parallel Explore subagents. Every subagent call was attributed by `agent_id`, and subagent usage (about 21k tokens each) came from the `Agent` result.
+- **Failing tests.** A failing `node --test` arrived as `PostToolUseFailure` and became `tool.call_completed {status: error, errorType: exit_nonzero, exitCode: 1}`, with the parsed counts and failing test names.
+- **Piped commands.** `node --test 2>&1 | tail` exits 0, so Claude Code reports success. Runloop keeps the reported status and the parsed counts, and creates no incident.
+- **Spool and flush.** With the runtime down at session start, 6 envelopes were spooled. After the runtime came back, the `Stop` and `SessionEnd` hooks flushed them, and the run was complete and in order.
+- **Data dir.** With `--plugin-dir`, `CLAUDE_PLUGIN_DATA` is `~/.claude/plugins/data/runloop-tracer-inline`. `--doctor` now checks every `runloop-tracer*` data dir.
+
+## Appendix E: review fixes (2026-10-17)
+
+A second review reproduced several defects with the real hook script and a live runtime. Fixed:
+- **Spool order.** A hook used to send the 20 oldest spooled envelopes plus its own, so a `SessionEnd` could overtake its backlog and the runtime dropped the rest as late. Envelopes now go strictly oldest first; the end-to-end test feeds 26 spooled hooks and a `SessionEnd`.
+- **Redaction coverage.** The pattern list covered six token formats; URL passwords, `Authorization` headers, `password=` form data, `curl -u`, `mysql -p`, Stripe/GitLab/Google/npm/Docker tokens and Slack webhooks were stored verbatim. The list is extended (plugin README), values found in a hook are masked wherever it repeats them, strings are redacted before they are cut, and shell commands are `sensitive`.
+- **Idle sweep** runs on wall-clock arrival time; a result for a call the sweep closed goes into the continuation segment.
+- **Subagent links** made at `SubagentStart` are *inferred* and corrected from the `Agent` result.
+- **Permissions:** `PostToolBatch` bounds a silent denial; a `PermissionRequest` after its notification or after its call's result no longer creates a phantom denial.
+- **Hook latency** is budgeted from process start; a spool write failure no longer stops delivery; the runtime tightens a loose token file to 0600.
+
