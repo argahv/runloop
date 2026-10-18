@@ -20,7 +20,7 @@ export const LABEL_BUDGET = 24;
 export interface TownLabel {
   key: string;
   ref: EntityRef;
-  kind: 'district' | 'building' | 'resident' | 'agent';
+  kind: 'district' | 'building' | 'resident' | 'agent' | 'lot';
   title: string;
   detail: string | null;
   /** Provenance chip: "Agent · Claude Code" (real) or "Simulated" (residents). */
@@ -167,6 +167,31 @@ export function collectLabels(ctx: TownCtx): TownLabel[] {
     });
   }
 
+  // Add to World: every offered lot is a label button ("Lot 3 · Free"; a taken one names its agent).
+  const pick = live.lotPick;
+  if (pick) {
+    for (const l of pick.lots) {
+      const lot = town.lotById.get(l.id);
+      if (!lot) continue;
+      const key = formatEntityRef({ kind: 'lot', id: l.id });
+      const [x, y, w, h] = lot.rect;
+      const selected = pick.selected === l.id;
+      out.push({
+        key,
+        ref: { kind: 'lot', id: l.id },
+        kind: 'lot',
+        title: l.label,
+        detail: null,
+        chip: null,
+        tone: 'none',
+        anchor: anchorOf(ctx, key, () => new Vector3(sceneX(f, x + (w - 1) / 2), 0.7, sceneZ(f, y + (h - 1) / 2))),
+        priority: selected ? 995 : l.state === 'free' ? 720 : 560,
+        required: selected,
+        eager: false,
+      });
+    }
+  }
+
   // Residents: only the selected, hovered or followed one (others are found through the directory and ⌘K).
   for (const key of new Set([sel, hov, fol])) {
     if (!key?.startsWith('resident:')) continue;
@@ -262,7 +287,13 @@ export function TownLabelProjector({ pool, obstacles }: { pool: React.RefObject<
     const cands = collectLabels(ctx);
     const items: LabelItem[] = [];
     const byKey = new Map<string, TownLabel>();
+    const view = ctx.cam.ctl.view;
+    const lowTilt = view.pose.tilt < (25 * Math.PI) / 180;
     for (const l of cands) {
+      // Never behind the camera or out in the haze; near the horizon, building names only near the target.
+      const dist = Math.hypot(l.anchor.x - view.eye[0], l.anchor.y - view.eye[1], l.anchor.z - view.eye[2]);
+      if (!l.required && dist > ctx.cam.fogNear) continue;
+      if (lowTilt && l.kind === 'building' && !l.required && !l.eager && dist > view.d * 1.6) continue;
       v.copy(l.anchor).project(camera);
       const x = ((v.x + 1) / 2) * size.width;
       const y = ((1 - v.y) / 2) * size.height;
@@ -270,7 +301,7 @@ export function TownLabelProjector({ pool, obstacles }: { pool: React.RefObject<
       const s = sizes(l);
       const far = ctx.frame.level === 'town' || ctx.frame.level === 'district';
       const forms =
-        l.kind === 'district' || l.kind === 'resident' || l.required || l.eager
+        l.kind === 'district' || l.kind === 'resident' || l.kind === 'lot' || l.required || l.eager
           ? [{ form: 'full' as const, ...s.full }]
           : far && l.kind === 'agent' && l.tone !== 'warn' && l.tone !== 'fail'
             ? [{ form: 'compact' as const, ...s.compact }]
@@ -287,15 +318,22 @@ export function TownLabelProjector({ pool, obstacles }: { pool: React.RefObject<
         y,
         forms,
         priority: l.priority - centre,
-        movable: l.kind !== 'district',
+        movable: l.kind !== 'district' && l.kind !== 'lot',
         ...(l.kind === 'agent' && !l.required ? { slots: NEAR_SLOTS } : {}),
         required: l.required,
         eager: l.eager,
       });
     }
     items.sort((a, b) => b.priority - a.priority);
-    items.length = Math.min(items.length, LABEL_BUDGET);
-    const placed = placeLabels(items, { width: size.width, height: size.height, gap: 4, margin: 6, obstacles: obstacles?.(size.width, size.height) ?? [], previous: previous.current });
+    items.length = Math.min(items.length, ctx.live.labelBudget);
+    // The HUD's occluded edges (an open sheet, the hotbar) are obstacles too.
+    const ins = ctx.cam.ctl.goalInsets;
+    const edges: ScreenRect[] = [];
+    if (ins.right > 0) edges.push({ l: size.width - ins.right, t: 0, r: size.width, b: size.height });
+    if (ins.left > 0) edges.push({ l: 0, t: 0, r: ins.left, b: size.height });
+    if (ins.top > 0) edges.push({ l: 0, t: 0, r: size.width, b: ins.top });
+    if (ins.bottom > 0) edges.push({ l: 0, t: size.height - ins.bottom, r: size.width, b: size.height });
+    const placed = placeLabels(items, { width: size.width, height: size.height, gap: 4, margin: 6, obstacles: [...(obstacles?.(size.width, size.height) ?? []), ...edges], previous: previous.current });
     previous.current = placed;
     let n = 0;
     for (const it of items) {
@@ -318,7 +356,7 @@ export function TownLabelProjector({ pool, obstacles }: { pool: React.RefObject<
         title!.textContent = l.title;
         detail!.textContent = p.form === 'full' && l.detail ? l.detail : '';
         detail!.hidden = !(p.form === 'full' && l.detail);
-        el.setAttribute('aria-label', [l.title, l.chip, l.detail].filter(Boolean).join(', '));
+        el.setAttribute('aria-label', l.kind === 'lot' ? `${l.title}, agent lot` : [l.title, l.chip, l.detail].filter(Boolean).join(', '));
         el.tabIndex = 0;
       }
       el.style.visibility = 'visible';

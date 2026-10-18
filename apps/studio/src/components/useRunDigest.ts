@@ -2,7 +2,7 @@
 import { summarizeRun, type ExecState, type RunDigest } from '@runloop-world/core';
 import type { RunSummary } from '@runloop-world/events';
 import { useEffect, useMemo, useState } from 'react';
-import { getAllEvents } from '../lib/api';
+import { getAllEvents, getRun } from '../lib/api';
 import { foldRaw } from '../state/compare';
 
 export type DigestLoad =
@@ -17,6 +17,22 @@ export type DigestLoad =
  * last folded sequence when its summary reports more events.
  */
 const folded = new Map<string, ExecState>();
+/** Cost Claude Code reported for a dispatched run (null = not reported, or not one run's cost). */
+const costs = new Map<string, number | null>();
+
+/** One run's cost as Claude Code reported it: only for a dispatched session recorded as this one run. */
+async function reportedCost(runId: string): Promise<number | null> {
+  if (costs.has(runId)) return costs.get(runId)!;
+  try {
+    const d = (await getRun(runId)).dispatch;
+    const cost = d && d.sessionRuns === 1 ? d.reportedCostUsd : null;
+    // A cost not reported yet may still come (the dispatch is running): only a reported one is kept.
+    if (cost !== null) costs.set(runId, cost);
+    return cost;
+  } catch {
+    return null;
+  }
+}
 
 /** Load a run's events (paged API), fold them with core and summarise them for compare. */
 export function useRunDigest(run: RunSummary | null, retryKey = 0): DigestLoad {
@@ -28,6 +44,17 @@ export function useRunDigest(run: RunSummary | null, retryKey = 0): DigestLoad {
     complete: false,
     error: null,
   });
+  const [cost, setCost] = useState<{ runId: string; usd: number | null } | null>(null);
+
+  // The run detail says whether Claude Code reported a cost (dispatched runs); refreshed as the run grows.
+  useEffect(() => {
+    if (!runId) return;
+    let cancelled = false;
+    void reportedCost(runId).then((usd) => !cancelled && setCost({ runId, usd }));
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, target]);
 
   useEffect(() => {
     if (!runId) return;
@@ -55,7 +82,8 @@ export function useRunDigest(run: RunSummary | null, retryKey = 0): DigestLoad {
   }, [runId, target, retryKey]);
 
   const exec = state.runId === runId ? state.exec : null;
-  const digest = useMemo(() => (exec ? summarizeRun(exec) : null), [exec]);
+  const costUsd = cost?.runId === runId ? cost.usd : null;
+  const digest = useMemo(() => (exec ? summarizeRun(exec, { costUsd }) : null), [exec, costUsd]);
 
   if (!runId) return { status: 'idle', digest: null, error: null };
   if (state.runId === runId && state.error) return { status: 'error', digest: null, error: state.error };

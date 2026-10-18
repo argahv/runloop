@@ -6,6 +6,8 @@ import { AdditiveBlending, BoxGeometry, CanvasTexture, InstancedMesh, MeshBasicM
 import { cellY, sceneX, sceneZ } from './coords';
 import { useTown } from './context';
 import { CLOCK } from './geometry/deco';
+import { exitKey } from './geometry/ground';
+import type { SurroundLayout } from './geometry/surroundings';
 import { LANDMARK_COLORS } from './townPalette';
 
 const o = new Object3D();
@@ -111,10 +113,10 @@ function lampPoolTexture(): CanvasTexture {
 }
 
 /** Street lamps light pools on the pavement from dusk to dawn (the lamps are state: the town's clock). */
-export const LampPools = memo(function LampPools({ seed }: { seed: number }) {
+export const LampPools = memo(function LampPools({ seed, layout }: { seed: number; layout?: SurroundLayout | undefined }) {
   const { town, uniforms } = useTown();
   const ref = useRef<InstancedMesh>(null);
-  const lamps = useMemo(() => decorate(town, seed).filter((d) => d.kind === 'lamp'), [town, seed]);
+  const lamps = useMemo(() => decorate(town, seed).filter((d) => d.kind === 'lamp' && !layout?.exits.has(exitKey(town, d.cell[0], d.cell[1]))), [town, seed, layout]);
   const geo = useMemo(() => new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), []);
   const mat = useMemo(() => new MeshBasicMaterial({ map: lampPoolTexture(), transparent: true, depthWrite: false, blending: AdditiveBlending, toneMapped: false }), []);
   useLayoutEffect(() => {

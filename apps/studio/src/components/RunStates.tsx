@@ -4,10 +4,11 @@ import { apiBase, DEFAULT_ALLOWED_ORIGINS, startRuntimeCommand } from '../lib/co
 import { useStudio, useStudioStore } from '../state/context';
 import { ROUTES } from '../state/deeplink';
 import { runNumber } from '../state/format';
-import { Button, ButtonLink } from '../ui/Button';
+import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { EmptyState, ErrorState, SkeletonRows } from '../ui/States';
 import styles from './RunStates.module.css';
+import { NavButtonLink } from './overlays/nav';
 import { useStartDemo } from './useStartDemo';
 
 const SAVED = 'Recorded runs stay in the runtime’s database (.runloop/runloop.db by default); nothing is lost while it is stopped.';
@@ -68,9 +69,9 @@ export function NoRunsState() {
           <Button variant="primary" icon="play" onClick={() => void demo.start()} busy={demo.starting} disabled={demo.disabledReason !== null}>
             Run demo mission
           </Button>
-          <ButtonLink href={ROUTES.integrations} icon="integrations">
+          <NavButtonLink href={ROUTES.integrations} icon="integrations">
             Connect Claude Code
-          </ButtonLink>
+          </NavButtonLink>
         </>
       }
     >

@@ -9,7 +9,7 @@ import { focusOf } from '../../world/store';
 import styles from './WorldMap.module.css';
 
 /** Town colours (the same warm palette as the 3D town; the theme never changes the town). */
-const C = {
+export const MAP_COLORS = {
   grass: '#a7c08b',
   asphalt: '#646a74',
   sidewalk: '#e2d8c6',
@@ -24,14 +24,15 @@ const C = {
   hqShell: '#2a2d34',
   hqTrim: '#1b1d22',
 } as const;
+const C = MAP_COLORS;
 
-const AREA_FILL: Record<string, string> = { plaza: C.plaza, path: C.path, park: C.park, garden: C.garden, water: C.water };
+export const AREA_FILL: Record<string, string> = { plaza: C.plaza, path: C.path, park: C.park, garden: C.garden, water: C.water };
 
 type Box = [number, number, number, number];
 
-/** Pixels the floating top bar and the ticker cover on the stage. */
-const STAGE_INSET_TOP = 84;
-const STAGE_INSET_BOTTOM = 64;
+/** Pixels the HUD's top row and the hotbar cover on the stage. */
+const STAGE_INSET_TOP = 80;
+const STAGE_INSET_BOTTOM = 96;
 
 /** Where a resident is drawn on the map (null = inside a building). */
 export function residentMapPos(town: CompiledTown, r: ResidentState, tick: number): { x: number; y: number; walking: boolean } | null {
@@ -123,6 +124,8 @@ export default function WorldMap({ variant = 'stage' }: { variant?: 'stage' | 'o
   const mode = useWorld((s) => s.mode);
   const camera = useWorld((s) => s.camera);
   const reducedMotion = useWorld((s) => s.reducedMotion);
+  // "Real" only for an agent registered in this runtime (P10).
+  const registered = useWorld((s) => s.agents);
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ w: 1, h: 1 });
   const [view, setView] = useState<Box | null>(null);
@@ -403,7 +406,7 @@ export default function WorldMap({ variant = 'stage' }: { variant?: 'stage' | 'o
                 </text>
               ))}
               <title>
-                {a.displayName} · Real · Claude Code · {hv.text}
+                {a.displayName} · {registered.some((r) => r.agentId === a.agentId) ? 'Real · Claude Code' : 'not confirmed as a registered agent'} · {hv.text}
               </title>
             </g>
           );

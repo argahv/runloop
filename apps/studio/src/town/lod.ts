@@ -7,8 +7,9 @@
  * | T1   | 10–28 px         | same mesh, bob     | robot, no limb motion   |
  * | T2   | < 10 px          | dots               | diamond marker + beacon |
  *
- * The camera is orthographic, so every resident projects to the same size:
- * the tier is one value per frame, not per resident.
+ * One tier per frame (not per resident): under the perspective camera it is
+ * taken at the nearest ground in view (the bottom of the screen), so the
+ * residents closest to the viewer always get the detail.
  */
 
 export type Tier = 0 | 1 | 2;
@@ -31,7 +32,7 @@ export function tierFor(px: number, prev: Tier | null, t0Px = T0_PX): Tier {
   return 2;
 }
 
-/** Projected height (px) of an object `height` world units tall, seen by an orthographic camera at `zoom` px per unit from `elevation` radians. */
-export function projectedHeight(height: number, zoom: number, elevation: number): number {
-  return height * zoom * Math.cos(elevation);
+/** Projected height (px) of an object `height` units tall at `dist` units from a perspective camera (vertical field of view `fovYDeg`, canvas `canvasH` px tall). */
+export function projectedHeightPersp(height: number, dist: number, fovYDeg: number, canvasH: number): number {
+  return (height * canvasH) / (2 * Math.max(1e-6, dist) * Math.tan((fovYDeg * Math.PI) / 360));
 }

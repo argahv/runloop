@@ -29,7 +29,7 @@ const PAGES: { href: string; label: string; icon: IconName }[] = [
  * The world's primary navigation (plan §5, UX §1): Explore, Agents,
  * Intelligence and Lab (keys 1–4). Society and Build stay hidden until they
  * work. On the town a mode switches in place; elsewhere it opens the town in
- * that mode, and Lab opens Experiments.
+ * that mode (Lab: the Lattice Lab with the compare sheet, `/?mode=lab`).
  */
 export default function ModeRail({ pathname, onNavigate, expanded }: { pathname: string; onNavigate?: () => void; expanded?: boolean }) {
   const router = useRouter();
@@ -45,10 +45,7 @@ export default function ModeRail({ pathname, onNavigate, expanded }: { pathname:
 
   const go = (mode: Mode) => {
     onNavigate?.();
-    if (mode === 'lab') {
-      router.push(ROUTES.experiments);
-      return;
-    }
+    // Every mode opens in the town now (Lab is the Lattice Lab with the compare sheet).
     if (onTown) world.getState().setMode(mode);
     else router.push(worldHref({ mode }));
   };

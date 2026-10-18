@@ -9,6 +9,7 @@
 //
 //   node scripts/perf-town.mjs                      # measure every bookmark, check the budgets
 //   node scripts/perf-town.mjs --serve              # just serve the harness (default port 3053)
+//   The harness takes cam=view:<x>,<y>,<px per cell>,<az°>,<tilt°> for any camera (see harness/main.tsx).
 //   node scripts/perf-town.mjs --shots <dir>        # also save a screenshot per bookmark
 //
 // Options: --port <n> (3053) · --only <names> · --width <px> (1440) · --height <px> (900)
@@ -33,7 +34,7 @@ const wait = Number(args.wait ?? 5000);
  * page's main thread for CPU, so the tail of wall-clock JS timings measures preemption, not our code
  * (a CPU profile of street-500 shows ~0.5 s of JS in 8 s). The p95 is still recorded.
  */
-const BUDGET = { calls: { town: 120, street: 150, interior: 250 }, triangles: 400_000, jsMsWith500: 4 };
+const BUDGET = { calls: { town: 120, street: 150, interior: 250 }, triangles: 400_000, jsMsWith500: 4, surroundCalls: 16, ambientJsMs: 0.3 };
 
 /** Camera bookmarks (render draft §5): ?cam=town|street:market|interior:cafe|interior:eng-house, plus stress views. */
 const BOOKMARKS = [
@@ -46,6 +47,10 @@ const BOOKMARKS = [
   { name: 'town-night', view: 'town', q: 'cam=town&t=22:30' },
   { name: 'town-500', view: 'town', q: 'cam=town&t=08:15&stress=420', actors: 500 },
   { name: 'street-500', view: 'street', q: 'cam=street:48,40&t=08:15&stress=420', actors: 500 },
+  // The immersive camera: the horizon at the lowest tilt, a low street view, and Add to World's lot picking.
+  { name: 'horizon', view: 'town', q: 'cam=view:48,36,14,200,10&t=12:20' },
+  { name: 'tilt-street', view: 'street', q: 'cam=view:40,47,51,45,15&t=12:35' },
+  { name: 'lot-pick', view: 'town', q: 'cam=district:dst_agent_district&lotpick=1&agents=2&t=11:00' },
 ];
 
 function fixturePlugin() {
@@ -88,7 +93,8 @@ const server = await createServer({
   configFile: false,
   root: HARNESS,
   logLevel: 'warn',
-  server: { port, strictPort: true, host: '127.0.0.1', fs: { allow: [ROOT] } },
+  // Measuring: no hot reloads (others may be editing the Studio while it runs; a reload would end a measurement).
+  server: { port, strictPort: true, host: '127.0.0.1', fs: { allow: [ROOT] }, hmr: args.serve ? undefined : false, watch: args.serve ? undefined : null },
   plugins: [fixturePlugin()],
   // Studio modules read Next's public env at import time (lib/config.ts).
   define: { 'process.env.NEXT_PUBLIC_RUNLOOP_API': 'undefined', 'process.env.NODE_ENV': '"development"' },
@@ -139,6 +145,8 @@ async function measure() {
       ? [
           [`calls ${perf.calls} ≤ ${budgetCalls}`, perf.calls <= budgetCalls],
           [`triangles ${perf.triangles} ≤ ${BUDGET.triangles}`, perf.triangles <= BUDGET.triangles],
+          [`surroundings ${perf.surroundCalls} calls ≤ ${BUDGET.surroundCalls}`, perf.surroundCalls <= BUDGET.surroundCalls],
+          [`surroundings JS p50 ${perf.ambientMs?.p50} ms ≤ ${BUDGET.ambientJsMs} ms`, (perf.ambientMs?.p50 ?? 0) <= BUDGET.ambientJsMs],
           ...(b.actors ? [[`JS p50 ${perf.jsMs.p50} ms ≤ ${BUDGET.jsMsWith500} ms (${perf.actors} actors)`, perf.jsMs.p50 <= BUDGET.jsMsWith500]] : []),
           [`no page errors (${errors.length})`, errors.length === 0],
         ]
@@ -149,7 +157,7 @@ async function measure() {
     console.log(
       `${ok ? 'ok  ' : 'FAIL'} ${b.name.padEnd(20)} ${
         perf
-          ? `calls ${String(perf.calls).padStart(3)} (+shadow ${perf.shadowCalls})  tris ${String(perf.triangles).padStart(7)}  js p50/p95 ${perf.jsMs.p50}/${perf.jsMs.p95} ms  render p50/p95 ${perf.renderMs.p50}/${perf.renderMs.p95} ms  frame p50 ${perf.frameMs.p50} ms  tier ${perf.tier}  actors ${perf.actors} (drawn ${perf.residents})  labels ${perf.labels}`
+          ? `calls ${String(perf.calls).padStart(3)} (+shadow ${perf.shadowCalls}, land ${perf.surroundCalls})  tris ${String(perf.triangles).padStart(7)}  js p50/p95 ${perf.jsMs.p50}/${perf.jsMs.p95} ms (land ${perf.ambientMs?.p50})  render p50/p95 ${perf.renderMs.p50}/${perf.renderMs.p95} ms  frame p50 ${perf.frameMs.p50} ms  tier ${perf.tier}  actors ${perf.actors} (drawn ${perf.residents})  labels ${perf.labels}`
           : 'no perf data'
       }`,
     );

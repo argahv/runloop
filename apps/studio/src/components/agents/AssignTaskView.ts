@@ -3,7 +3,7 @@
  * dispatch's status in words, and its stream-json output as readable lines.
  * Outcomes are Claude Code's reports, never Runloop's verdict.
  */
-import type { DispatchOutputFrame, DispatchSummary } from '@runloop-world/events';
+import type { DispatchOutputFrame, DispatchPreviewStatusResponse, DispatchSummary } from '@runloop-world/events';
 import type { IconName } from '../../ui/Icon';
 
 /** One argv element as a POSIX shell word (display only: Runloop never runs a shell). */
@@ -122,4 +122,25 @@ export function outputLines(frames: readonly DispatchOutputFrame[], max = 200): 
 export function expiresIn(expiresAt: string, nowMs: number): string {
   const s = Math.max(0, Math.floor((Date.parse(expiresAt) - nowMs) / 1000));
   return s === 0 ? 'expired' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Why an approval on the runtime's page did not start a task, in words (null
+ * while it waits, or once it started one). Studio adds "Nothing was run."
+ */
+export function approvalOutcomeText(st: Pick<DispatchPreviewStatusResponse, 'state' | 'code' | 'dispatchId'>): string | null {
+  switch (st.state) {
+    case 'awaiting_approval':
+      return null;
+    case 'approved':
+      return st.dispatchId ? null : 'Approved on the runtime page, but the runtime did not say which task started: see the agent’s Tasks.';
+    case 'declined':
+      return 'You declined it on the approval page.';
+    case 'expired':
+      return 'The approval expired before anyone approved it.';
+    case 'refused':
+      return `The runtime refused it${st.code ? ` (${st.code.replace(/_/g, ' ')})` : ''}.`;
+    case 'unknown':
+      return 'The runtime no longer knows this approval (it may have restarted).';
+  }
 }

@@ -1,10 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { MOBILE_QUERY, useMediaQuery } from '../../ui/useMediaQuery';
-import { useWorld } from '../../world/context';
+import { useEffect, useState, type Ref } from 'react';
+import type { TownApi, TownListener } from '../../town/types';
+import { useWorld, useWorldStore } from '../../world/context';
+import { useTownView } from './hud/viewPref';
+import styles from './hud/hud.module.css';
 import Town3D from './Town3D';
 import WorldMap from './WorldMap';
-import styles from './WorldHome.module.css';
 
 /** Probed once per page load (each probe costs a GL context). */
 let webglCache: boolean | null = null;
@@ -29,26 +30,41 @@ export function useWebGL(): boolean | null {
   return ok;
 }
 
-/** Which view draws the town: the 3D town, or the 2D map (phones, no WebGL). Null before mount. */
+/**
+ * Which view draws the town: the 3D town (phones too, lighter: contract §5.6),
+ * or the 2D map (no WebGL, or the viewer chose it in the Esc menu). Null
+ * before mount.
+ */
 export function useStageKind(): '3d' | 'map' | null {
-  const mobile = useMediaQuery(MOBILE_QUERY);
   const webgl = useWebGL();
-  if (mobile || webgl === false) return 'map';
+  const view = useTownView();
+  if (webgl === false || view === 'map') return 'map';
   return webgl === null ? null : '3d';
 }
 
 /**
- * The town itself, full-bleed: the 3D town (workstream B1's renderer). Below
- * 760 px or without WebGL the 2D WorldMap takes over (plan §5); every 3D
- * interaction has this 2D route.
+ * The town itself, edge to edge: the 3D town, or the 2D WorldMap (every 3D
+ * interaction has this 2D route). It tells the world store which one draws,
+ * so Add to World picks lots in 3D or opens its dialog.
  */
-export default function TownStage() {
+export default function TownStage({ apiRef, onFly, onListener }: { apiRef?: Ref<TownApi>; onFly?: (ms: number, pan: number) => void; onListener?: (l: TownListener) => void }) {
+  const store = useWorldStore();
   const kind = useStageKind();
   const status = useWorld((s) => s.status);
   const hasTown = useWorld((s) => s.town !== null);
+  useEffect(() => {
+    store.getState().setStage(kind);
+    return () => store.getState().setStage(null);
+  }, [store, kind]);
   return (
     <div className={styles.stage} data-kind={kind ?? undefined}>
-      {!hasTown || kind === null ? <StageMessage status={status} /> : kind === '3d' ? <Town3D /> : <WorldMap variant="stage" />}
+      {!hasTown || kind === null ? (
+        <StageMessage status={status} />
+      ) : kind === '3d' ? (
+        <Town3D {...(apiRef ? { apiRef } : {})} {...(onFly ? { onFly } : {})} {...(onListener ? { onListener } : {})} />
+      ) : (
+        <WorldMap variant="stage" />
+      )}
     </div>
   );
 }
@@ -57,7 +73,7 @@ function StageMessage({ status }: { status: string }) {
   return (
     <div className={styles.stageMessage} role="status">
       {status === 'disabled'
-        ? 'The world is turned off in this runtime (RUNLOOP_WORLD=off). Sessions, Traces and Experiments still work.'
+        ? 'The world is turned off in this runtime (RUNLOOP_WORLD=off). Sessions, Traces and Experiments still work: open them from the menu (Esc → Pages).'
         : status === 'offline'
           ? 'The runtime is not answering. Start it with “pnpm serve”; the town picks up where it left off.'
           : 'Loading the town…'}

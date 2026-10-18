@@ -1,6 +1,7 @@
 /**
  * Day and night from the world clock (DL-011: the sky follows sim time, the
- * theme never changes it). Pure: keyframes at 04:30, 05:30, 07:00, 12:00,
+ * theme never changes it; since the immersive world, the theme no longer
+ * changes the backdrop either: the land and the sky beyond the town are sim time too). Pure: keyframes at 04:30, 05:30, 07:00, 12:00,
  * 17:30, 19:30 and 22:00, interpolated per minute (and wrapping at midnight),
  * plus a sun that rises in the east, stands south at noon and sets in the west.
  *
@@ -20,6 +21,14 @@ export interface Sky {
   hemi: number;
   /** 0 = full day … 1 = full night: drives lit windows, lamps and signs. */
   night: number;
+  /** The sky dome: overhead, at the horizon, and the haze (fog) the land fades into. */
+  zenith: string;
+  horizon: string;
+  haze: string;
+  /** Lit side of the clouds. */
+  cloud: string;
+  /** How many stars show (0 by day … 1 at night). */
+  stars: number;
 }
 
 interface Key {
@@ -32,17 +41,23 @@ interface Key {
   hemiGround: string;
   hemi: number;
   night: number;
+  zenith: string;
+  horizon: string;
+  haze: string;
+  cloud: string;
+  stars: number;
 }
 
 /** Keyframes in minutes of day (ascending). Between 22:00 and 04:30 it is full night. */
+const NIGHT_SKY = { zenith: '#0a1226', horizon: '#1d2944', haze: '#1a233b', cloud: '#38425a', stars: 1 };
 const KEYS: readonly Key[] = [
-  { m: 270, sunColor: '#9fb2ff', sun: 0.55, ambient: 0.4, ambientColor: '#8ea0d8', hemiSky: '#4d5f96', hemiGround: '#1d1f2e', hemi: 0.75, night: 1 },
-  { m: 330, sunColor: '#ffb385', sun: 0.6, ambient: 0.45, ambientColor: '#b2a7c8', hemiSky: '#7a7fb0', hemiGround: '#352c33', hemi: 0.8, night: 0.8 },
-  { m: 420, sunColor: '#ffd3a4', sun: 2.3, ambient: 0.45, ambientColor: '#fff1e2', hemiSky: '#bccfe6', hemiGround: '#6c5a48', hemi: 0.72, night: 0.1 },
-  { m: 720, sunColor: '#fff5e6', sun: 3.0, ambient: 0.45, ambientColor: '#ffffff', hemiSky: '#d2e4f4', hemiGround: '#8a7a62', hemi: 0.75, night: 0 },
-  { m: 1050, sunColor: '#ffdcae', sun: 2.6, ambient: 0.45, ambientColor: '#fff3e6', hemiSky: '#c7d5e8', hemiGround: '#7c6650', hemi: 0.74, night: 0.02 },
-  { m: 1170, sunColor: '#ff9c6e', sun: 1.0, ambient: 0.47, ambientColor: '#d8b8c4', hemiSky: '#8a82b4', hemiGround: '#40343c', hemi: 0.8, night: 0.6 },
-  { m: 1320, sunColor: '#9fb2ff', sun: 0.55, ambient: 0.4, ambientColor: '#8ea0d8', hemiSky: '#4d5f96', hemiGround: '#1d1f2e', hemi: 0.75, night: 1 },
+  { m: 270, sunColor: '#9fb2ff', sun: 0.55, ambient: 0.4, ambientColor: '#8ea0d8', hemiSky: '#4d5f96', hemiGround: '#1d1f2e', hemi: 0.75, night: 1, ...NIGHT_SKY },
+  { m: 330, sunColor: '#ffb385', sun: 0.6, ambient: 0.45, ambientColor: '#b2a7c8', hemiSky: '#7a7fb0', hemiGround: '#352c33', hemi: 0.8, night: 0.8, zenith: '#2a3766', horizon: '#c99089', haze: '#8c88a3', cloud: '#d7a7a2', stars: 0.35 },
+  { m: 420, sunColor: '#ffd3a4', sun: 2.3, ambient: 0.45, ambientColor: '#fff1e2', hemiSky: '#bccfe6', hemiGround: '#6c5a48', hemi: 0.72, night: 0.1, zenith: '#6c9bd4', horizon: '#efd3b6', haze: '#d6dbe1', cloud: '#fbefe6', stars: 0 },
+  { m: 720, sunColor: '#fff5e6', sun: 3.0, ambient: 0.45, ambientColor: '#ffffff', hemiSky: '#d2e4f4', hemiGround: '#8a7a62', hemi: 0.75, night: 0, zenith: '#5d9adb', horizon: '#cde0ef', haze: '#d3e0ea', cloud: '#ffffff', stars: 0 },
+  { m: 1050, sunColor: '#ffdcae', sun: 2.6, ambient: 0.45, ambientColor: '#fff3e6', hemiSky: '#c7d5e8', hemiGround: '#7c6650', hemi: 0.74, night: 0.02, zenith: '#6896cf', horizon: '#eed9bf', haze: '#d9d8d2', cloud: '#fff3e5', stars: 0 },
+  { m: 1170, sunColor: '#ff9c6e', sun: 1.0, ambient: 0.47, ambientColor: '#d8b8c4', hemiSky: '#8a82b4', hemiGround: '#40343c', hemi: 0.8, night: 0.6, zenith: '#384886', horizon: '#e29b78', haze: '#a08a98', cloud: '#e6a28c', stars: 0.25 },
+  { m: 1320, sunColor: '#9fb2ff', sun: 0.55, ambient: 0.4, ambientColor: '#8ea0d8', hemiSky: '#4d5f96', hemiGround: '#1d1f2e', hemi: 0.75, night: 1, ...NIGHT_SKY },
 ];
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -109,6 +124,11 @@ export function skyAt(minuteOfDay: number): Sky {
     hemiGround: lerpHex(a.hemiGround, b.hemiGround, k),
     hemi: lerp(a.hemi, b.hemi, k),
     night,
+    zenith: lerpHex(a.zenith, b.zenith, k),
+    horizon: lerpHex(a.horizon, b.horizon, k),
+    haze: lerpHex(a.haze, b.haze, k),
+    cloud: lerpHex(a.cloud, b.cloud, k),
+    stars: lerp(a.stars, b.stars, k),
   };
 }
 

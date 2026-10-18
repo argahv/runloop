@@ -1,8 +1,6 @@
 'use client';
 import type { ArrivalSummary } from '@runloop-world/events';
-import Link from 'next/link';
 import { useState } from 'react';
-import { ROUTES } from '../../state/deeplink';
 import { formatWhen } from '../../state/format';
 import { useTicker } from '../../state/hooks';
 import { claimSession, WorldApiError } from '../../world/api';
@@ -119,7 +117,13 @@ export default function AgentsPanel({ onAddToWorld }: { onAddToWorld: (fromSessi
       </section>
 
       <p className={styles.hint}>
-        <Link href={ROUTES.overview}>All sessions</Link> · <Link href={ROUTES.integrations}>Connect Claude Code</Link>
+        <button type="button" className={styles.textButton} onClick={() => store.getState().setOverlay('sessions')}>
+          All sessions
+        </button>{' '}
+        ·{' '}
+        <button type="button" className={styles.textButton} onClick={() => store.getState().setOverlay('connect')}>
+          Connect Claude Code
+        </button>
       </p>
     </div>
   );

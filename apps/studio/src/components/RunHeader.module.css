@@ -123,3 +123,15 @@
     flex-wrap: wrap;
   }
 }
+
+/* The in-world trace sheet's compact header. */
+.header[data-variant='sheet'] {
+  gap: var(--rl-space-2) var(--rl-space-3);
+  padding: 0;
+}
+.header[data-variant='sheet'] .title {
+  flex-basis: 240px;
+}
+.header[data-variant='sheet'] .h1 {
+  font-size: var(--rl-text-lg);
+}

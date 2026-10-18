@@ -85,6 +85,26 @@ describe('panels (P10 on the UI side)', () => {
     expect(agentView(docs, null, 0)!.apiMissing).toBe(true);
   });
 
+  it('Real only with an agent registered in this runtime: a phantom presence is an unregistered building (P10)', () => {
+    const docs = fixtureSnapshot().agents[1]!;
+    const phantom = agentView(docs, null, 0, 'ok')!;
+    expect(phantom.chip.real).toBe(false);
+    expect(phantom.chip.label).toBe('Unregistered building');
+    expect(phantom.unregistered).toBe(true);
+    // The agents API has not answered: not confirmed, never Real.
+    const unconfirmed = agentView(docs, null, 0, 'offline')!;
+    expect(unconfirmed.chip.real).toBe(false);
+    expect(unconfirmed.unregistered).toBe(false);
+    expect(unconfirmed.apiMissing).toBe(true);
+  });
+
+  it('a dispatched task without hook events yet is said, apart from the health', () => {
+    const agent = { ...fixtureSnapshot().agents[0]!, health: 'idle' as const, dispatch: { dispatchId: 'dsp_0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', phase: 'running' as const } };
+    expect(agentView(agent, summary(), 0, 'ok')!.taskNote).toBe('Task running · no events yet');
+    expect(agentView({ ...agent, health: 'live' }, summary(), 0, 'ok')!.taskNote).toBeNull();
+    expect(agentView({ ...agent, dispatch: null }, summary(), 0, 'ok')!.taskNote).toBeNull();
+  });
+
   it('no Why factor is unsourced: the engine explanation keeps all, a broken one loses them', () => {
     const decided = fixtureEvents().filter((e) => e.type === 'resident.decided');
     for (const d of decided.slice(0, 40)) {

@@ -35,8 +35,6 @@ export const SURFACE_Y: Record<number, number> = {
 
 /** One storey of a building (a resident is 0.95 tall). */
 export const STOREY = 1.7;
-/** Depth of the town's slab below the road datum. */
-export const SLAB_DEPTH = 1.4;
 /** Grass margin drawn around the map (cells). */
 export const MARGIN = 2;
 

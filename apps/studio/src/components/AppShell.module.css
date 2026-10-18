@@ -9,8 +9,7 @@
 .shell[data-rail] {
   --sidebar-w: 64px;
 }
-/* The town and the other pages use the ModeRail (plan §5); run pages keep the run sidebar. */
-.shell[data-layout='town'],
+/* Other pages use the ModeRail (plan §5); run pages keep the run sidebar. */
 .shell[data-layout='page'] {
   --sidebar-w: 76px;
 }
@@ -18,6 +17,20 @@
   grid-template-columns: minmax(0, 1fr);
   height: auto;
   min-height: 100dvh;
+}
+/* The town is the whole screen: no sidebar, no top bar (immersive contract §0). */
+.shell[data-layout='town'] {
+  display: block;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--rl-world-bg);
+}
+.shell[data-layout='town'] .main {
+  position: absolute;
+  inset: 0;
 }
 
 .skip {

@@ -16,10 +16,16 @@ import { GlyphIcon, Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { toast } from '../ui/Toast';
 import { CompareWithBaseline, PinButton } from './Baseline';
+import OpenInWorld from './overlays/OpenInWorld';
 import styles from './RunHeader.module.css';
 
-/** Run title, status, provenance and the run's actions; `page` decides the cross-link. */
-export default function RunHeader({ page }: { page: 'world' | 'traces' }) {
+/**
+ * Run title, status, provenance and the run's actions; `page` decides the
+ * cross-link. `variant="sheet"` is the compact header of the in-world trace
+ * sheet: an h2 (the town owns the page's h1), no cross-link (the sheet has
+ * its own World tab and "Full page" link).
+ */
+export default function RunHeader({ page, variant = 'page' }: { page: 'world' | 'traces'; variant?: 'page' | 'sheet' }) {
   const store = useStudioStore();
   const run = useStudio((s) => s.run);
   const runs = useStudio((s) => s.runs);
@@ -55,14 +61,17 @@ export default function RunHeader({ page }: { page: 'world' | 'traces' }) {
     }
   };
 
+  const sheet = variant === 'sheet';
+  const Heading = sheet ? 'h2' : 'h1';
+
   return (
-    <header className={styles.header}>
+    <header className={styles.header} data-variant={variant}>
       <div className={styles.title}>
         <span className={styles.number}>{n !== null ? `#${n}` : '#'}</span>
         <div className={styles.titleText}>
-          <h1 className={styles.h1} title={run?.title}>
+          <Heading className={styles.h1} title={run?.title}>
             {run?.title ?? 'Loading run…'}
-          </h1>
+          </Heading>
           {(subtitle || activity) && (
             <p className={styles.subtitle}>
               {subtitle}
@@ -122,7 +131,7 @@ export default function RunHeader({ page }: { page: 'world' | 'traces' }) {
             </ul>
           </Popover>
         )}
-        {page === 'world' ? (
+        {sheet ? null : page === 'world' ? (
           <ButtonLink href={ROUTES.traces} size="sm" icon="traces">
             Investigate in Traces
           </ButtonLink>
@@ -131,6 +140,7 @@ export default function RunHeader({ page }: { page: 'world' | 'traces' }) {
             Open Live World
           </ButtonLink>
         )}
+        {!sheet && <OpenInWorld compact />}
         {canStop && (
           <Button size="sm" variant="danger" icon="stop" onClick={() => setConfirmStop(true)}>
             Stop run

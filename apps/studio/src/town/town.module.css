@@ -1,4 +1,4 @@
-/* The town's DOM layer: the backdrop beyond the town's edge and the labels. Chrome colours come from tokens.css only. */
+/* The town's DOM layer: the labels over the world. Chrome colours come from tokens.css only. */
 
 .wrap {
   position: relative;
@@ -7,9 +7,10 @@
   overflow: hidden;
   isolation: isolate;
   touch-action: none;
-  /* The theme changes the backdrop (never the town or its time of day). */
-  background:
-    radial-gradient(ellipse 70% 62% at 50% 46%, color-mix(in srgb, var(--rl-world-bg) 70%, var(--rl-surface)) 0%, var(--rl-world-bg) 82%);
+  user-select: none;
+  -webkit-user-select: none;
+  /* Until the first frame: a neutral haze (the sky and the land are drawn from sim time, not the theme). */
+  background: linear-gradient(#c9d6e2, #a9bb98);
 }
 
 .fallback {
@@ -103,6 +104,14 @@
 .detail::before {
   content: '·';
   margin-right: 6px;
+}
+
+/* Lots on offer while Add to World picks one. */
+.label[data-kind='lot'] {
+  box-shadow: 0 0 0 1px var(--rl-ice), 0 4px 14px rgba(0, 0, 0, 0.24);
+}
+.label[data-kind='lot'][data-selected='true'] {
+  box-shadow: 0 0 0 2px var(--rl-lime), 0 6px 18px rgba(0, 0, 0, 0.3);
 }
 
 /* District names: quiet signs over the map at far zoom. */

@@ -28,17 +28,41 @@ export function tickNow(clock: WorldClock | null, nowMs: number): number {
 }
 
 /**
- * The clock after a frame: a frame behind the extrapolated time does not move
- * the displayed clock backwards by less than a tick (no jitter); a real jump
- * (a resync, a pause) is taken as is.
+ * The local time a clock frame's tick began: the frame's `wallMs` (the
+ * runtime runs on this machine, so its wall clock is ours), else the time it
+ * arrived. A `wallMs` from the future or far in the past (a skewed clock) is
+ * not trusted.
  */
-export function nextClock(prev: WorldClock | null, frame: { tick: number; speed: WorldSpeed; lagging?: boolean }, nowMs: number): WorldClock {
+export function frameAnchor(wallMs: number | undefined, nowMs: number): number {
+  return wallMs !== undefined && wallMs <= nowMs && nowMs - wallMs < MAX_AHEAD_MS ? wallMs : nowMs;
+}
+
+/**
+ * The clock after a frame, anchored at the frame's `wallMs` so the client's
+ * fractional tick matches the runtime's. A frame behind the extrapolated time
+ * does not move the displayed clock backwards by less than a tick (no
+ * jitter); a real jump (a resync, a pause) is taken as is.
+ */
+export function nextClock(prev: WorldClock | null, frame: { tick: number; speed: WorldSpeed; lagging?: boolean; wallMs?: number }, nowMs: number): WorldClock {
   const lagging = frame.lagging ?? prev?.lagging ?? false;
+  const next: WorldClock = { tick: frame.tick, speed: frame.speed, receivedAt: frameAnchor(frame.wallMs, nowMs), lagging };
   if (prev && prev.speed === frame.speed && frame.speed > 0) {
     const shown = tickNow(prev, nowMs);
-    if (frame.tick < shown && shown - frame.tick < 1) return { tick: shown, speed: frame.speed, receivedAt: nowMs, lagging };
+    const fresh = tickNow(next, nowMs);
+    if (fresh < shown && shown - fresh < 1) return { tick: shown, speed: frame.speed, receivedAt: nowMs, lagging };
   }
-  return { tick: frame.tick, speed: frame.speed, receivedAt: nowMs, lagging };
+  return next;
+}
+
+/**
+ * The clock right after a `world.clock_changed` event (pause, resume, a new
+ * speed): re-based at the event's tick so the client stops extrapolating at
+ * the old speed. Pausing never moves the displayed time backwards.
+ */
+export function clockAfterSpeedChange(prev: WorldClock | null, e: { tick: number; speed: WorldSpeed }, nowMs: number): WorldClock {
+  const shown = tickNow(prev, nowMs);
+  const tick = e.speed === 0 && prev ? Math.max(e.tick, shown) : e.tick;
+  return { tick, speed: e.speed, receivedAt: nowMs, lagging: prev?.lagging ?? false };
 }
 
 /** A position on the town grid in cells (fractional while walking). */

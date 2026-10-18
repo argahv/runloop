@@ -36,9 +36,9 @@ import { useWorldCommands } from './world/useWorldCommands';
  * keeps streaming across pages), one world store (the town, connected for
  * the whole app), the runtime connections, and the chrome.
  *
- * Three layouts: the town at `/` (ModeRail + the full-bleed world), run pages
- * (/world, /traces: the run sidebar, unchanged), and other pages (ModeRail +
- * the page under a top bar).
+ * Three layouts: the town at `/` (the world edge to edge with its game HUD:
+ * no sidebar, no top bar), run pages (/world, /traces: the run sidebar,
+ * unchanged), and other pages (ModeRail + the page under a top bar).
  */
 export default function AppShell({ children }: { children: ReactNode }) {
   const [store] = useState(() => createStudioStore());
@@ -69,13 +69,15 @@ function Shell({ store, world, children }: { store: StudioStore; world: WorldSto
   const narrow = useMediaQuery(NARROW_QUERY);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const traceSheet = useWorld((s) => s.overlay === 'trace');
 
   // Order matters: preferences (runtime URL) before the deep link and polling.
   usePrefs(store);
   useDeepLinkOnce(store);
   useRuntimePolling(store, apiKey);
   usePlaybackDriver(store);
-  useKeyboardShortcuts(store, layout !== 'town');
+  // The town has its own keys; the trace sheet over it uses the run shortcuts (play, step, live).
+  useKeyboardShortcuts(store, layout !== 'town' || traceSheet);
   useUrlSync(store, pathname);
   useOnboardingTracker(store, pathname);
   useEffect(() => (runId ? connectRun(store, runId) : undefined), [store, runId, retry, connectNonce]);
@@ -112,7 +114,7 @@ function Shell({ store, world, children }: { store: StudioStore; world: WorldSto
       <a href="#main" className={styles.skip}>
         Skip to content
       </a>
-      {!mobile && (
+      {!mobile && layout !== 'town' && (
         <aside className={styles.sidebar} aria-label="Sidebar">
           {layout === 'run' ? <StudioSidebar pathname={pathname} rail={narrow} /> : <ModeRail pathname={pathname} />}
         </aside>
@@ -131,7 +133,7 @@ function Shell({ store, world, children }: { store: StudioStore; world: WorldSto
           </>
         )}
       </div>
-      {mobile && (
+      {mobile && layout !== 'town' && (
         <Dialog open={drawerOpen} onClose={() => setDrawerOpen(false)} labelledBy="drawer-title" placement="left" className={styles.drawer}>
           <h2 id="drawer-title" className="sr-only">
             Navigation
@@ -151,7 +153,10 @@ function Shell({ store, world, children }: { store: StudioStore; world: WorldSto
   );
 }
 
-/** Add to World can open from anywhere (⌘K, a panel, Arrivals). */
+/**
+ * Add to World as a dialog (with its lot list): from another page, or on the
+ * town without the 3D view (no WebGL, the 2D map). In 3D it is lot picking.
+ */
 function WorldDialogs() {
   const world = useWorldStore();
   const add = useWorld((s) => s.addToWorld);

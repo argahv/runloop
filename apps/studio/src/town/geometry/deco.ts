@@ -12,14 +12,15 @@ import type { TownPlaces } from '../place';
 import { BODY } from '../rig/residentRig';
 import { AGENT_HQ_COLORS, DECO_COLORS as D, GROUND_COLORS as G, LANDMARK_COLORS as LM } from '../townPalette';
 import { GLOW_KIND, GeoBuilder, type Meta } from './builder';
-import { noise2 } from './ground';
+import { exitKey, noise2 } from './ground';
 
 /** Height of the clock face centre on the clock tower (the hands are drawn by ClockHands). */
 export const CLOCK = { faceY: 4.15, faceR: 0.55, halfWidth: 0.8 } as const;
 
-export function buildDecoration(town: CompiledTown, places: TownPlaces, seed: number): GeoBuilder {
+/** `exits`: cells the roads out cross (exitKey); nothing stands on them. */
+export function buildDecoration(town: CompiledTown, places: TownPlaces, seed: number, exits: ReadonlyMap<number, number> = new Map()): GeoBuilder {
   const gb = new GeoBuilder();
-  const items = decorate(town, seed);
+  const items = decorate(town, seed).filter((it) => !exits.has(exitKey(town, it.cell[0], it.cell[1])));
   const patioCells = new Set<number>();
   for (const s of town.spots) if (s.def.kind === 'patio') for (const i of s.cellIndex) patioCells.add(i);
   for (const it of items) {

@@ -1,7 +1,6 @@
 'use client';
 import { diffRuns, type AgentDiff, type CountEntry, type DiffNote, type DigestCall, type FieldDiff, type FileTouch, type KeyedCountDiff, type RunDiff, type RunDigest, type TestChange } from '@runloop-world/core';
 import type { RunSummary } from '@runloop-world/events';
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { compareHref, isPinned, parseComparePair, pinnedRuns, resolvePair, type ComparePair } from '../../state/baselines';
 import { CHANGE, changeView, noteText, outcomeChange, outcomeText, SIDE_LETTER, SIDE_NAME, type ChangeView, type Side } from '../../state/compare';
@@ -14,13 +13,16 @@ import { CATEGORY_ICON, categoryLabel, formatInt, formatTokens, shortModel } fro
 import { isTracedRun, runSourceLabel, runSubtitle } from '../../state/runs';
 import { formatDuration } from '../../state/timeline';
 import { callStatusView, runStatusView } from '../../state/view';
-import { Button, ButtonLink } from '../../ui/Button';
+import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
 import { Chip, StatusBadge } from '../../ui/Chip';
 import { Icon, type IconName } from '../../ui/Icon';
 import { EmptyState, ErrorState, Skeleton } from '../../ui/States';
 import { toast } from '../../ui/Toast';
 import { PinButton } from '../Baseline';
+import { compareRequests, NavButtonLink, plainClick, useInWorld, useStudioNav } from '../overlays/nav';
+import SheetScroll from '../overlays/SheetScroll';
+import OpenInWorld from '../overlays/OpenInWorld';
 import { OfflineState } from '../RunStates';
 import { useRunDigest, type DigestLoad } from '../useRunDigest';
 import { useStartDemo } from '../useStartDemo';
@@ -34,13 +36,38 @@ import styles from './Experiments.module.css';
  * and the divergence link to the events behind them.
  */
 export default function ExperimentsPage() {
+  // Inside the world (the compare sheet at the Lattice Lab): the panel alone.
+  if (useInWorld())
+    return (
+      <SheetScroll>
+        <ComparePanel variant="sheet" />
+      </SheetScroll>
+    );
+  return (
+    <div className={pages.page}>
+      <div className={`${pages.pageInner} ${styles.inner}`}>
+        <ComparePanel />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The comparison itself: pickers, verdict, divergence, tests, files, tools,
+ * tokens and permissions. The Experiments page shows it under its h1; the
+ * in-world compare sheet (at the Lattice Lab) shows it with a one-line
+ * intro, and its event links open the trace sheet instead of leaving.
+ * Both keep the pair in `?a=&b=`.
+ */
+export function ComparePanel({ variant = 'page' }: { variant?: 'page' | 'sheet' }) {
   const runtime = useStudio((s) => s.runtime.status);
   const runs = useStudio((s) => s.runs);
   const [requested, setRequested] = useState<ComparePair | null>(null);
   const [retry, setRetry] = useState({ a: 0, b: 0 });
 
-  // The deep link (?a=&b=) is read once; picks after that are explicit.
+  // The deep link (?a=&b=) is read once; picks after that are explicit, and so is a link that asks for a pair while this is open.
   useEffect(() => setRequested(parseComparePair(new URLSearchParams(window.location.search))), []);
+  useEffect(() => compareRequests.subscribe((r) => r.pair && setRequested(r.pair)), []);
   const ready = requested !== null && runtime === 'online';
   const pair = useMemo(() => (ready ? resolvePair(runs, requested) : { a: null, b: null }), [ready, runs, requested]);
 
@@ -72,91 +99,102 @@ export default function ExperimentsPage() {
       toast({ tone: 'err', title: 'Could not copy the link', description: 'Copy it from the address bar instead.' });
     }
   };
+  const copy = ready && pair.a && pair.b && (
+    <Button size="sm" variant="ghost" icon="link" onClick={() => void copyLink()}>
+      Copy link
+    </Button>
+  );
 
   return (
-    <div className={pages.page}>
-      <div className={`${pages.pageInner} ${styles.inner}`}>
+    <>
+      {variant === 'page' ? (
         <header className={pages.pageHead}>
           <div>
             <h1 className={pages.h1}>Experiments</h1>
             <p className={pages.lede}>Compare a baseline with a candidate run: outcome, tests, files, tool activity, tokens and permissions, and the first moment they diverged. Underlined values open the event behind them in Traces.</p>
           </div>
-          {ready && pair.a && pair.b && (
-            <Button size="sm" variant="ghost" icon="link" onClick={() => void copyLink()}>
-              Copy link
-            </Button>
-          )}
+          <span className={pages.pageHeadActions}>
+            {copy}
+            <OpenInWorld />
+          </span>
         </header>
+      ) : (
+        <div className={styles.sheetIntro}>
+          <p className={pages.lede}>Baseline against candidate: what differed, and the first moment they diverged. Underlined values open the event behind them in the trace.</p>
+          {copy}
+        </div>
+      )}
 
-        {runtime === 'offline' ? (
-          <Card>
-            <OfflineState />
-          </Card>
-        ) : !ready ? (
-          <LoadingCompare />
-        ) : runs.length === 0 ? (
-          <Card>
-            <NothingYet />
-          </Card>
-        ) : (
-          <>
-            <section className={styles.pickers} aria-label="Runs to compare">
-              <SidePicker side="a" runs={runs} value={pair.a} run={runA} load={loadA} onPick={(id) => pick('a', id)} />
-              <div className={styles.swap}>
-                <Button variant="secondary" size="sm" iconOnly icon="swap" aria-label="Swap baseline and candidate" title="Swap baseline and candidate" onClick={swap} disabled={!pair.a && !pair.b} />
-              </div>
-              <SidePicker side="b" runs={runs} value={pair.b} run={runB} load={loadB} onPick={(id) => pick('b', id)} />
-            </section>
+      {runtime === 'offline' ? (
+        <Card>
+          <OfflineState />
+        </Card>
+      ) : !ready ? (
+        <LoadingCompare />
+      ) : runs.length === 0 ? (
+        <Card>
+          <NothingYet />
+        </Card>
+      ) : (
+        <>
+          <section className={styles.pickers} aria-label="Runs to compare">
+            <SidePicker side="a" runs={runs} value={pair.a} run={runA} load={loadA} onPick={(id) => pick('a', id)} />
+            <div className={styles.swap}>
+              <Button variant="secondary" size="sm" iconOnly icon="swap" aria-label="Swap baseline and candidate" title="Swap baseline and candidate" onClick={swap} disabled={!pair.a && !pair.b} />
+            </div>
+            <SidePicker side="b" runs={runs} value={pair.b} run={runB} load={loadB} onPick={(id) => pick('b', id)} />
+          </section>
 
-            {!pair.a || !pair.b ? (
-              <Card>
-                <TeachCompare runs={runs} pair={pair} />
-              </Card>
-            ) : !runA || !runB ? (
-              <Card>
-                <ErrorState title="A run in this link is not in this runtime" saved="Nothing was changed. Choose another run above.">
-                  <p>
-                    {!runA ? 'The baseline' : 'The candidate'} (<code>{(!runA ? pair.a : pair.b)!.slice(0, 8)}</code>) was not found. It may have been recorded by another runtime or data directory.
-                  </p>
-                </ErrorState>
-              </Card>
-            ) : loadA.status === 'error' || loadB.status === 'error' ? (
-              <Card>
-                <ErrorState
-                  title={`Could not load the ${loadA.status === 'error' ? 'baseline' : 'candidate'}’s events`}
-                  saved="Both runs are still recorded; nothing was changed."
-                  onRetry={() => setRetry((r) => (loadA.status === 'error' ? { ...r, a: r.a + 1 } : { ...r, b: r.b + 1 }))}
-                >
-                  <p>{loadA.status === 'error' ? loadA.error : loadB.error}</p>
-                </ErrorState>
-              </Card>
-            ) : !diff ? (
-              <LoadingCompare pickersShown />
-            ) : (
-              <Comparison diff={diff} runA={runA} runB={runB} partial={(loadA.status === 'ready' && loadA.partial) || (loadB.status === 'ready' && loadB.partial)} />
-            )}
-          </>
-        )}
-      </div>
-    </div>
+          {!pair.a || !pair.b ? (
+            <Card>
+              <TeachCompare runs={runs} pair={pair} />
+            </Card>
+          ) : !runA || !runB ? (
+            <Card>
+              <ErrorState title="A run in this link is not in this runtime" saved="Nothing was changed. Choose another run above.">
+                <p>
+                  {!runA ? 'The baseline' : 'The candidate'} (<code>{(!runA ? pair.a : pair.b)!.slice(0, 8)}</code>) was not found. It may have been recorded by another runtime or data directory.
+                </p>
+              </ErrorState>
+            </Card>
+          ) : loadA.status === 'error' || loadB.status === 'error' ? (
+            <Card>
+              <ErrorState
+                title={`Could not load the ${loadA.status === 'error' ? 'baseline' : 'candidate'}’s events`}
+                saved="Both runs are still recorded; nothing was changed."
+                onRetry={() => setRetry((r) => (loadA.status === 'error' ? { ...r, a: r.a + 1 } : { ...r, b: r.b + 1 }))}
+              >
+                <p>{loadA.status === 'error' ? loadA.error : loadB.error}</p>
+              </ErrorState>
+            </Card>
+          ) : !diff ? (
+            <LoadingCompare pickersShown />
+          ) : (
+            <Comparison diff={diff} runA={runA} runB={runB} partial={(loadA.status === 'ready' && loadA.partial) || (loadB.status === 'ready' && loadB.partial)} />
+          )}
+        </>
+      )}
+    </>
   );
 }
 
 // ── navigation to events ───────────────────────────────────────────────
 
-/** Open a run in Traces at an event (or with a filter). Modified clicks keep the link's default (a new tab). */
+/**
+ * Open a run in Traces at an event (or with a filter): the Traces page, or in
+ * the world the trace sheet. Modified clicks keep the link's default (a new tab).
+ */
 function useOpenInTraces() {
   const store = useStudioStore();
-  const router = useRouter();
+  const nav = useStudioNav();
   return (e: MouseEvent, runId: string, opts: { seq?: number; filter?: TraceFilter }) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    if (!plainClick(e)) return;
     e.preventDefault();
     selectRun(store, runId);
     const s = store.getState();
     s.setFilter(opts.filter ?? EMPTY_FILTER);
     s.setTab('timeline');
-    if (opts.seq !== undefined) s.focusDeepLink({ seq: opts.seq, agentId: null });
-    router.push(ROUTES.traces);
+    nav.openTrace(runId, { seq: opts.seq ?? null });
   };
 }
 
@@ -335,9 +373,9 @@ function TeachCompare({ runs, pair }: { runs: RunSummary[]; pair: ComparePair })
                   <Button size="sm" variant="primary" icon="play" onClick={() => void demo.start()} busy={demo.starting} disabled={demo.disabledReason !== null} title={demo.disabledReason ?? undefined}>
                     Run demo mission
                   </Button>
-                  <ButtonLink href={ROUTES.integrations} size="sm" variant="ghost" icon="integrations">
+                  <NavButtonLink href={ROUTES.integrations} size="sm" variant="ghost" icon="integrations">
                     Trace Claude Code
-                  </ButtonLink>
+                  </NavButtonLink>
                 </div>
               )}
             </div>
@@ -359,9 +397,9 @@ function NothingYet() {
           <Button variant="primary" icon="play" onClick={() => void demo.start()} busy={demo.starting} disabled={demo.disabledReason !== null} title={demo.disabledReason ?? undefined}>
             Run demo mission
           </Button>
-          <ButtonLink href={ROUTES.integrations} variant="ghost" icon="integrations">
+          <NavButtonLink href={ROUTES.integrations} variant="ghost" icon="integrations">
             Connect Claude Code
-          </ButtonLink>
+          </NavButtonLink>
         </>
       }
     >
@@ -471,6 +509,7 @@ function Tile({ label, icon, a, b, change, foot }: { label: string; icon: IconNa
 }
 
 const num = (v: number | null, fmt: (n: number) => string = formatInt) => (v === null ? <NotReported /> : fmt(v));
+const formatUsd = (n: number) => `$${n.toFixed(4).replace(/0{1,2}$/, '')}`;
 
 /** A run's outcome as icon + text ("ended" for a traced session that ended normally). */
 function OutcomeBadge({ digest }: { digest: RunDigest }) {
@@ -497,9 +536,24 @@ function Verdict({ diff, ids, traced }: { diff: RunDiff; ids: Record<Side, strin
         <Tile label="Outcome" icon="flag" a={outcome('a')} b={outcome('b')} change={outcomeChange(diff.outcome, traced)} />
         <Tile label="Tests passing" icon="flask" a={testValue(ta, 'a')} b={testValue(tb, 'b')} change={changeView(diff.tests.failed, CHANGE.failing)} foot={ta || tb ? 'latest test run' : undefined} />
         <Tile label="Failures" icon="alert" a={formatInt(diff.failures.a!)} b={formatInt(diff.failures.b!)} change={changeView(diff.failures, CHANGE.failures)} />
-        <Tile label="Duration" icon="clock" a={num(diff.durationMs.a, formatDuration)} b={num(diff.durationMs.b, formatDuration)} change={changeView(diff.durationMs, CHANGE.duration)} />
+        <Tile
+          label="Duration"
+          icon="clock"
+          a={num(diff.durationMs.a, formatDuration)}
+          b={num(diff.durationMs.b, formatDuration)}
+          change={changeView(diff.durationMs, CHANGE.duration)}
+          foot={diff.a.pausedMs > 0 || diff.b.pausedMs > 0 ? 'excluding time paused' : undefined}
+        />
         <Tile label="Tool calls" icon="terminal" a={formatInt(diff.toolCalls.a!)} b={formatInt(diff.toolCalls.b!)} change={changeView(diff.toolCalls, CHANGE.toolCalls)} />
         <Tile label="Tokens" icon="coins" a={num(diff.tokens.a, formatTokens)} b={num(diff.tokens.b, formatTokens)} change={changeView(diff.tokens, CHANGE.tokens)} foot={diff.tokens.a !== null || diff.tokens.b !== null ? 'as reported by the source' : undefined} />
+        <Tile
+          label="Cost"
+          icon="coins"
+          a={num(diff.costUsd.a, formatUsd)}
+          b={num(diff.costUsd.b, formatUsd)}
+          change={changeView(diff.costUsd, CHANGE.cost)}
+          foot={diff.costUsd.a !== null || diff.costUsd.b !== null ? 'as reported by Claude Code (dispatched runs)' : 'reported for dispatched runs only'}
+        />
       </dl>
     </section>
   );
@@ -593,7 +647,15 @@ function DivergenceCard({ diff, ids }: { diff: RunDiff; ids: Record<Side, string
       labelledBy="cmp-divergence"
     >
       <div className={styles.cardBody}>
-        {!d ? (
+        {!d && diff.divergenceNote ? (
+          // A side still recording: no divergence yet is not a final answer.
+          <p className={styles.divergenceLead}>
+            <Icon name="pulse" size={16} />
+            {diff.a.calls.length === 0 && diff.b.calls.length === 0
+              ? `No tool calls yet; ${noteText(diff.divergenceNote)}.`
+              : `Same calls so far; ${noteText(diff.divergenceNote)}.`}
+          </p>
+        ) : !d ? (
           <p className={styles.divergenceLead}>
             <Icon name="checkCircle" size={16} />
             {diff.a.calls.length === 0 ? 'Neither run made a tool call.' : `No divergence: both runs made the same ${diff.a.calls.length} calls with the same results.`}
@@ -770,8 +832,13 @@ function OutcomeTests({ diff, ids, traced }: { diff: RunDiff; ids: Record<Side, 
                 <Icon name="check" size={13} /> No failing test names differ between the two runs{t.namesComparable && t.failedAlongTheWay.complete ? '' : ' (as far as names were reported)'}.
               </p>
             )}
-            {t.namesNote && t.namesNote !== 'not_reported' && <p className={styles.foot}>{namesCaveat(diff, t.namesNote === 'not_reported_a' ? 'a' : 'b')}</p>}
+            {t.namesCaveat === 'scope_differs' ? (
+              <p className={styles.foot}>The latest test runs covered different numbers of tests, so fixed and newly failing tests are not listed.</p>
+            ) : (
+              t.namesNote && t.namesNote !== 'not_reported' && <p className={styles.foot}>{namesCaveat(diff, t.namesNote === 'not_reported_a' ? 'a' : 'b')}</p>
+            )}
             {t.failedAlongTheWay.note && <p className={styles.foot}>{alongCaveat(diff, t.failedAlongTheWay.note)}</p>}
+            {t.pending && <p className={styles.foot}>As of now: {noteText(t.pending)}, so these lists may still change.</p>}
           </div>
         )}
       </div>

@@ -1,0 +1,216 @@
+/*
+ * In-world sheets (immersive contract §1.1 O, §4): opaque graphite at 96 %
+ * with a soft blur, radius 16, over the live town; the session strip (S) is
+ * a glass HUD control. Lime only for the active state.
+ */
+
+/* ── the sheet frame (OverlayHost) ─────────────────────────────────── */
+.sheet {
+  position: absolute;
+  right: 16px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--rl-surface) 96%, transparent);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 12px 32px rgb(0 0 0 / 0.35),
+    0 0 0 1px var(--rl-line);
+  color: var(--rl-text);
+  overflow: hidden;
+  animation: sheetIn var(--rl-dur-standard, 200ms) var(--rl-ease-out, ease-out);
+}
+.sheet[data-mobile] {
+  left: 0;
+  right: 0;
+  border-radius: 16px 16px 0 0;
+  animation-name: sheetUp;
+}
+@keyframes sheetIn {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+@keyframes sheetUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
+}
+:global(html[data-motion='reduce']) .sheet {
+  animation: none;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  flex: none;
+  padding: 0 6px 0 16px;
+  box-shadow: inset 0 -1px 0 var(--rl-line);
+}
+.title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--rl-text-md);
+  font-weight: 600;
+}
+.where {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.where svg {
+  flex: none;
+  align-self: center;
+}
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.body > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── page content in a sheet (SheetScroll) ─────────────────────────── */
+.scroll {
+  container: rl-sheet / inline-size;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.scrollInner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl-space-4);
+  padding: var(--rl-space-4);
+}
+
+/* ── the trace sheet ───────────────────────────────────────────────── */
+.trace {
+  container: rl-sheet / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl-space-2);
+  min-height: 0;
+  padding: var(--rl-space-3) var(--rl-space-3) var(--rl-space-3);
+}
+.traceTop {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--rl-space-2);
+}
+.traceMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.traceMain > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── the session strip inside an agent's building (S) ──────────────── */
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(760px, calc(100vw - 32px));
+  padding: 8px 10px 10px;
+  border-radius: 14px;
+  background: var(--rl-glass);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow:
+    0 8px 24px rgb(0 0 0 / 0.28),
+    0 0 0 1px var(--rl-glass-line);
+  color: var(--rl-text);
+}
+.stripHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stripPick {
+  flex: 1;
+  min-width: 0;
+}
+.stripPick select {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--rl-surface-2);
+  color: var(--rl-text);
+  font: inherit;
+  font-size: var(--rl-text-sm);
+  font-weight: 600;
+}
+.stripActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.stripNote {
+  padding: 4px 2px 0;
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-xs);
+}
+.stripMode {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--rl-radius-pill);
+  background: var(--rl-surface-2);
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.stripMode[data-live] {
+  color: var(--rl-accent-text);
+}
+@media (max-width: 760px) {
+  .stripHead {
+    flex-wrap: wrap;
+  }
+  .stripPick {
+    flex-basis: 100%;
+  }
+  .stripActions {
+    margin-left: auto;
+  }
+}

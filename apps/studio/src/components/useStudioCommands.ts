@@ -1,5 +1,4 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import { useMemo } from 'react';
 import type { Command } from '../state/commands';
 import { useStudio, useStudioStore } from '../state/context';
@@ -8,15 +7,20 @@ import { isRunPage } from '../state/format';
 import { selectRun } from '../state/hooks';
 import { isTracedRun, runSourceLabel, shortId } from '../state/runs';
 import { runStatusView } from '../state/view';
-import { baselineFor, compareHref, isPinned } from '../state/baselines';
+import { baselineFor, isPinned } from '../state/baselines';
 import { toast } from '../ui/Toast';
 import { usePinToggle } from './Baseline';
+import { useStudioNav } from './overlays/nav';
 import { useStartDemo } from './useStartDemo';
 
-/** Everything the ⌘K palette can do, built from the current state. */
+/**
+ * Everything the ⌘K palette can do, built from the current state. Pages and
+ * runs open through `useStudioNav()`: inside the world on `/` (sheets, an
+ * agent's building), as pages everywhere else.
+ */
 export function useStudioCommands(pathname: string): Command[] {
   const store = useStudioStore();
-  const router = useRouter();
+  const nav = useStudioNav();
   const runs = useStudio((s) => s.runs);
   const runId = useStudio((s) => s.runId);
   const lastSequence = useStudio((s) => s.lastSequence);
@@ -31,10 +35,10 @@ export function useStudioCommands(pathname: string): Command[] {
 
   return useMemo(() => {
     const s = () => store.getState();
-    const go = (href: string) => router.push(href);
+    const go = (href: string) => nav.openPage(href);
     const cmds: Command[] = [];
 
-    const nav: [string, string, string][] = [
+    const pages: [string, string, string][] = [
       [ROUTES.overview, 'Overview', 'home health runs'],
       [ROUTES.world, 'Live World', '3d world agents watch'],
       [ROUTES.traces, 'Traces', 'timeline logs inspect search filter'],
@@ -42,7 +46,7 @@ export function useStudioCommands(pathname: string): Command[] {
       [ROUTES.integrations, 'Integrations', 'claude code plugin connect install'],
       [ROUTES.settings, 'Settings', 'theme motion quality runtime url privacy shortcuts'],
     ];
-    for (const [href, label, keywords] of nav) {
+    for (const [href, label, keywords] of pages) {
       cmds.push({ id: `nav:${href}`, group: 'Go to', label, keywords, hint: pathname.startsWith(href) ? 'current' : undefined, run: () => go(href) });
     }
 
@@ -64,10 +68,7 @@ export function useStudioCommands(pathname: string): Command[] {
         label: 'Watch the newest live Claude Code session',
         keywords: 'traced live follow session',
         hint: liveTraced.runId === runId ? 'open' : undefined,
-        run: () => {
-          selectRun(store, liveTraced.runId);
-          go(ROUTES.world);
-        },
+        run: () => nav.openRunWorld(liveTraced.runId),
       });
     }
 
@@ -91,7 +92,7 @@ export function useStudioCommands(pathname: string): Command[] {
               return;
             }
             st.selectEvent(next.seq, { seek: true });
-            if (!isRunPage(pathname)) go(ROUTES.traces);
+            if (!isRunPage(pathname)) nav.openTrace(runId, { seq: next.seq });
           },
         },
         ...(() => {
@@ -113,7 +114,7 @@ export function useStudioCommands(pathname: string): Command[] {
               group: 'Actions',
               label: 'Compare this run with the baseline',
               keywords: `experiments diff ${base.title}`,
-              run: () => go(compareHref({ a: base.runId, b: runId })),
+              run: () => nav.openCompare({ a: base.runId, b: runId }),
             });
           }
           return out;
@@ -140,8 +141,8 @@ export function useStudioCommands(pathname: string): Command[] {
     }
 
     cmds.push(
-      { id: 'view-world', group: 'View', label: 'Show the 3D world', keywords: 'live world view', hint: worldView === 'world' ? 'current' : undefined, run: () => (s().setWorldView('world'), go(ROUTES.world)) },
-      { id: 'view-table', group: 'View', label: 'Show the Network view (2D)', keywords: 'graph network table list view delegation', hint: worldView === 'graph' ? 'current' : undefined, run: () => (s().setWorldView('graph'), go(ROUTES.world)) },
+      { id: 'view-world', group: 'View', label: 'Show the 3D world', keywords: 'live world view', hint: worldView === 'world' ? 'current' : undefined, run: () => (s().setWorldView('world'), runId ? nav.openRunWorld(runId) : go(ROUTES.world)) },
+      { id: 'view-table', group: 'View', label: 'Show the Network view (2D)', keywords: 'graph network table list view delegation', hint: worldView === 'graph' ? 'current' : undefined, run: () => (s().setWorldView('graph'), runId ? nav.openRunWorld(runId) : go(ROUTES.world)) },
       { id: 'camera-iso', group: 'View', label: 'Camera: isometric 3D', keywords: 'camera iso', hint: cameraMode === 'iso' ? 'current' : undefined, run: () => s().setCameraMode('iso') },
       { id: 'camera-top', group: 'View', label: 'Camera: top-down 2D', keywords: 'camera top map', hint: cameraMode === 'top' ? 'current' : undefined, run: () => s().setCameraMode('top') },
       { id: 'follow', group: 'View', label: follow ? 'Stop following the selected agent' : 'Follow the selected agent', keywords: 'camera', shortcut: ['F'], run: () => s().toggleFollow() },
@@ -163,11 +164,11 @@ export function useStudioCommands(pathname: string): Command[] {
         keywords: `${r.runId} ${r.status} ${runSourceLabel(r)} ${r.source?.sessionId ?? ''} ${r.source?.projectLabel ?? ''}`,
         hint: r.runId === runId ? 'open' : runStatusView(r.status, r.paused, isTracedRun(r)).text,
         run: () => {
-          selectRun(store, r.runId);
-          if (!isRunPage(pathname)) go(ROUTES.world);
+          if (isRunPage(pathname)) selectRun(store, r.runId);
+          else nav.openRunWorld(r.runId);
         },
       });
     });
     return cmds;
-  }, [store, router, pathname, runs, runId, lastSequence, themePref, motionPref, quality, cameraMode, worldView, follow, demo, pin]);
+  }, [store, nav, pathname, runs, runId, lastSequence, themePref, motionPref, quality, cameraMode, worldView, follow, demo, pin]);
 }

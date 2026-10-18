@@ -293,3 +293,8 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* The approval card over the town: a light scrim, so the agent's building stays in view (contract §4.1). */
+:global(div[data-placement]):has(> .approval) {
+  background: rgb(6 7 9 / 0.3);
+}

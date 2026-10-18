@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import type { AgentPresence } from '@runloop-world/events';
 import type { Lot } from '@runloop-world/town';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { MeshBasicMaterial, MeshLambertMaterial, Vector3, type Mesh } from 'three';
+import { MeshBasicMaterial, MeshLambertMaterial, Vector3, type Group, type Mesh } from 'three';
 import { DARK_TOKENS } from '../scene/palette';
 import { mixHex } from './color';
 import { cellY, yawOf } from './coords';
@@ -131,7 +131,30 @@ const Hq = memo(function Hq({ agent, lot, selected, entered, quiet }: { agent: A
     mats.beacon.color.set(BEACON[state]).multiplyScalar(state === 'off' ? 1 : 1.4);
   }, [mats, waiting, state]);
   const beacon = useRef<Mesh>(null);
-  useFrame(() => {
+  // Flying in, the pavilion lifts 6 units and fades in 450 ms (the diorama shows beneath); leaving, it settles back.
+  const shellGroup = useRef<Group>(null);
+  const lift = useRef(entered ? 1 : 0);
+  const [shellShown, setShellShown] = useState(!entered);
+  useEffect(() => {
+    if (!entered) setShellShown(true);
+  }, [entered]);
+  useFrame((_, dt) => {
+    const goal = entered ? 1 : 0;
+    if (lift.current !== goal) {
+      const step = live.reducedMotion ? 1 : Math.min(dt, 0.1) / 0.45;
+      lift.current = goal > lift.current ? Math.min(goal, lift.current + step) : Math.max(goal, lift.current - step);
+      const k = lift.current;
+      const fading = k > 0 && k < 1;
+      for (const m of [mats.shell, mats.glass]) {
+        if (m.transparent !== fading) {
+          m.transparent = fading;
+          m.needsUpdate = true;
+        }
+        m.opacity = 1 - k;
+      }
+      if (shellGroup.current) shellGroup.current.position.y = 6 * k * k * (3 - 2 * k);
+      if (k >= 1 && shellShown) setShellShown(false);
+    }
     agentPos.set(agent.agentId, layout.robot);
     // Lit glass when a session is open (live or idle), warmer at night; dark when offline.
     const night = uniforms.uNight.value;
@@ -143,13 +166,19 @@ const Hq = memo(function Hq({ agent, lot, selected, entered, quiet }: { agent: A
   });
   return (
     <group>
-      {!entered && (
-        <>
+      {shellShown && (
+        <group ref={shellGroup}>
           <mesh geometry={geo.shell} material={mats.shell} castShadow receiveShadow />
           <mesh geometry={geo.glass} material={mats.glass} />
-          <mesh ref={beacon} position={layout.beacon} rotation={[-Math.PI / 2, 0, 0]} material={mats.beacon}>
-            <torusGeometry args={[0.42, 0.07, 8, waiting ? 8 : 32]} />
-          </mesh>
+          {!entered && (
+            <mesh ref={beacon} position={layout.beacon} rotation={[-Math.PI / 2, 0, 0]} material={mats.beacon}>
+              <torusGeometry args={[0.42, 0.07, 8, waiting ? 8 : 32]} />
+            </mesh>
+          )}
+        </group>
+      )}
+      {!entered && (
+        <>
           {!quiet && (
             <group position={layout.robot} rotation={[0, layout.robotYaw, 0]}>
               <AgentRobot hue={agent.hue} state={state} selected={selected} reducedMotion={live.reducedMotion} dim={state === 'off'} />

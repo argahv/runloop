@@ -426,3 +426,22 @@ a.row:hover {
 .pending[data-state='failed'] {
   color: var(--rl-failure);
 }
+.textLink {
+  display: block;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.textLink:hover {
+  color: var(--rl-text);
+}
+.connectSteps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl-space-2);
+  margin-top: var(--rl-space-2);
+}
+.connectSteps code {
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+}

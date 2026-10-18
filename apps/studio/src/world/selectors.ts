@@ -30,6 +30,7 @@ import type { Tone } from '../ui/Chip';
 import type { IconName } from '../ui/Icon';
 import { actionLabel, archetypeLabel, districtOf, placeText } from './entityIndex';
 import { clockParts } from './interpolate';
+import type { AgentsApiStatus } from './store';
 
 // ── Provenance chips ─────────────────────────────────────────────────
 
@@ -56,6 +57,24 @@ export const REAL_AGENT_CHIP: ProvChip = {
   tone: 'info',
   detail: 'A real Claude Code agent. Runloop shows what its hooks reported; it did not run or verify the work.',
   real: true,
+};
+
+/** A presence with no agent registered behind it in this runtime (P10: never Real). */
+export const UNREGISTERED_CHIP: ProvChip = {
+  label: 'Unregistered building',
+  icon: 'circle',
+  tone: 'muted',
+  detail: 'This runtime has no agent registered for this building, so nothing here is real agent activity.',
+  real: false,
+};
+
+/** The agents API has not answered, so the agent behind a building cannot be confirmed yet. */
+export const UNCONFIRMED_AGENT_CHIP: ProvChip = {
+  label: 'Agent · not confirmed',
+  icon: 'ellipsis',
+  tone: 'muted',
+  detail: 'The agents API has not answered, so Runloop cannot confirm a real agent behind this building yet.',
+  real: false,
 };
 
 const TOWN_CHIP: ProvChip = { label: 'Town', icon: 'map', tone: 'muted', detail: 'Part of the town file.', real: false };
@@ -95,7 +114,7 @@ export interface HealthView {
 }
 
 const HEALTH: Record<ConnectionHealth, HealthView> = {
-  live: { text: 'Live', icon: 'pulse', tone: 'live', detail: 'Events arrived in the last 5 minutes.' },
+  live: { text: 'Live', icon: 'pulse', tone: 'live', detail: 'A session is open and its hooks reported in the last 5 minutes.' },
   idle: { text: 'Idle', icon: 'pause', tone: 'muted', detail: 'A session is open but quiet.' },
   offline: { text: 'Offline', icon: 'slash', tone: 'muted', detail: 'No open session. The building stays; the world keeps living.' },
   awaiting_first_event: { text: 'Waiting for first event', icon: 'hourglass', tone: 'warn', detail: 'Start Claude Code in the workspace with the Runloop plugin.' },
@@ -310,15 +329,26 @@ export interface AgentView {
   sessions: AgentSummary['sessions'];
   /** The agents API is not available: workspace, sessions and capabilities are not reported. */
   apiMissing: boolean;
+  /** The agents API answered and lists no agent for this presence: a building only, with no actions. */
+  unregistered: boolean;
+  /** A dispatched task runs while the hooks have not (yet) reported: "Task running · no events yet". */
+  taskNote: string | null;
 }
 
-export function agentView(presence: AgentPresence | null, summary: AgentSummary | null, nowMs: number): AgentView | null {
+/**
+ * `api` is the agents API's status: "Real" needs an agent registered in this
+ * runtime (an AgentSummary); a presence the API does not list is an
+ * unregistered building, and one it has not confirmed yet says so (P10).
+ */
+export function agentView(presence: AgentPresence | null, summary: AgentSummary | null, nowMs: number, api: AgentsApiStatus = 'unknown'): AgentView | null {
   if (!presence && !summary) return null;
   const health = presence?.health ?? summary!.health;
+  const unregistered = summary === null && api === 'ok';
+  const phase = presence?.dispatch?.phase;
   return {
     agentId: presence?.agentId ?? summary!.agentId,
     name: presence?.displayName ?? summary!.displayName,
-    chip: REAL_AGENT_CHIP,
+    chip: summary ? REAL_AGENT_CHIP : unregistered ? UNREGISTERED_CHIP : UNCONFIRMED_AGENT_CHIP,
     health: healthView(health),
     attention: attentionText(presence?.attention ?? summary?.attention ?? 'none'),
     lastEvent: summary ? lastEventText(summary.lastEventAt, nowMs) : 'last event: not reported',
@@ -334,7 +364,9 @@ export function agentView(presence: AgentPresence | null, summary: AgentSummary 
     openIncidents: presence?.openIncidents ?? 0,
     lastCause: presence?.lastCause ?? null,
     sessions: summary?.sessions ?? [],
-    apiMissing: summary === null,
+    apiMissing: summary === null && !unregistered,
+    unregistered,
+    taskNote: (phase === 'running' || phase === 'approved') && health !== 'live' ? 'Task running · no events yet' : null,
   };
 }
 

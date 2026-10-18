@@ -1,6 +1,5 @@
 'use client';
 import type { RunSummary } from '@runloop-world/events';
-import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { setBaseline } from '../lib/api';
 import { baselineFor, compareHref, isPinned } from '../state/baselines';
@@ -9,11 +8,12 @@ import { formatWhen } from '../state/format';
 import { Button, ButtonLink } from '../ui/Button';
 import { Chip } from '../ui/Chip';
 import { toast } from '../ui/Toast';
+import { plainClick, useStudioNav } from './overlays/nav';
 
 /** Pin or unpin a run as a baseline (persisted by the runtime), with a toast and an undo. */
 export function usePinToggle() {
   const store = useStudioStore();
-  const router = useRouter();
+  const nav = useStudioNav();
   const [busy, setBusy] = useState<string | null>(null);
   const self = useRef<(run: RunSummary) => Promise<void>>(async () => {});
 
@@ -30,7 +30,7 @@ export function usePinToggle() {
               tone: 'ok',
               title: 'Pinned as a baseline',
               description: 'Run your agent again, then compare the new run against this one in Experiments.',
-              ...(others.length > 0 ? { action: { label: 'Compare now', run: () => router.push(compareHref({ a: run.runId, b: null })) } } : {}),
+              ...(others.length > 0 ? { action: { label: 'Compare now', run: () => nav.openCompare({ a: run.runId, b: null }) } } : {}),
             }
           : {
               tone: 'ok',
@@ -48,7 +48,7 @@ export function usePinToggle() {
     } finally {
       setBusy(null);
     }
-  }, [store, router]);
+  }, [store, nav]);
   self.current = toggle;
 
   return useMemo(() => ({ toggle, busy }), [toggle, busy]);
@@ -96,10 +96,24 @@ export function PinButton({ run, iconOnly, size = 'sm', variant }: { run: RunSum
 /** "Compare with baseline" for a run that is not itself the newest baseline; null when there is none. */
 export function CompareWithBaseline({ run }: { run: RunSummary }) {
   const runs = useStudio((s) => s.runs);
+  const nav = useStudioNav();
   const base = baselineFor(runs, run.runId);
   if (!base) return null;
+  const pair = { a: base.runId, b: run.runId };
   return (
-    <ButtonLink href={compareHref({ a: base.runId, b: run.runId })} size="sm" variant="ghost" icon="compare" title={`Compare this run with the baseline “${base.title}”`}>
+    <ButtonLink
+      href={compareHref(pair)}
+      size="sm"
+      variant="ghost"
+      icon="compare"
+      title={`Compare this run with the baseline “${base.title}”`}
+      onClick={(e) => {
+        // In the world: the compare sheet at the Lattice Lab (a modified click still opens the page).
+        if (!nav.inWorld || !plainClick(e)) return;
+        e.preventDefault();
+        nav.openCompare(pair);
+      }}
+    >
       Compare
     </ButtonLink>
   );

@@ -7,6 +7,7 @@ import {
   type DispatchPolicyResponse,
   type DispatchPreviewRequest,
   type DispatchPreviewResponse,
+  type DispatchPreviewStatusResponse,
   type DispatchResponse,
 } from '@runloop-world/events';
 import { apiUrl } from '../../lib/api';
@@ -29,12 +30,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Writes are JSON; the browser adds the Origin header the runtime requires for approval. */
+/** Writes are JSON. */
 const postJson = (body: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 export const getDispatchPolicy = () => request<DispatchPolicyResponse>(worldApiPaths.dispatchPolicy);
 export const previewDispatch = (agentId: string, body: DispatchPreviewRequest) => request<DispatchPreviewResponse>(worldApiPaths.dispatchPreview(agentId), postJson(body));
-export const approveDispatch = (previewId: string, approvalNonce: string) => request<DispatchResponse>(worldApiPaths.dispatches, postJson({ previewId, approvalNonce }));
+/**
+ * Where a preview's approval stands. Studio never approves a task itself: a
+ * person approves it on the runtime's own page (`preview.approveUrl`), and
+ * Studio follows the outcome here.
+ */
+export const getPreviewStatus = (previewId: string) => request<DispatchPreviewStatusResponse>(worldApiPaths.dispatchPreviewStatus(previewId));
 export const getDispatch = (dispatchId: string) => request<DispatchResponse>(worldApiPaths.dispatch(dispatchId));
 export const cancelDispatch = (dispatchId: string) => request<DispatchResponse>(worldApiPaths.dispatchCancel(dispatchId), postJson({}));
 export const dispatchStreamUrl = (dispatchId: string) => apiUrl(worldApiPaths.dispatchStream(dispatchId));

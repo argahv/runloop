@@ -2,11 +2,12 @@
 import { useFrame } from '@react-three/fiber';
 import { isOpenAt, minuteOfDay } from '@runloop-world/town';
 import type { CompiledTown } from '@runloop-world/town';
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { DoubleSide, FrontSide, type BufferGeometry, type Material, type Vector4 } from 'three';
 import { useTown } from './context';
 import { cutRect } from './place';
-import { buildBuildings } from './geometry/buildings';
+import { buildBuildings, buildingShape } from './geometry/buildings';
+import type { SurroundLayout } from './geometry/surroundings';
 import { buildDecoration } from './geometry/deco';
 import { buildGround, buildRoadPaint, buildWater } from './geometry/ground';
 import { GeoBuilder } from './geometry/builder';
@@ -19,11 +20,12 @@ import { createSignMaterial, createTownMaterial, createWaterMaterial } from './t
  * per town; per-frame state reaches them only through the town uniforms
  * (night, lit windows, open signs, the open interior, dimming).
  */
-export const StaticTown = memo(function StaticTown({ seed, shadows }: { seed: number; shadows: boolean }) {
-  const { town, places, uniforms, frame } = useTown();
+export const StaticTown = memo(function StaticTown({ seed, shadows, layout }: { seed: number; shadows: boolean; layout?: SurroundLayout | undefined }) {
+  const { town, places, uniforms, frame, live } = useTown();
+  const exits = layout?.exits;
 
   const built = useMemo(() => {
-    const ground = buildGround(town)
+    const ground = buildGround(town, exits)
       .map((g) => g.build())
       .filter((g): g is BufferGeometry => g !== null);
     const paint = buildRoadPaint(town).build();
@@ -31,9 +33,9 @@ export const StaticTown = memo(function StaticTown({ seed, shadows }: { seed: nu
     const bgb = new GeoBuilder();
     const signs = buildSigns(buildBuildings(town, bgb));
     const buildings = bgb.build();
-    const deco = buildDecoration(town, places, seed).build();
+    const deco = buildDecoration(town, places, seed, exits).build();
     return { ground, paint, water, buildings, deco, signs: signs ? { geometry: signs.geometry.build()!, texture: signs.texture } : null };
-  }, [town, places, seed]);
+  }, [town, places, seed, exits]);
 
   const mats = useMemo(
     () => ({
@@ -54,6 +56,30 @@ export const StaticTown = memo(function StaticTown({ seed, shadows }: { seed: nu
     [built, mats],
   );
 
+  // Flying in: the open building's roof lifts and dissolves (450 ms) while its walls give way to the cutaway;
+  // leaving, the roof settles back. Reduced motion cuts.
+  const lift = useRef<{ id: string | null; value: number }>({ id: null, value: 0 });
+  useFrame((_, dt) => {
+    const L = lift.current;
+    const target = frame.entered && town.buildingById.has(frame.entered) ? frame.entered : null;
+    if (target && target !== L.id) {
+      L.id = target;
+      L.value = 0;
+      const b = town.buildingById.get(target)!;
+      uniforms.uLiftBld.value = b.idx + 1;
+      uniforms.uLiftBase.value = Math.max(0.6, buildingShape(b).wallTop - 0.05);
+    }
+    const goal = target ? 1 : 0;
+    const step = live.reducedMotion ? 1 : Math.min(dt, 0.1) / 0.45;
+    L.value = goal > L.value ? Math.min(goal, L.value + step) : Math.max(goal, L.value - step);
+    uniforms.uRoofLift.value = L.value;
+    uniforms.uWallsHidden.value = target ? 1 : 0;
+    if (!target && L.value <= 0 && L.id) {
+      L.id = null;
+      uniforms.uLiftBld.value = 0;
+    }
+  });
+
   // Per-building state for the material: occupied (windows lit), hidden (interior open), open now (sign lit).
   useFrame(() => {
     const tex = uniforms.uBld.value;
@@ -64,7 +90,8 @@ export const StaticTown = memo(function StaticTown({ seed, shadows }: { seed: nu
     for (const b of town.buildings) {
       const st = snap?.buildings[b.idx]?.id === b.def.id ? snap.buildings[b.idx] : snap?.buildings.find((x) => x.id === b.def.id);
       const lit = st && st.occupancy > 0 ? 255 : 0;
-      const hidden = frame.entered === b.def.id ? 255 : 0;
+      // The open building is hidden by its lift (roof dissolving, walls replaced by the cutaway).
+      const hidden = frame.entered === b.def.id && uniforms.uLiftBld.value !== b.idx + 1 ? 255 : 0;
       const open = st ? (st.open && isOpenAt(b.hours, minute) ? 255 : 0) : 0;
       const o = b.idx * 4;
       if (data[o] !== lit || data[o + 1] !== hidden || data[o + 2] !== open) {

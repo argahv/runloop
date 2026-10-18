@@ -1,18 +1,17 @@
 'use client';
 import type { RunSummary } from '@runloop-world/events';
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { connectCommands } from '../../lib/claude-code';
 import { apiBase } from '../../lib/config';
 import { useStudio, useStudioStore } from '../../state/context';
 import { ROUTES } from '../../state/deeplink';
 import { formatWhen, runDurationMs } from '../../state/format';
-import { selectRun, useTicker } from '../../state/hooks';
+import { useTicker } from '../../state/hooks';
 import { nextStep, ONBOARDING_STEPS, stepsDone, type OnboardingStep } from '../../state/onboarding';
 import { activityText, formatAgo, groupRuns, isTracedRun, lastTracedEventAt, runSourceLabel, runSubtitle } from '../../state/runs';
 import { formatDuration } from '../../state/timeline';
 import { runStatusView } from '../../state/view';
-import { Button, ButtonLink } from '../../ui/Button';
+import { Button } from '../../ui/Button';
 import { Card } from '../../ui/Card';
 import { Chip, StatusBadge } from '../../ui/Chip';
 import { CommandSnippet } from '../../ui/CommandSnippet';
@@ -20,6 +19,9 @@ import { Icon } from '../../ui/Icon';
 import { Kbd, modKey } from '../../ui/Kbd';
 import { EmptyState, Skeleton } from '../../ui/States';
 import { BaselineBadge, PinButton } from '../Baseline';
+import { NavButtonLink, useInWorld, useStudioNav } from '../overlays/nav';
+import SheetScroll from '../overlays/SheetScroll';
+import OpenInWorld from '../overlays/OpenInWorld';
 import { OfflineState } from '../RunStates';
 import { useStartDemo } from '../useStartDemo';
 import styles from './Pages.module.css';
@@ -35,25 +37,13 @@ function SourceChip({ run }: { run: RunSummary }) {
 
 /** Overview: getting started, runtime health, live sessions and run history. */
 export default function OverviewPage() {
-  const store = useStudioStore();
-  const router = useRouter();
-  const runtime = useStudio((s) => s.runtime);
-  const runs = useStudio((s) => s.runs);
-  const onboarding = useStudio((s) => s.onboarding);
-  useStudio((s) => s.apiBaseOverride); // re-render when the runtime URL changes
-  const groups = useMemo(() => groupRuns(runs), [runs]);
-  useTicker(groups.live.length > 0, 5000);
-
-  const open = (runId: string, route: string = ROUTES.world) => {
-    selectRun(store, runId);
-    router.push(route);
-  };
-
-  const online = runtime.status === 'online';
-  const done = stepsDone(onboarding, runs);
-  const allDone = nextStep(done) === null;
-  const showChecklist = online && !onboarding.dismissed && !allDone;
-
+  // Inside the world (the Sessions sheet): the panel alone, sized for the narrow sheet.
+  if (useInWorld())
+    return (
+      <SheetScroll>
+        <SessionsPanel compact />
+      </SheetScroll>
+    );
   return (
     <div className={styles.page}>
       <div className={styles.pageInner}>
@@ -62,90 +52,177 @@ export default function OverviewPage() {
             <h1 className={styles.h1}>Overview</h1>
             <p className={styles.lede}>A local flight recorder for coding agents: watch a run live, replay any moment, and inspect every tool call.</p>
           </div>
+          <OpenInWorld />
         </header>
-
-        {runtime.status === 'offline' ? (
-          <Card>
-            <OfflineState />
-          </Card>
-        ) : (
-          <div className={styles.overviewTop}>
-            {showChecklist ? <Checklist done={done} onOpen={open} /> : <QuickStart />}
-            <HealthCard />
-          </div>
-        )}
-
-        {/* Offline, the runtime's sessions and runs are unknown: say nothing rather than "none". */}
-        {runtime.status !== 'offline' && (
-          <>
-            <Card title="Live sessions" subtitle="Recording right now; idle time counts from the last recorded event" labelledBy="live-sessions">
-              <div className={styles.cardBody}>
-                {runtime.status === 'unknown' ? (
-                  <Skeleton height={52} radius={8} />
-                ) : groups.live.length === 0 ? (
-                  <EmptyState inline icon="pulse" title="Nothing is recording">
-                    <p>Run Claude Code with the plugin installed, or start the demo mission. A session appears here with its first recorded event, and the Studio opens it when nothing else is open.</p>
-                  </EmptyState>
-                ) : (
-                  <ul className={styles.sessions}>
-                    {groups.live.map((r) => (
-                      <LiveSession key={r.runId} run={r} n={runs.length - runs.indexOf(r)} onOpen={open} />
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </Card>
-
-            <Card title="Run history" subtitle="Everything this runtime recorded, newest first" labelledBy="run-history">
-              {runtime.status === 'unknown' ? (
-                <div className={styles.cardBody}>
-                  <Skeleton height={14} />
-                  <Skeleton height={14} width="80%" />
-                  <Skeleton height={14} width="60%" />
-                </div>
-              ) : groups.traced.length + groups.demo.length === 0 ? (
-                <div className={styles.cardBody}>
-                  <EmptyState inline icon="traces" title={runs.length ? 'No finished runs yet' : 'No runs recorded yet'}>
-                    <p>
-                      Finished runs are kept here to replay. Start one from the checklist above, or from a terminal: <code>pnpm demo</code>.
-                    </p>
-                  </EmptyState>
-                </div>
-              ) : (
-                <div className={styles.tableWrap}>
-                  <table className={styles.table}>
-                    <thead>
-                      <tr>
-                        <th scope="col">#</th>
-                        <th scope="col">Run</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Source</th>
-                        <th scope="col">Started</th>
-                        <th scope="col" className={styles.right}>
-                          Duration
-                        </th>
-                        <th scope="col" className={styles.right}>
-                          Events
-                        </th>
-                        <th scope="col">
-                          <span className="sr-only">Actions</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <HistoryGroup title="Claude Code sessions" icon="eye" runs={groups.traced} all={runs} onOpen={open} />
-                    <HistoryGroup title="Demo runs" icon="terminal" runs={groups.demo} all={runs} onOpen={open} />
-                  </table>
-                </div>
-              )}
-            </Card>
-          </>
-        )}
+        <SessionsPanel />
       </div>
     </div>
   );
 }
 
-function HistoryGroup({ title, icon, runs, all, onOpen }: { title: string; icon: 'eye' | 'terminal'; runs: RunSummary[]; all: RunSummary[]; onOpen: (id: string, route?: string) => void }) {
+/**
+ * Getting started, runtime health, live sessions and run history: the
+ * Overview page's content, and the in-world Sessions sheet's (`compact`:
+ * the run history is a list that fits the narrow sheet). Run links go
+ * through `useStudioNav`, so in the world they open the trace sheet or the
+ * run's building instead of leaving.
+ */
+export function SessionsPanel({ compact = false }: { compact?: boolean }) {
+  const nav = useStudioNav();
+  const runtime = useStudio((s) => s.runtime);
+  const runs = useStudio((s) => s.runs);
+  const onboarding = useStudio((s) => s.onboarding);
+  useStudio((s) => s.apiBaseOverride); // re-render when the runtime URL changes
+  const groups = useMemo(() => groupRuns(runs), [runs]);
+  useTicker(groups.live.length > 0, 5000);
+
+  const open: OpenRun = (runId, route = ROUTES.world) => {
+    if (route === ROUTES.traces) nav.openTrace(runId);
+    else nav.openRunWorld(runId);
+  };
+
+  const online = runtime.status === 'online';
+  const done = stepsDone(onboarding, runs);
+  const allDone = nextStep(done) === null;
+  const showChecklist = online && !onboarding.dismissed && !allDone;
+
+  return (
+    <>
+      {runtime.status === 'offline' ? (
+        <Card>
+          <OfflineState compact={compact} />
+        </Card>
+      ) : (
+        <div className={styles.overviewTop}>
+          {showChecklist ? <Checklist done={done} onOpen={open} /> : <QuickStart />}
+          <HealthCard onOpen={open} />
+        </div>
+      )}
+
+      {/* Offline, the runtime's sessions and runs are unknown: say nothing rather than "none". */}
+      {runtime.status !== 'offline' && (
+        <>
+          <Card title="Live sessions" subtitle="Recording right now; idle time counts from the last recorded event" labelledBy="live-sessions">
+            <div className={styles.cardBody}>
+              {runtime.status === 'unknown' ? (
+                <Skeleton height={52} radius={8} />
+              ) : groups.live.length === 0 ? (
+                <EmptyState inline icon="pulse" title="Nothing is recording">
+                  <p>Run Claude Code with the plugin installed, or start the demo mission. A session appears here with its first recorded event, and the Studio opens it when nothing else is open.</p>
+                </EmptyState>
+              ) : (
+                <ul className={styles.sessions}>
+                  {groups.live.map((r) => (
+                    <LiveSession key={r.runId} run={r} n={runs.length - runs.indexOf(r)} onOpen={open} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Card>
+
+          <Card title="Run history" subtitle="Everything this runtime recorded, newest first" labelledBy="run-history">
+            {runtime.status === 'unknown' ? (
+              <div className={styles.cardBody}>
+                <Skeleton height={14} />
+                <Skeleton height={14} width="80%" />
+                <Skeleton height={14} width="60%" />
+              </div>
+            ) : groups.traced.length + groups.demo.length === 0 ? (
+              <div className={styles.cardBody}>
+                <EmptyState inline icon="traces" title={runs.length ? 'No finished runs yet' : 'No runs recorded yet'}>
+                  <p>
+                    Finished runs are kept here to replay. Start one from the checklist above, or from a terminal: <code>pnpm demo</code>.
+                  </p>
+                </EmptyState>
+              </div>
+            ) : compact ? (
+              <div className={styles.cardBody}>
+                <HistoryList title="Claude Code sessions" icon="eye" runs={groups.traced} all={runs} onOpen={open} />
+                <HistoryList title="Demo runs" icon="terminal" runs={groups.demo} all={runs} onOpen={open} />
+              </div>
+            ) : (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">Run</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Source</th>
+                      <th scope="col">Started</th>
+                      <th scope="col" className={styles.right}>
+                        Duration
+                      </th>
+                      <th scope="col" className={styles.right}>
+                        Events
+                      </th>
+                      <th scope="col">
+                        <span className="sr-only">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <HistoryGroup title="Claude Code sessions" icon="eye" runs={groups.traced} all={runs} onOpen={open} />
+                  <HistoryGroup title="Demo runs" icon="terminal" runs={groups.demo} all={runs} onOpen={open} />
+                </table>
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+    </>
+  );
+}
+
+type OpenRun = (runId: string, route?: string) => void;
+
+/** The run history as a list (the narrow Sessions sheet): the same facts as the table's columns, stacked. */
+function HistoryList({ title, icon, runs, all, onOpen }: { title: string; icon: 'eye' | 'terminal'; runs: RunSummary[]; all: RunSummary[]; onOpen: OpenRun }) {
+  if (runs.length === 0) return null;
+  const id = `history-${icon}`;
+  return (
+    <section className={styles.historyList} aria-labelledby={id}>
+      <h3 id={id} className={styles.groupTitle}>
+        <Icon name={icon} size={13} />
+        {title}
+        <span className={styles.groupCount}>{runs.length}</span>
+      </h3>
+      <ul className={styles.historyItems}>
+        {runs.map((r) => {
+          const n = all.length - all.indexOf(r);
+          const ms = runDurationMs(r);
+          const sub = runSubtitle(r);
+          return (
+            <li key={r.runId} className={styles.historyItem}>
+              <div className={styles.historyMain}>
+                <span className={styles.rowTitle}>
+                  <span className={styles.sessionNum}>#{n}</span>
+                  <button type="button" className={styles.rowLink} onClick={() => onOpen(r.runId)}>
+                    {r.title}
+                  </button>
+                  <BaselineBadge run={r} compact />
+                </span>
+                {sub && <span className={styles.rowSub}>{sub}</span>}
+                <span className={styles.historyMeta}>
+                  <StatusBadge view={runStatusView(r.status, r.paused, isTracedRun(r))} />
+                  <SourceChip run={r} />
+                  <span className={styles.num}>
+                    {formatWhen(r.createdAt)} · {ms !== null ? formatDuration(ms) : <span className={styles.none}>duration not reported</span>} · {r.lastSequence} events
+                  </span>
+                </span>
+              </div>
+              <span className={styles.rowActions}>
+                <PinButton run={r} iconOnly />
+                <Button size="sm" variant="ghost" iconOnly icon="traces" onClick={() => onOpen(r.runId, ROUTES.traces)} aria-label={`Open run ${n} in Traces`} title="Open its trace" />
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function HistoryGroup({ title, icon, runs, all, onOpen }: { title: string; icon: 'eye' | 'terminal'; runs: RunSummary[]; all: RunSummary[]; onOpen: OpenRun }) {
   if (runs.length === 0) return null;
   return (
     <tbody>
@@ -198,7 +275,7 @@ function HistoryGroup({ title, icon, runs, all, onOpen }: { title: string; icon:
   );
 }
 
-function LiveSession({ run, n, onOpen }: { run: RunSummary; n: number; onOpen: (id: string, route?: string) => void }) {
+function LiveSession({ run, n, onOpen }: { run: RunSummary; n: number; onOpen: OpenRun }) {
   const traced = isTracedRun(run);
   const ms = runDurationMs(run);
   const activity = traced ? activityText(run, Date.now()) : null;
@@ -237,11 +314,9 @@ function LiveSession({ run, n, onOpen }: { run: RunSummary; n: number; onOpen: (
   );
 }
 
-function HealthCard() {
+function HealthCard({ onOpen }: { onOpen: OpenRun }) {
   const runtime = useStudio((s) => s.runtime);
   const runs = useStudio((s) => s.runs);
-  const store = useStudioStore();
-  const router = useRouter();
   const online = runtime.status === 'online';
   const ingest = runtime.ingest;
   const lastTraced = lastTracedEventAt(runs);
@@ -303,14 +378,7 @@ function HealthCard() {
               {!online ? (
                 checking
               ) : runtime.activeRunId ? (
-                <button
-                  type="button"
-                  className={styles.rowLink}
-                  onClick={() => {
-                    selectRun(store, runtime.activeRunId!);
-                    router.push(ROUTES.world);
-                  }}
-                >
+                <button type="button" className={styles.rowLink} onClick={() => onOpen(runtime.activeRunId!)}>
                   Watch it
                 </button>
               ) : (
@@ -341,9 +409,9 @@ function QuickStart() {
             </span>
             <p className={styles.cardText}>Use Claude Code as normal with the plugin installed. Runloop records what it reports and never runs or approves anything.</p>
             <div className={styles.cardActions}>
-              <ButtonLink href={ROUTES.integrations} size="sm" icon="integrations">
+              <NavButtonLink href={ROUTES.integrations} size="sm" icon="integrations">
                 Connect Claude Code
-              </ButtonLink>
+              </NavButtonLink>
             </div>
           </div>
           <div className={styles.option}>
@@ -372,7 +440,7 @@ const STEP_TITLE: Record<OnboardingStep, string> = {
 };
 
 /** Getting started: teaches run demo → connect Claude Code → open a run → inspect a failure → replay. */
-function Checklist({ done, onOpen }: { done: Record<OnboardingStep, boolean>; onOpen: (id: string, route?: string) => void }) {
+function Checklist({ done, onOpen }: { done: Record<OnboardingStep, boolean>; onOpen: OpenRun }) {
   const store = useStudioStore();
   const runs = useStudio((s) => s.runs);
   const ingest = useStudio((s) => s.runtime.ingest);
@@ -403,9 +471,9 @@ function Checklist({ done, onOpen }: { done: Record<OnboardingStep, boolean>; on
         </p>
         <CommandSnippet command={cmds.claude} />
         <div className={styles.cardActions}>
-          <ButtonLink href={ROUTES.integrations} size="sm" variant="ghost" icon="integrations">
+          <NavButtonLink href={ROUTES.integrations} size="sm" variant="ghost" icon="integrations">
             Marketplace install, doctor and privacy
-          </ButtonLink>
+          </NavButtonLink>
         </div>
       </>
     ),

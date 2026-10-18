@@ -1,4 +1,4 @@
-import { foldExecution, initialExecState, type DiffNote, type ExecState, type FieldDiff, type RunDiff } from '@runloop-world/core';
+import { foldExecution, initialExecState, type DiffCaveat, type DiffNote, type ExecState, type FieldDiff, type RunDiff } from '@runloop-world/core';
 import { invalidEnvelopeEvent, parseEvent, type AnyEvent, type RunOutcome } from '@runloop-world/events';
 import type { IconName } from '../ui/Icon';
 import { formatTokens } from './labels';
@@ -32,6 +32,19 @@ export function noteText(note: DiffNote): string {
   return NOTE_TEXT[note];
 }
 
+const CAVEAT_TEXT: Record<DiffCaveat, string> = {
+  incomplete: 'neither run ran to completion',
+  incomplete_a: 'the baseline did not run to completion',
+  incomplete_b: 'the candidate did not run to completion',
+  outcome_differs: 'one run failed, the other did not',
+  scope_differs: 'the latest test runs covered different numbers of tests',
+};
+
+/** Why two reported, final values support no verdict (core withholds it). */
+export function caveatText(caveat: DiffCaveat): string {
+  return CAVEAT_TEXT[caveat];
+}
+
 export interface ChangeView {
   tone: 'ok' | 'err' | 'warn' | 'info' | 'muted';
   icon: IconName;
@@ -53,7 +66,7 @@ export interface ChangeSpec {
 /** The change chip for a numeric field. */
 export function changeView(f: FieldDiff<number>, spec: ChangeSpec): ChangeView {
   if (!f.comparable || f.delta === null) {
-    return { tone: 'muted', icon: 'minus', text: 'not comparable', detail: f.note ? noteText(f.note) : null };
+    return { tone: 'muted', icon: 'minus', text: 'not comparable', detail: f.caveat ? caveatText(f.caveat) : f.note ? noteText(f.note) : null };
   }
   const caveat = f.note ? noteText(f.note) : null;
   if (f.delta === 0) return { tone: 'muted', icon: 'minus', text: 'no change', detail: caveat };
@@ -85,6 +98,7 @@ export const CHANGE = {
   turns: { better: 'neutral', say: fewerMore('turn') },
   subagents: { better: 'neutral', say: fewerMore('subagent') },
   events: { better: 'neutral', say: fewerMore('event') },
+  cost: { better: 'lower', say: (n, down) => `$${n.toFixed(4).replace(/0{1,2}$/, '')} ${down ? 'less' : 'more'}` },
 } satisfies Record<string, ChangeSpec>;
 
 /** How an outcome reads; a traced session that ended normally is "ended" (it claims nothing about success). */
@@ -93,7 +107,7 @@ export function outcomeText(outcome: RunOutcome | null, traced: boolean): string
   return traced && outcome === 'stopped' ? 'ended' : outcome;
 }
 
-/** The outcome change: success ↔ failure is judged; anything else is described. */
+/** The outcome change: success ↔ failure is judged, so is a run that no longer finishes; anything else is described. */
 export function outcomeChange(o: RunDiff['outcome'], traced: [boolean, boolean]): ChangeView {
   if (!o.comparable) return { tone: 'muted', icon: 'minus', text: 'not comparable', detail: o.note ? noteText(o.note) : null };
   const caveat = o.note ? noteText(o.note) : null;
@@ -101,6 +115,10 @@ export function outcomeChange(o: RunDiff['outcome'], traced: [boolean, boolean])
   const to = outcomeText(o.b, traced[1]);
   if (o.b === 'succeeded' && o.a === 'failed') return { tone: 'ok', icon: 'arrowUp', text: 'now succeeds', detail: caveat };
   if (o.b === 'failed') return { tone: 'err', icon: 'arrowDown', text: 'now fails', detail: caveat };
+  // A run that finished, then one that did not (an executed run stopped, or any run interrupted): a warning.
+  const finishedA = o.a === 'succeeded' || (o.a === 'stopped' && traced[0]);
+  const unfinishedB = o.b === 'interrupted' || (o.b === 'stopped' && !traced[1]);
+  if (finishedA && unfinishedB) return { tone: 'warn', icon: 'alert', text: 'did not finish', detail: caveat ?? `now ${to}` };
   return { tone: 'info', icon: 'swap', text: `now ${to}`, detail: caveat };
 }
 

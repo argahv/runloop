@@ -7,14 +7,15 @@
 import type { EntityRef, WorldSnapshot } from '@runloop-world/events';
 import type { CompiledTown } from '@runloop-world/town';
 import { createContext, useContext } from 'react';
-import type { Vector3 } from 'three';
+import type { Object3D, Vector3 } from 'three';
 import type { ScopedLabelStore } from './AgentHouse';
 import type { Tier } from './lod';
 import type { TownPlaces } from './place';
 import type { QualitySettings } from './quality';
 import type { Sky } from './sky';
+import type { TownCamRuntime } from './TownCamera';
 import type { TownUniforms } from './townMaterial';
-import type { AgentHouseSource, TownLevel } from './types';
+import type { AgentHouseSource, LotPick, TownLevel } from './types';
 
 export interface TownFrame {
   /** Fractional world tick drawn this frame. */
@@ -40,6 +41,8 @@ export interface TownFrame {
   entered: string | null;
   /** Camera azimuth (radians; the view looks from (sin, cos) on the ground plane: π/4 = from the south-east). */
   camAz: number;
+  /** Wall seconds for decorative ambient life: frozen while the world is paused or under reduced motion. */
+  ambientT: number;
   /** Bumps when the snapshot object or its contents may have changed (cheap change detection). */
   version: number;
 }
@@ -66,7 +69,13 @@ export interface TownCtx {
     follow: EntityRef | null;
     reducedMotion: boolean;
     quality: QualitySettings;
-    agentHouse?: (agentId: string) => AgentHouseSource | null;
+    agentHouse?: ((agentId: string) => AgentHouseSource | null) | undefined;
+    /** Add to World: the lots on offer (free ones glow and are pickable), or null. */
+    lotPick: LotPick | null;
+    /** At most this many labels. */
+    labelBudget: number;
+    /** Decorative ambient life is on (not paused by reduced motion or the shell). */
+    ambient: boolean;
   };
   /** Residents and agents write their world positions here every frame (for picking, labels and the camera). */
   residentPos: Float32Array;
@@ -74,6 +83,10 @@ export interface TownCtx {
   agentPos: Map<string, Vector3>;
   /** Labels of an open agent headquarters' diorama (scene/labels, anchors carried to world space). */
   dioramaLabels: ScopedLabelStore;
+  /** The camera: controller, this frame's view, fog distances, the HUD's state. */
+  cam: TownCamRuntime;
+  /** The countryside's meshes (perf: surroundCalls). */
+  surround: Set<Object3D>;
 }
 
 export const TownContext = createContext<TownCtx | null>(null);

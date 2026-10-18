@@ -2,12 +2,14 @@
  * The ground: one merged mesh per chunk with vertex colours (grass by
  * district, mown park stripes, garden rows, asphalt with lane marks,
  * sidewalks with curbs, zebra crossings, paved plazas, gravel paths, a pond
- * with a stone bank), standing on the town's slab. Static: built once.
+ * with a stone bank). The town no longer stands on a slab: its grass margin
+ * meets the land beyond (geometry/surroundings.ts), and the roads out cross
+ * the margin on `exits` cells that ramp up from the road datum. Static: built once.
  */
 import { GROUND, type CompiledTown } from '@runloop-world/town';
 import { Color, Vector3 } from 'three';
 import { mixHex, scaleHex } from '../color';
-import { MARGIN, SLAB_DEPTH, SURFACE_Y, cellY, sceneX, sceneZ } from '../coords';
+import { MARGIN, SURFACE_Y, cellY, sceneX, sceneZ } from '../coords';
 import { GROUND_COLORS as G, AGENT_HQ_COLORS } from '../townPalette';
 import { GeoBuilder } from './builder';
 
@@ -82,9 +84,16 @@ function contactShade(town: CompiledTown, x: number, y: number): number {
   return Math.min(0.12, k * 0.035);
 }
 
-/** Ground geometry, one builder per CHUNK × CHUNK cells (plus the slab and the margin in the edge chunks). */
-export function buildGround(town: CompiledTown): GeoBuilder[] {
+/** Key of a town cell (margin included) in an `exits` map. */
+export const exitKey = (town: { width: number }, gx: number, gy: number) => (gy + MARGIN) * (town.width + 2 * MARGIN) + gx + MARGIN;
+
+/**
+ * Ground geometry, one builder per CHUNK × CHUNK cells (the margin in the edge chunks).
+ * `exits`: cells the roads out cross (exitKey → surface height), drawn as asphalt.
+ */
+export function buildGround(town: CompiledTown, exits: ReadonlyMap<number, number> = new Map()): GeoBuilder[] {
   const { width, height } = town;
+  const groundH = (x: number, y: number) => exits.get(exitKey(town, x, y)) ?? cellY(town, x, y);
   const agentLot = new Uint8Array(width * height);
   for (const l of town.agentLots) {
     const [lx, ly, lw, lh] = l.rect;
@@ -101,13 +110,18 @@ export function buildGround(town: CompiledTown): GeoBuilder[] {
   for (let y = -MARGIN; y < height + MARGIN; y++) {
     for (let x = -MARGIN; x < width + MARGIN; x++) {
       const inside = x >= 0 && y >= 0 && x < width && y < height;
-      const look = inside ? lookOf(town, x, y, agentLot) : { top: scaleHex(G.grass, 0.97 + 0.06 * noise2(x, y)), side: G.soil };
+      const exit = exits.has(exitKey(town, x, y));
+      const look = exit
+        ? { top: scaleHex(G.asphalt, 0.99 + 0.02 * noise2(x, y)), side: G.asphaltDark }
+        : inside
+          ? lookOf(town, x, y, agentLot)
+          : { top: scaleHex(G.grass, 0.97 + 0.06 * noise2(x, y)), side: G.soil };
       // Baked contact shade: ground beside a building or landmark is a little darker (cheap ambient occlusion).
-      if (inside) {
+      if (inside && !exit) {
         const ao = contactShade(town, x, y);
         if (ao > 0) look.top = scaleHex(look.top, 1 - ao);
       }
-      const h = cellY(town, x, y);
+      const h = groundH(x, y);
       const gb = chunkAt(x, y);
       const x0 = sceneX(f, x) - 0.5;
       const x1 = x0 + 1;
@@ -122,24 +136,15 @@ export function buildGround(town: CompiledTown): GeoBuilder[] {
         [x - 1, y, v(x0, 0, z0), v(x0, 0, z1)],
       ];
       for (const [nx, ny, a, b] of sides) {
+        // Beyond the margin the land continues (no slab edge): the terrain meets it there.
         const outside = nx < -MARGIN || ny < -MARGIN || nx >= width + MARGIN || ny >= height + MARGIN;
-        const nh = outside ? -SLAB_DEPTH : cellY(town, nx, ny);
+        if (outside) continue;
+        const nh = groundH(nx, ny);
         if (nh >= h - 1e-4) continue;
-        if (outside) {
-          // The slab's edge: a band of turf over the soil.
-          const turf = Math.max(nh, h - 0.16);
-          gb.quad(v(a.x, turf, a.z), v(b.x, turf, b.z), v(b.x, h, b.z), v(a.x, h, a.z), scaleHex(look.top, 0.8));
-          gb.quad(v(a.x, nh, a.z), v(b.x, nh, b.z), v(b.x, turf, b.z), v(a.x, turf, a.z), noise2(x, y, 7) < 0.5 ? G.soil : G.soilDark);
-          continue;
-        }
         gb.quad(v(a.x, nh, a.z), v(b.x, nh, b.z), v(b.x, h, b.z), v(a.x, h, a.z), look.side);
       }
     }
   }
-  // Under the slab: a dark underside so the island reads solid from low angles.
-  const hx = width / 2 + MARGIN;
-  const hz = height / 2 + MARGIN;
-  chunks[0]!.quad(v(-hx, -SLAB_DEPTH, -hz), v(hx, -SLAB_DEPTH, -hz), v(hx, -SLAB_DEPTH, hz), v(-hx, -SLAB_DEPTH, hz), G.soilDark);
   return chunks;
 }
 

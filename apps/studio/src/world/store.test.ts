@@ -1,5 +1,7 @@
 import { applyEvent, foldEvents, hashState } from '@runloop-world/sim';
 import { describe, expect, it } from 'vitest';
+import type { WorldEvent } from '@runloop-world/events';
+import { tickNow } from './interpolate';
 import { createWorldStore, focusOf } from './store';
 import { commonsTown, DOCS_DESK, ENGINEERING_HOUSE, fixtureEvents, fixtureSnapshot } from './test-utils';
 
@@ -126,5 +128,36 @@ describe('world store fold', () => {
     expect(s().camera!.motion).toBe('cut');
     s().closePanels();
     expect(focusOf(s())).toBeNull();
+  });
+});
+
+describe('world store clock', () => {
+  it('a pause event stops the clock at once without moving it back', () => {
+    const store = loaded();
+    // The snapshot is folded in place: keep its numbers from before the pause.
+    const { seq, tick, speed } = store.getState().snapshot!;
+    expect(speed).toBe(4);
+    // Running at 4× since NOW: 1 s later the client shows tick + 4; the pause happened at tick + 3.
+    const pause = { seq: seq + 1, tick: tick + 3, type: 'world.clock_changed', prov: 'user', p: { speed: 0, prevSpeed: speed } } as unknown as WorldEvent;
+    store.getState().applyEvents([pause], NOW + 1000);
+    const clock = store.getState().clock!;
+    expect(clock.speed).toBe(0);
+    expect(clock.tick).toBe(tick + 4);
+    // Frozen afterwards, not extrapolated at the old speed until the next clock frame.
+    expect(tickNow(clock, NOW + 1800)).toBe(tick + 4);
+  });
+
+  it('forgets the old world entirely when another world answers', () => {
+    const store = loaded();
+    store.getState().focusEntity({ kind: 'resident', id: 'res_0001' });
+    store.getState().addPending({ id: 'c1', command: { type: 'clock.set', speed: 0 }, label: 'Pausing', sentAt: NOW, state: 'sending' });
+    store.getState().resetWorld();
+    const s = store.getState();
+    expect(s.snapshot).toBeNull();
+    expect(s.panelStack).toEqual([]);
+    expect(s.pending).toEqual({});
+    expect(s.attention).toEqual([]);
+    expect(s.log).toEqual([]);
+    expect(s.lastSeenSeq).toBeNull();
   });
 });

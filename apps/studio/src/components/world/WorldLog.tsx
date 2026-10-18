@@ -1,8 +1,7 @@
 'use client';
 import { isAmbientWorldEvent, WORLD_EVENT_TYPES, type EntityKind, type WorldEvent, type WorldProvenance } from '@runloop-world/events';
-import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { linkTo, ROUTES } from '../../state/deeplink';
+import { ROUTES } from '../../state/deeplink';
 import { getWorldEventsSince } from '../../world/api';
 import { useWorld, useWorldStore } from '../../world/context';
 import { entityName } from '../../world/entityIndex';
@@ -10,6 +9,7 @@ import { clockParts } from '../../world/interpolate';
 import { eventRunLink, eventText, provenanceChip } from '../../world/selectors';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
+import { useStudioNav } from '../overlays/nav';
 import styles from './WorldLog.module.css';
 
 type ProvFilter = 'all' | WorldProvenance;
@@ -40,8 +40,9 @@ const actorRef = (e: WorldEvent): { kind: EntityKind; id: string } | null => {
  * the run events behind them in Traces. Movement and decisions (ambient) are
  * here, never in the ticker.
  */
-export default function WorldLog() {
+export default function WorldLog({ embedded }: { /** Inside a sheet that shows the title already. */ embedded?: boolean } = {}) {
   const store = useWorldStore();
+  const nav = useStudioNav();
   const live = useWorld((s) => s.log);
   const snapshot = useWorld((s) => s.snapshot);
   const town = useWorld((s) => s.town);
@@ -114,13 +115,13 @@ export default function WorldLog() {
     <div className={styles.log}>
       <div className={styles.head}>
         <div>
-          <h2 className={styles.title}>World Log</h2>
+          <h2 className={embedded ? 'sr-only' : styles.title}>World Log</h2>
           <p className={styles.lede}>Every recorded change to the town, newest first, with who caused it.</p>
         </div>
-        <Link href={ROUTES.traces} className={styles.tracesLink}>
+        <button type="button" className={styles.tracesLink} onClick={() => nav.openPage(ROUTES.traces)}>
           <Icon name="traces" size={14} />
           Traces
-        </Link>
+        </button>
       </div>
 
       <div className={styles.filters}>
@@ -184,9 +185,9 @@ export default function WorldLog() {
               </span>
               <span className={styles.meta}>
                 {run && (
-                  <Link className={styles.traceLink} href={linkTo(ROUTES.traces, { runId: run.runId, seq: run.seq })} title={`Run events ${e.cause!.seqFrom}–${e.cause!.seqTo} in Traces`}>
+                  <button type="button" className={styles.traceLink} onClick={() => nav.openTrace(run.runId, { seq: run.seq })} title={`Run events ${e.cause!.seqFrom}–${e.cause!.seqTo}: open the trace`}>
                     Trace →
-                  </Link>
+                  </button>
                 )}
                 <span className={styles.seq}>#{e.seq}</span>
               </span>

@@ -28,7 +28,7 @@ import { applyEvent } from '@runloop-world/sim';
 import type { CompiledTown } from '@runloop-world/town';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { foldAttention, foldAttentionLog, type AttentionItem } from './attention';
-import { nextClock, tickNow, type WorldClock } from './interpolate';
+import { clockAfterSpeedChange, nextClock, tickNow, type WorldClock } from './interpolate';
 import type { Mode, WorldCam } from './link';
 
 /** connecting → live; reconnecting after a drop; offline when the runtime is gone; disabled = RUNLOOP_WORLD=off. */
@@ -48,16 +48,48 @@ export interface PendingCommand {
   reason?: RejectCode | string;
 }
 
-/** A request to the town camera (the renderer or the map acts on it). */
+/**
+ * A request to the town camera (the renderer or the map acts on it):
+ * focus, enter, exit, overview; goto a point (minimap; keeps zoom, az, tilt);
+ * a level around the centre; rotate by `deg` (default 90); cam = an exact view.
+ */
 export interface CameraRequest {
   id: number;
-  kind: 'focus' | 'enter' | 'exit' | 'overview';
+  kind: 'focus' | 'enter' | 'exit' | 'overview' | 'goto' | 'level' | 'rotate' | 'cam';
   ref: EntityRef | null;
   /** quick: 400–700 ms; cinematic: ≤ 2.5 s (earned: the first intro, an arrival); cut: no animation (reduced motion). */
   motion: 'quick' | 'cinematic' | 'cut';
+  /** goto: the ground point in cells. */
+  point?: { x: number; z: number };
+  level?: 'town' | 'district' | 'street';
+  /** rotate: degrees, positive = clockwise. */
+  deg?: number;
+  /** cam: the exact view. */
+  cam?: WorldCam;
 }
+export type CameraExtra = Pick<CameraRequest, 'point' | 'level' | 'deg' | 'cam'>;
 
-export type Overlay = 'none' | 'map' | 'list';
+/**
+ * What covers the town (contract §4.1): the 2D map or the directory, a sheet
+ * (World Log, a trace, compare, sessions, connections), or Add to World's lot
+ * picking (`add` ⇔ `lotPick` is set).
+ */
+export type Overlay = 'none' | 'map' | 'list' | 'log' | 'trace' | 'compare' | 'sessions' | 'connect' | 'add';
+
+/** The Esc menu's tabs. */
+export type MenuTab = 'resume' | 'display' | 'sound' | 'controls' | 'runtime' | 'connections' | 'pages' | 'help';
+
+/** Where the modes look (eye anchors only: the camera frames them; nothing in the sim changes). */
+export const MODE_PLACES: Record<Mode, EntityRef | null> = {
+  explore: null,
+  agents: { kind: 'district', id: 'dst_agent_district' },
+  intelligence: { kind: 'building', id: 'bld_library' },
+  lab: { kind: 'building', id: 'bld_lattice_lab' },
+};
+
+/** The sheet a mode opens (`mode=intelligence` ⇒ the World Log, `mode=lab` ⇒ compare). */
+export const MODE_SHEET: Partial<Record<Mode, Overlay>> = { intelligence: 'log', lab: 'compare' };
+const SHEET_MODE: Partial<Record<Overlay, Mode>> = { log: 'intelligence', compare: 'lab' };
 
 /** Recent events kept for the World Log and panels (older ones are paged from the API). */
 export const LOG_LIMIT = 4000;
@@ -87,6 +119,20 @@ export interface WorldUiState {
   /** The camera from the URL (`cam=`), and the latest one the renderer reports. */
   cam: WorldCam | null;
   overlay: Overlay;
+  /** The Esc menu, when open. */
+  menu: MenuTab | null;
+  /** The HUD: hidden by the viewer (H), or faded while they drag the view. */
+  hud: { hidden: boolean; interacting: boolean };
+  /** Add to World's lot picking in the town (overlay `add`). */
+  lotPick: { selected: string | null; fromSessionId: string | null } | null;
+  /** The entity card shows its full panel (Details ▸). */
+  cardExpanded: boolean;
+  /** The bell's notification list is open. */
+  bellOpen: boolean;
+  /** What draws the town on `/`: the 3D town, the 2D map, or nothing (another page). */
+  stage: '3d' | 'map' | null;
+  /** The town stops rendering while another 3D canvas is on top (the trace sheet's World tab). */
+  townPaused: boolean;
   reducedMotion: boolean;
   /** What the World Log should show first: an event and/or one entity's events. */
   logFocus: { seq: number | null; actor: string | null } | null;
@@ -111,7 +157,10 @@ export interface WorldUiState {
   applySnapshot(snap: WorldSnapshot, nowMs: number): void;
   /** Fold events in seq order (duplicates are skipped; a gap sets `gap`). */
   applyEvents(events: readonly WorldEvent[], nowMs: number): void;
-  setClock(frame: { tick: number; speed: WorldSpeed; lagging: boolean }, nowMs: number): void;
+  /** A clock frame (`wallMs`: when its tick began, on this machine's clock). */
+  setClock(frame: { tick: number; speed: WorldSpeed; lagging: boolean; wallMs?: number }, nowMs: number): void;
+  /** Another world answered (the runtime restarted on a fresh data directory): forget everything from the old one. */
+  resetWorld(): void;
   /**
    * Seed attention with recorded events from before the snapshot (so a
    * permission wait that started before the page opened still shows), then
@@ -120,19 +169,33 @@ export interface WorldUiState {
   primeAttention(history: readonly WorldEvent[]): void;
 
   // ── Navigation ──
-  setMode(mode: Mode): void;
-  /** Open an entity's panel (pushing it on the stack) and ask the camera to focus it. */
-  focusEntity(ref: EntityRef, opts?: { camera?: boolean; replace?: boolean }): void;
+  /** Switch mode; it opens its sheet and (unless `camera: false`) frames its place. */
+  setMode(mode: Mode, opts?: { camera?: boolean }): void;
+  /** Open an entity's panel (pushing it on the stack) and ask the camera to focus it. `expand` opens the card's details. */
+  focusEntity(ref: EntityRef, opts?: { camera?: boolean; replace?: boolean; expand?: boolean }): void;
   back(): void;
   closePanels(): void;
   setFollow(ref: EntityRef | null): void;
   enter(buildingId: string | null): void;
-  requestCamera(kind: CameraRequest['kind'], ref: EntityRef | null, motion?: CameraRequest['motion']): void;
+  requestCamera(kind: CameraRequest['kind'], ref: EntityRef | null, motion?: CameraRequest['motion'], extra?: CameraExtra): void;
   setCam(cam: WorldCam | null): void;
+  /** Open a sheet or view over the town (`none` closes it). The World Log and compare carry their mode. */
   setOverlay(o: Overlay): void;
+  setMenu(tab: MenuTab | null): void;
+  setHudHidden(hidden: boolean): void;
+  setInteracting(active: boolean): void;
+  setCardExpanded(expanded: boolean): void;
+  setBellOpen(open: boolean): void;
+  setStage(stage: WorldUiState['stage']): void;
+  setTownPaused(paused: boolean): void;
+  /** Add to World in the town: fly to the Agent District and pick a free lot. */
+  startLotPick(fromSessionId?: string | null): void;
+  pickLot(lotId: string | null): void;
+  cancelLotPick(): void;
   setReducedMotion(v: boolean): void;
   /** Open the World Log (Intelligence) at an event or on one entity's events. */
   showInLog(focus: { seq?: number | null; actor?: string | null }): void;
+  /** Add to World: lot picking in the 3D town, or the dialog (no 3D, another page). */
   openAddToWorld(fromSessionId?: string | null): void;
   closeAddToWorld(): void;
 
@@ -175,6 +238,13 @@ export function createWorldStore(init: Partial<Pick<WorldUiState, 'mode' | 'pane
     camera: null,
     cam: init.cam ?? null,
     overlay: 'none',
+    menu: null,
+    hud: { hidden: false, interacting: false },
+    lotPick: null,
+    cardExpanded: false,
+    bellOpen: false,
+    stage: null,
+    townPaused: false,
     reducedMotion: init.reducedMotion ?? false,
     logFocus: null,
     addToWorld: null,
@@ -210,6 +280,7 @@ export function createWorldStore(init: Partial<Pick<WorldUiState, 'mode' | 'pane
       const added: WorldEvent[] = [];
       let gap = false;
       let arrived: string | null = null;
+      let clock = s.clock;
       for (const e of events) {
         if (e.seq <= snap.seq) continue;
         if (e.seq !== snap.seq + 1) {
@@ -229,6 +300,8 @@ export function createWorldStore(init: Partial<Pick<WorldUiState, 'mode' | 'pane
           break;
         }
         added.push(e);
+        // A speed change re-bases the clock at once (no extrapolating at the old speed until the next frame).
+        if (e.type === 'world.clock_changed') clock = clockAfterSpeedChange(clock, { tick: e.tick, speed: e.p.speed }, nowMs);
         if (!isAmbientWorldEvent(e.type)) attention = foldAttention(attention, e, prev);
         if (e.cmdId && pending[e.cmdId]) {
           const p = pending[e.cmdId]!;
@@ -241,7 +314,6 @@ export function createWorldStore(init: Partial<Pick<WorldUiState, 'mode' | 'pane
       }
       if (added.length === 0 && !gap) return;
       const last = added[added.length - 1];
-      let clock = s.clock;
       // Never show a decision "in the future" of the clock.
       if (last && clock && last.tick > tickNow(clock, nowMs)) clock = { ...clock, tick: last.tick, receivedAt: nowMs };
       const log = added.length ? [...s.log, ...added].slice(-LOG_LIMIT) : s.log;
@@ -250,6 +322,30 @@ export function createWorldStore(init: Partial<Pick<WorldUiState, 'mode' | 'pane
     },
 
     setClock: (frame, nowMs) => set((s) => ({ clock: nextClock(s.clock, frame, nowMs) })),
+    resetWorld: () =>
+      set((s) => ({
+        info: null,
+        snapshot: null,
+        rev: s.rev + 1,
+        clock: null,
+        log: [],
+        gap: false,
+        panelStack: [],
+        follow: null,
+        entered: null,
+        camera: null,
+        lotPick: null,
+        overlay: s.overlay === 'add' ? 'none' : s.overlay,
+        cardExpanded: false,
+        logFocus: null,
+        addToWorld: null,
+        pending: {},
+        attention: [],
+        lastSeenSeq: null,
+        agents: [],
+        arrivals: [],
+        agentsFetchedAt: null,
+      })),
     primeAttention: (history) =>
       set((s) => {
         const sorted = history.filter((e) => !isAmbientWorldEvent(e.type)).sort((a, b) => a.seq - b.seq);
@@ -259,30 +355,61 @@ export function createWorldStore(init: Partial<Pick<WorldUiState, 'mode' | 'pane
         return { attention: foldAttentionLog(past, live) };
       }),
 
-    setMode: (mode) => set({ mode }),
+    setMode: (mode, opts = {}) => {
+      const s = get();
+      // A mode's sheet opens with it; Explore and Agents give the town back (lot picking stays).
+      const overlay: Overlay = MODE_SHEET[mode] ?? (s.overlay === 'add' ? 'add' : 'none');
+      set({ mode, overlay, ...(mode === 'agents' ? { panelStack: [], cardExpanded: false } : {}) });
+      const place = MODE_PLACES[mode];
+      if (opts.camera !== false && place) get().requestCamera('focus', place);
+    },
     focusEntity: (ref, opts = {}) => {
       const s = get();
       const top = s.panelStack[s.panelStack.length - 1];
       const same = top && top.kind === ref.kind && top.id === ref.id;
       const panelStack = same ? s.panelStack : opts.replace ? [...s.panelStack.slice(0, -1), ref] : [...s.panelStack, ref].slice(-8);
-      set({ panelStack });
+      set({ panelStack, cardExpanded: opts.expand ?? (same ? s.cardExpanded : false) });
       if (opts.camera !== false) get().requestCamera('focus', ref);
     },
-    back: () => set((s) => ({ panelStack: s.panelStack.slice(0, -1) })),
-    closePanels: () => set({ panelStack: [], follow: null }),
+    back: () => set((s) => ({ panelStack: s.panelStack.slice(0, -1), cardExpanded: false })),
+    closePanels: () => set({ panelStack: [], follow: null, cardExpanded: false }),
     setFollow: (follow) => set({ follow }),
     enter: (entered) => {
       set({ entered });
       get().requestCamera(entered ? 'enter' : 'exit', entered ? { kind: 'building', id: entered } : null);
     },
-    requestCamera: (kind, ref, motion = 'quick') =>
-      set((s) => ({ camera: { id: ++cameraId, kind, ref, motion: s.reducedMotion ? 'cut' : motion } })),
+    requestCamera: (kind, ref, motion = 'quick', extra = {}) =>
+      set((s) => ({ camera: { id: ++cameraId, kind, ref, motion: s.reducedMotion ? 'cut' : motion, ...extra } })),
     setCam: (cam) => set({ cam }),
-    setOverlay: (overlay) => set({ overlay }),
+    setOverlay: (overlay) => {
+      const s = get();
+      if (overlay === s.overlay) return;
+      if (overlay === 'add') return get().openAddToWorld();
+      const mode = SHEET_MODE[overlay] ?? (SHEET_MODE[s.overlay] && s.mode === SHEET_MODE[s.overlay] ? 'explore' : s.mode);
+      set({ overlay, mode, ...(s.overlay === 'add' ? { lotPick: null } : {}) });
+    },
+    setMenu: (menu) => set({ menu }),
+    setHudHidden: (hidden) => set((s) => (s.hud.hidden === hidden ? {} : { hud: { ...s.hud, hidden } })),
+    setInteracting: (interacting) => set((s) => (s.hud.interacting === interacting ? {} : { hud: { ...s.hud, interacting } })),
+    setCardExpanded: (cardExpanded) => set({ cardExpanded }),
+    setBellOpen: (bellOpen) => set({ bellOpen }),
+    setStage: (stage) => set({ stage }),
+    setTownPaused: (townPaused) => set((s) => (s.townPaused === townPaused ? {} : { townPaused })),
+    startLotPick: (fromSessionId = null) => {
+      const s = get();
+      set({ overlay: 'add', lotPick: { selected: null, fromSessionId }, panelStack: [], follow: null, menu: null, addToWorld: null, ...(SHEET_MODE[s.overlay] ? { mode: 'explore' as Mode } : {}) });
+      if (s.entered) set({ entered: null });
+      get().requestCamera('focus', MODE_PLACES.agents, 'quick');
+    },
+    pickLot: (lotId) => set((s) => (s.lotPick ? { lotPick: { ...s.lotPick, selected: lotId } } : {})),
+    cancelLotPick: () => set((s) => (s.overlay === 'add' || s.lotPick ? { overlay: 'none', lotPick: null } : {})),
     setReducedMotion: (reducedMotion) => set({ reducedMotion }),
-    openAddToWorld: (fromSessionId = null) => set({ addToWorld: { fromSessionId } }),
+    openAddToWorld: (fromSessionId = null) => {
+      if (get().stage === '3d') get().startLotPick(fromSessionId);
+      else set({ addToWorld: { fromSessionId } });
+    },
     closeAddToWorld: () => set({ addToWorld: null }),
-    showInLog: (f) => set({ mode: 'intelligence', panelStack: [], logFocus: { seq: f.seq ?? null, actor: f.actor ?? null } }),
+    showInLog: (f) => set({ mode: 'intelligence', overlay: 'log', panelStack: [], logFocus: { seq: f.seq ?? null, actor: f.actor ?? null } }),
 
     addPending: (p) => set((s) => ({ pending: { ...s.pending, [p.id]: p } })),
     resolvePending: (id, result) =>

@@ -6,8 +6,11 @@
  *
  * Query parameters:
  *   t=HH:MM     start time (Day 1)                 speed=0|1|4|16   pop=80
- *   cam=town | district:<dst_id> | street:<x>,<y>[,<px per cell>] | focus:<kind>:<id> | interior:<bld_id> | interior:hq
+ *   cam=town | district:<dst_id> | street:<x>,<y>[,<px per cell>] | view:<x>,<y>,<px per cell>,<az°>,<tilt°>
+ *       | focus:<kind>:<id> | interior:<bld_id> | interior:hq
  *   rot=0..3    quarter turns                      theme=dark|light quality=auto|high|low
+ *   land=full|lite|off  the land beyond the town   lotpick=1 Add to World lot picking (fixture)
+ *   inset=<px>  a sheet's width on the right (viewInsets)
  *   agents=0..4 fixture agents to house            reduced=1        stress=<n> synthetic extra walkers (perf only)
  *   select=<kind>:<id>                             follow=1 (follow the selection)
  *   live=<runtime url>  render that runtime's world over SSE instead (read only)
@@ -21,7 +24,7 @@ import { createRoot } from 'react-dom/client';
 import { createStudioStore, type StudioStore } from '../../state/store';
 import type { TownClock } from '../clock';
 import TownCanvas from '../TownCanvas';
-import type { AgentHouseSource, TownCam, TownCameraRequest, TownLevel, TownState } from '../types';
+import type { AgentHouseSource, LotPick, TownApi, TownCam, TownCameraRequest, TownLevel, TownState } from '../types';
 import { FIXTURE_HQ_AGENT, LocalWorld, houseFixtureAgents } from './localWorld';
 import '../../app/tokens.css';
 import '../../app/globals.css';
@@ -138,6 +141,9 @@ function Harness({ town, house }: { town: CompiledTown; house: { store: StudioSt
       else if (cam.startsWith('street:')) {
         const [x, y, zoom] = cam.slice(7).split(',').map(Number);
         ask({ kind: 'cam', cam: { x: x ?? 48, z: y ?? 40, zoom: zoom || innerWidth / 28 }, motion });
+      } else if (cam.startsWith('view:')) {
+        const [x, y, zoom, az, tilt] = cam.slice(5).split(',').map(Number);
+        ask({ kind: 'cam', cam: { x: x ?? 48, z: y ?? 36, zoom: zoom || 14, az: az ?? 45, tilt: tilt ?? 37 }, motion });
       } else if (cam.startsWith('focus:')) ask({ kind: 'focus', ref: parseRef(cam.slice(6)), motion });
       else if (cam.startsWith('interior:')) {
         const id = cam.slice(9);
@@ -157,6 +163,26 @@ function Harness({ town, house }: { town: CompiledTown; house: { store: StudioSt
   );
   useEffect(() => (house ? house.store.getState().mountWorld() : undefined), [house]);
 
+  // Add to World (fixture): every agent lot, free or taken by a housed fixture agent.
+  const [picking, setPicking] = useState(q.get('lotpick') === '1');
+  const [pickedLot, setPickedLot] = useState<string | null>(null);
+  const lotPick = useMemo<LotPick | null>(() => {
+    if (!picking) return null;
+    const agents = world.snapshot().agents;
+    return {
+      lots: town.agentLots.map((l, i) => {
+        const a = agents.find((x) => x.lotId === l.id);
+        return { id: l.id, state: a ? ('taken' as const) : ('free' as const), label: a ? a.displayName : `Lot ${i + 1} · Free` };
+      }),
+      selected: pickedLot,
+    };
+  }, [picking, pickedLot, world, town]);
+  const api = useRef<TownApi>(null);
+  useEffect(() => {
+    (window as unknown as { __townApi?: unknown }).__townApi = api;
+  }, []);
+  const inset = num('inset', 0);
+
   return (
     <div style={{ position: 'fixed', inset: 0 }}>
       <TownCanvas
@@ -174,8 +200,15 @@ function Harness({ town, house }: { town: CompiledTown; house: { store: StudioSt
         seed={num('seed', 42)}
         agentHouse={agentHouse}
         onReady={() => setReady(true)}
-        obstacles={(w) => [{ l: 0, t: 0, r: Math.min(w, 520), b: 52 }]}
+        obstacles={(w) => [{ l: 0, t: 0, r: Math.min(w, 620), b: 52 }]}
+        apiRef={api}
+        lotPick={lotPick}
+        onPickLot={setPickedLot}
+        surroundings={(q.get('land') as 'full' | 'lite' | 'off' | null) ?? 'full'}
+        viewInsets={{ top: 0, right: inset, bottom: 0, left: 0 }}
+        onLongPress={(r) => console.info('[harness] long press', r)}
       />
+      {inset > 0 && <div style={{ position: 'fixed', top: 16, right: 16, bottom: 16, width: inset - 32, borderRadius: 16, background: 'var(--rl-surface)', opacity: 0.96 }} />}
       <div style={bar}>
         <span style={chip}>Fixture · engine running in this page</span>
         <span style={{ opacity: 0.8 }}>{status.level}</span>
@@ -184,6 +217,17 @@ function Harness({ town, house }: { town: CompiledTown; house: { store: StudioSt
         <button style={btn} onClick={() => ask({ kind: 'level', level: 'street' })}>Street</button>
         <button style={btn} onClick={() => ask({ kind: 'rotate', dir: 1 })}>Rotate</button>
         <button style={btn} onClick={() => setEntered(entered ? null : 'bld_corner_cafe')}>{entered ? 'Back to town' : 'Enter café'}</button>
+        <button style={btn} onClick={() => ask({ kind: 'cam', cam: { x: 48, z: 36, zoom: 14, az: 200, tilt: 10 } })}>Horizon</button>
+        <button
+          style={btn}
+          onClick={() => {
+            setPicking(!picking);
+            setPickedLot(null);
+            if (!picking) ask({ kind: 'focus', ref: { kind: 'district', id: 'dst_agent_district' } });
+          }}
+        >
+          {picking ? 'Cancel lot pick' : 'Pick a lot'}
+        </button>
       </div>
     </div>
   );

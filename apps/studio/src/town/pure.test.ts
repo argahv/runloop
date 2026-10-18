@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_AHEAD_MS, TickSmoother, frameTick } from './clock';
 import { deltaE2000, hexToRgb, mixHex } from './color';
-import { HYSTERESIS, T0_PX, T1_PX, tierFor, type Tier } from './lod';
+import { HYSTERESIS, T0_PX, T1_PX, projectedHeightPersp, tierFor, type Tier } from './lod';
+import { distanceFor } from './cameraMath';
 import { AdaptiveQuality, percentile } from './quality';
 import { skyAt, skyBrightness, sunDirection } from './sky';
 import { LIME, SEMANTIC, daylightMaterials } from './townPalette';
@@ -57,6 +58,8 @@ describe('sky (DL-011)', () => {
       expect(deltaE2000(a.sunColor, b.sunColor)).toBeLessThan(2);
       const dot = a.sunDir[0] * b.sunDir[0] + a.sunDir[1] * b.sunDir[1] + a.sunDir[2] * b.sunDir[2];
       expect(dot).toBeGreaterThan(Math.cos((4 * Math.PI) / 180));
+      for (const k of ['zenith', 'horizon', 'haze', 'cloud'] as const) expect(deltaE2000(a[k], b[k])).toBeLessThan(2);
+      expect(Math.abs(a.stars - b.stars)).toBeLessThan(0.03);
     }
   });
   it('is brightest around noon and dark at night', () => {
@@ -120,6 +123,13 @@ describe('LOD tiers', () => {
     expect(tierFor(T0_PX * (1 - HYSTERESIS) - 0.01, 0)).toBe(1);
     expect(tierFor(T1_PX * (1 - HYSTERESIS) - 0.01, 1)).toBe(2);
     expect(tierFor(100, 2)).toBe(0);
+  });
+  it('projects heights under the perspective camera (zoom = px per unit at the target)', () => {
+    // At the target's distance one unit is `zoom` px tall.
+    const d = distanceFor(30, 20, 900);
+    expect(projectedHeightPersp(1, d, 20, 900)).toBeCloseTo(30, 9);
+    // Twice as near, twice as tall.
+    expect(projectedHeightPersp(1, d / 2, 20, 900)).toBeCloseTo(60, 9);
   });
 });
 

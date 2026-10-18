@@ -105,4 +105,6 @@ export const listArrivals = () => request<ArrivalsResponse>(worldApiPaths.arriva
 export const createAgent = (body: CreateAgentRequest) => request<CreateAgentResponse>(worldApiPaths.agents, postJson(body));
 export const claimSession = (agentId: string, sessionId: string) => request<ClaimSessionResponse>(worldApiPaths.claim(agentId), postJson({ sessionId }));
 
-export const worldStreamUrl = (after: number | null) => apiUrl(after === null ? worldApiPaths.stream : `${worldApiPaths.stream}?after=${after}`);
+/** The world stream; resuming names the world too, so another world's runtime answers with a fresh snapshot. */
+export const worldStreamUrl = (after: number | null, worldId?: string | null) =>
+  apiUrl(after === null ? worldApiPaths.stream : `${worldApiPaths.stream}?after=${after}${worldId ? `&world=${encodeURIComponent(worldId)}` : ''}`);

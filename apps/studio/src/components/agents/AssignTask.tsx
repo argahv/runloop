@@ -5,8 +5,11 @@
  * tools, workspace, environment names) → approve → follow its output → the
  * outcome as Claude Code reported it ("Claude Code reports done").
  *
- * Nothing runs until "Approve and run": the preview's single-use nonce is
- * what the runtime spawns with, and it expires after 5 minutes.
+ * Nothing runs until a person approves it on the runtime's own approval page
+ * (`preview.approveUrl`, opened in a window): no web page, Studio included,
+ * can approve a task by itself. Studio keeps showing the exact command and
+ * follows the approval (GET /api/dispatches/previews/:id). The approval is
+ * single use and expires after 5 minutes.
  */
 import {
   DISPATCH_COPY,
@@ -19,9 +22,7 @@ import {
   type DispatchPreview,
   type DispatchSummary,
 } from '@runloop-world/events';
-import Link from 'next/link';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { linkTo, ROUTES } from '../../state/deeplink';
 import { formatWhen } from '../../state/format';
 import { refreshAgents } from '../../world/connect';
 import { useWorldStore } from '../../world/context';
@@ -31,8 +32,9 @@ import { Button } from '../../ui/Button';
 import { Chip } from '../../ui/Chip';
 import { Dialog } from '../../ui/Dialog';
 import { Icon } from '../../ui/Icon';
-import { approveDispatch, cancelDispatch, dispatchStreamUrl, getDispatch, getDispatchPolicy, previewDispatch } from './AssignTaskApi';
-import { commandLine, costText, dispatchStatusView, expiresIn, outputLines, type DispatchStatusView } from './AssignTaskView';
+import { useStudioNav } from '../overlays/nav';
+import { cancelDispatch, dispatchStreamUrl, getDispatch, getDispatchPolicy, getPreviewStatus, previewDispatch } from './AssignTaskApi';
+import { approvalOutcomeText, commandLine, costText, dispatchStatusView, expiresIn, outputLines, type DispatchStatusView } from './AssignTaskView';
 import base from './agents.module.css';
 import styles from './AssignTask.module.css';
 
@@ -74,6 +76,7 @@ export function AssignTaskSection({
   const [open, setOpen] = useState(false);
   const [watch, setWatch] = useState<string | null>(null);
   const [summary, setSummary] = useState<DispatchSummary | null>(null);
+  const nav = useStudioNav();
   const available = submit?.available ?? false;
 
   // The world says which dispatch is the latest and its phase; details come from the API.
@@ -118,9 +121,9 @@ export function AssignTaskSection({
               {view.active ? 'Follow' : 'Details'}
             </button>
             {summary.runId && (
-              <Link className={styles.linkButton} href={linkTo(ROUTES.traces, { runId: summary.runId })}>
+              <button type="button" className={styles.linkButton} onClick={() => nav.openTrace(summary.runId!)}>
                 Trace
-              </Link>
+              </button>
             )}
           </span>
         </div>
@@ -166,6 +169,7 @@ export default function AssignTaskDialog({
 }) {
   const id = useId();
   const store = useWorldStore();
+  const nav = useStudioNav();
   const taskRef = useRef<HTMLTextAreaElement>(null);
   const [step, setStep] = useState<Step>('compose');
   const [policy, setPolicy] = useState<DispatchPolicyResponse | null>(null);
@@ -179,6 +183,8 @@ export default function AssignTaskDialog({
   const [summary, setSummary] = useState<DispatchSummary | null>(null);
   const [frames, setFrames] = useState<DispatchOutputFrame[]>([]);
   const [busy, setBusy] = useState(false);
+  /** The runtime's approval page is open; Studio waits for its outcome. */
+  const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -188,6 +194,7 @@ export default function AssignTaskDialog({
     if (!open) return;
     setError(null);
     setBusy(false);
+    setWaiting(false);
     setConfirmCancel(false);
     setPreview(null);
     setFrames([]);
@@ -272,24 +279,43 @@ export default function AssignTaskDialog({
     }
   };
 
-  const doApprove = async () => {
+  /** A person approves on the runtime's own page; Studio only opens it. */
+  const doApprove = () => {
     if (!preview) return;
-    setBusy(true);
     setError(null);
-    try {
-      const r = await approveDispatch(preview.previewId, preview.approvalNonce);
-      setSummary(r.dispatch);
-      setDispatchId(r.dispatch.dispatchId);
-      setStep('run');
-    } catch (e) {
-      // The nonce is spent by any attempt: a retry needs a fresh preview.
-      setError(`${errorText(e)} Nothing was run.`);
-      setPreview(null);
-      setStep('compose');
-    } finally {
-      setBusy(false);
-    }
+    window.open(preview.approveUrl, 'runloop-approve', 'popup,width=720,height=860');
+    setWaiting(true);
   };
+
+  // Follow the approval page's outcome. Its window is cross-origin isolated (COOP), so poll the
+  // runtime rather than watch the window.
+  useEffect(() => {
+    if (!open || !waiting || !preview) return;
+    let live = true;
+    const check = () =>
+      getPreviewStatus(preview.previewId).then(
+        (st) => {
+          if (!live || st.state === 'awaiting_approval') return;
+          setWaiting(false);
+          if (st.state === 'approved' && st.dispatchId) {
+            setDispatchId(st.dispatchId);
+            setStep('run');
+            return;
+          }
+          const why = approvalOutcomeText(st);
+          setError(st.state === 'approved' ? why : `${why} Nothing was run.`);
+          setPreview(null);
+          setStep('compose');
+        },
+        (e: unknown) => live && setError(errorText(e)),
+      );
+    void check();
+    const t = setInterval(() => void check(), 1000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [open, waiting, preview]);
 
   const doCancel = async () => {
     if (!dispatchId) return;
@@ -314,7 +340,7 @@ export default function AssignTaskDialog({
   const where = workspaceLabel ? `“${workspaceLabel}”` : 'its workspace';
 
   return (
-    <Dialog open={open} onClose={onClose} labelledBy={`${id}-title`} describedBy={`${id}-lede`} initialFocus={step === 'compose' ? taskRef : undefined} className={`${base.dialog} ${styles.dialog}`}>
+    <Dialog open={open} onClose={onClose} labelledBy={`${id}-title`} describedBy={`${id}-lede`} initialFocus={step === 'compose' ? taskRef : undefined} className={`${base.dialog} ${styles.dialog} ${styles.approval}`}>
       <form
         className={base.form}
         // The fields are checked here (and by the runtime against the policy), with reasons shown inline.
@@ -332,7 +358,7 @@ export default function AssignTaskDialog({
           <p id={`${id}-lede`} className={base.dialogLede}>
             {step === 'run'
               ? `Claude Code, headless, in ${where}. Its hooks trace the session like any other.`
-              : `Claude Code runs headless in ${where}. Nothing runs until you approve the exact command.`}
+              : `Claude Code runs headless in ${where}. Nothing runs until you approve the exact command on Runloop’s own approval page.`}
           </p>
         </header>
 
@@ -447,6 +473,21 @@ export default function AssignTaskDialog({
               <p className={styles.note} aria-live="polite">
                 <Icon name="clock" size={12} /> This approval is valid once, for {expiresIn(preview.expiresAt, now)}.
               </p>
+              {waiting ? (
+                <p className={base.notice} role="status">
+                  <Icon name="hourglass" size={14} />
+                  <span>
+                    Waiting for your approval in the Runloop window. It shows this same command; nothing runs until you approve it there.{' '}
+                    <a href={preview.approveUrl} target="runloop-approve" rel="noopener" className={styles.linkButton}>
+                      Open the approval page again
+                    </a>
+                  </span>
+                </p>
+              ) : (
+                <p className={styles.note}>
+                  <Icon name="shield" size={12} /> Approving opens Runloop&apos;s own approval page in a new window: no web page, this one included, can start a task by itself.
+                </p>
+              )}
             </>
           )}
 
@@ -465,12 +506,26 @@ export default function AssignTaskDialog({
                   <span className={styles.links}>
                     {summary.runId ? (
                       <>
-                        <Link className={styles.linkButton} href={linkTo(ROUTES.traces, { runId: summary.runId })} onClick={onClose}>
+                        <button
+                          type="button"
+                          className={styles.linkButton}
+                          onClick={() => {
+                            onClose();
+                            nav.openTrace(summary.runId!);
+                          }}
+                        >
                           Open the trace
-                        </Link>
-                        <Link className={styles.linkButton} href={linkTo(ROUTES.world, { runId: summary.runId })} onClick={onClose}>
-                          Watch in Live World
-                        </Link>
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.linkButton}
+                          onClick={() => {
+                            onClose();
+                            nav.openRunWorld(summary.runId!);
+                          }}
+                        >
+                          Watch it in the building
+                        </button>
                       </>
                     ) : (
                       <span className={styles.note}>The trace appears with the session&apos;s first hook.</span>
@@ -529,11 +584,17 @@ export default function AssignTaskDialog({
           )}
           {step === 'review' && (
             <>
-              <Button variant="ghost" onClick={() => setStep('compose')}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setWaiting(false);
+                  setStep('compose');
+                }}
+              >
                 Back
               </Button>
-              <Button type="submit" variant="primary" icon="play" busy={busy} disabled={!preview || expiresIn(preview.expiresAt, now) === 'expired'}>
-                Approve and run
+              <Button type="submit" variant="primary" icon="external" busy={waiting} disabled={!preview || waiting || expiresIn(preview.expiresAt, now) === 'expired'}>
+                {waiting ? 'Waiting for approval…' : 'Approve in Runloop…'}
               </Button>
             </>
           )}

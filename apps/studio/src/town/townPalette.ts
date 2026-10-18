@@ -10,8 +10,8 @@
  *   success/warning/failure colours).
  * - Only state glows: lit windows (occupied), signs (open), street lamps at
  *   night (the clock), agent beacons (connection). Glow colours are in GLOW.
- * - The theme never changes the town or its time of day; it changes the
- *   chrome, the labels and the backdrop beyond the town's edge (BACKDROP).
+ * - The theme never changes the town, the land beyond it or the time of day;
+ *   it changes the chrome and the labels only.
  */
 
 export const LIME = '#b8f36a';
@@ -39,7 +39,7 @@ export const GROUND_COLORS = {
   path: '#d6c39b',
   footprint: '#cfc2ab',
   landmarkBase: '#d2c6af',
-  /** The town's slab sides (soil under the turf). */
+  /** Soil under lawns and gardens (curb faces). */
   soil: '#8c6c50',
   soilDark: '#6f553f',
 } as const;
@@ -129,12 +129,6 @@ export const GLOW = {
   window: '#ffd18a',
   lamp: '#ffd89a',
   sign: '#fff1d6',
-} as const;
-
-/** The backdrop beyond the town's edge, per theme (the town itself never changes with the theme). */
-export const BACKDROP = {
-  dark: { top: '#0c0d10', bottom: '#14161b', shadow: 0.55 },
-  light: { top: '#eef0f3', bottom: '#e1e4ea', shadow: 0.22 },
 } as const;
 
 /** Every daylight material colour (for the ΔE test). */

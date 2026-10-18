@@ -687,3 +687,88 @@
   justify-content: flex-end;
   gap: 2px;
 }
+
+/* Page header actions (Copy link, Open in the world). */
+.pageHeadActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--rl-space-2);
+}
+
+/*
+ * Inside an in-world sheet (container `rl-sheet`, components/overlays): the
+ * same responsive steps as the viewport rules above, by the sheet's width.
+ */
+@container rl-sheet (max-width: 1000px) {
+  .overviewTop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .statusStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .grid3 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .grid3 > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+@container rl-sheet (max-width: 600px) {
+  .session {
+    flex-wrap: wrap;
+  }
+  .sessionMain {
+    flex-basis: calc(100% - 24px);
+  }
+  .grid2,
+  .grid3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .settingRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .input {
+    width: 100%;
+  }
+  .field {
+    flex-wrap: wrap;
+  }
+}
+
+/* Run history as a list (the narrow in-world Sessions sheet). */
+.historyList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl-space-2);
+}
+.historyList + .historyList {
+  margin-top: var(--rl-space-4);
+}
+.historyItems {
+  display: flex;
+  flex-direction: column;
+}
+.historyItem {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--rl-space-2);
+  padding: var(--rl-space-2) 0;
+  box-shadow: inset 0 -1px 0 var(--rl-line);
+}
+.historyMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.historyMain .rowTitle {
+  flex-wrap: wrap;
+}
+.historyMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--rl-text-2xs);
+}

@@ -23,7 +23,7 @@ interface Row {
  * keys move, → opens, ← closes or goes to the parent, Enter chooses: the same
  * as clicking the entity in 3D. One Tab stop (roving tabindex).
  */
-export default function EntityDirectory() {
+export default function EntityDirectory({ embedded }: { /** Inside a sheet that shows the title already. */ embedded?: boolean } = {}) {
   const store = useWorldStore();
   const town = useWorld((s) => s.town);
   const snapshot = useWorld((s) => s.snapshot);
@@ -54,7 +54,9 @@ export default function EntityDirectory() {
   }, [tree, open, filter]);
 
   const choose = (ref: EntityRef | null) => {
-    if (ref) store.getState().focusEntity(ref);
+    if (!ref) return;
+    store.getState().focusEntity(ref, { expand: true });
+    if (ref.kind === 'resident' || ref.kind === 'agent') store.getState().setFollow(ref);
   };
   const toggle = (key: string, to?: boolean) =>
     setOpen((s) => {
@@ -115,7 +117,7 @@ export default function EntityDirectory() {
   return (
     <div className={styles.dir}>
       <div className={styles.head}>
-        <h2 className={styles.title} id="directory-title">
+        <h2 className={embedded ? 'sr-only' : styles.title} id="directory-title">
           Directory
         </h2>
         <input className={styles.filter} placeholder="Filter by name" aria-label="Filter the directory" value={filter} onChange={(e) => setFilter(e.target.value)} />

@@ -67,7 +67,7 @@ export function connectWorld(store: WorldStore): () => void {
     // After a gap the state may be partly folded: start again from a snapshot.
     const after = s.snapshot && !s.gap ? s.snapshot.seq : null;
     if (s.gap) store.setState({ gap: false });
-    const source = new EventSource(worldStreamUrl(after));
+    const source = new EventSource(worldStreamUrl(after, s.snapshot?.worldId ?? null));
     es = source;
     source.addEventListener(WORLD_SSE_SNAPSHOT_EVENT, (m) => {
       const parsed = WorldSnapshotSchema.safeParse(parseJson((m as MessageEvent<string>).data));
@@ -77,6 +77,16 @@ export function connectWorld(store: WorldStore): () => void {
         return;
       }
       queue = [];
+      const current = st().snapshot;
+      if (current && current.worldId !== parsed.data.worldId) {
+        // Another world answered (the runtime restarted on a fresh data directory): nothing of
+        // the old one carries over. Reload its info and town, then start from its snapshot.
+        source.close();
+        es = null;
+        st().resetWorld();
+        void start();
+        return;
+      }
       st().applySnapshot(parsed.data, Date.now());
       st().setStatus('live');
       void primeAttention(parsed.data);
