@@ -1,0 +1,82 @@
+{
+  "id": "tavern",
+  "kind": "grid",
+  "label": "Tavern",
+  "archetype": "tavern",
+  "grid": [
+    "###w####w###",
+    "#..........#",
+    "#..........#",
+    "w..........w",
+    "#..........#",
+    "w..........w",
+    "#..........#",
+    "#####D######"
+  ],
+  "furniture": [
+    {
+      "id": "stove",
+      "kind": "stove",
+      "cells": [[1, 1], [2, 1]],
+      "uses": [{"cell": [1, 2], "pose": "stand", "facing": "n"}, {"cell": [2, 2], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "bartender"]
+    },
+    {
+      "id": "bar",
+      "kind": "bar",
+      "cells": [[5, 2], [6, 2], [7, 2], [8, 2]],
+      "uses": [
+        {"cell": [5, 1], "pose": "stand", "facing": "s"},
+        {"cell": [6, 1], "pose": "stand", "facing": "s"},
+        {"cell": [7, 1], "pose": "stand", "facing": "s"},
+        {"cell": [8, 1], "pose": "stand", "facing": "s"}
+      ],
+      "tags": ["work", "bartender"]
+    },
+    {
+      "id": "stools",
+      "kind": "bar",
+      "cells": [[5, 3], [6, 3], [7, 3], [8, 3]],
+      "uses": [
+        {"cell": [5, 3], "pose": "sit", "facing": "n"},
+        {"cell": [6, 3], "pose": "sit", "facing": "n"},
+        {"cell": [7, 3], "pose": "sit", "facing": "n"},
+        {"cell": [8, 3], "pose": "sit", "facing": "n"}
+      ],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "table_1",
+      "kind": "table",
+      "cells": [[2, 4]],
+      "uses": [{"cell": [1, 4], "pose": "sit", "facing": "e"}, {"cell": [3, 4], "pose": "sit", "facing": "w"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "table_2",
+      "kind": "table",
+      "cells": [[2, 6]],
+      "uses": [{"cell": [1, 6], "pose": "sit", "facing": "e"}, {"cell": [3, 6], "pose": "sit", "facing": "w"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "table_3",
+      "kind": "table",
+      "cells": [[8, 5]],
+      "uses": [{"cell": [7, 5], "pose": "sit", "facing": "e"}, {"cell": [9, 5], "pose": "sit", "facing": "w"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "bench",
+      "kind": "sofa",
+      "cells": [[10, 4], [10, 5], [10, 6]],
+      "uses": [
+        {"cell": [10, 4], "pose": "sit", "facing": "w"},
+        {"cell": [10, 5], "pose": "sit", "facing": "w"},
+        {"cell": [10, 6], "pose": "sit", "facing": "w"}
+      ],
+      "tags": ["eat", "socialize", "rest"]
+    },
+    {"id": "piano", "kind": "piano", "cells": [[7, 6]], "uses": [], "tags": []}
+  ]
+}

@@ -6,3 +6,5 @@ export * from './redact';
 export * from './sequence-buffer';
 export * from './protocol';
 export * from './claude-code';
+export * from './world';
+export * from './world-protocol';

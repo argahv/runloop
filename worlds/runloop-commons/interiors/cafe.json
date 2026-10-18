@@ -1,0 +1,79 @@
+{
+  "id": "cafe",
+  "kind": "grid",
+  "label": "Café",
+  "archetype": "cafe",
+  "grid": [
+    "##ww##ww##",
+    "#........#",
+    "#........#",
+    "w........w",
+    "#........#",
+    "w........w",
+    "#........#",
+    "####D#####"
+  ],
+  "furniture": [
+    {
+      "id": "espresso",
+      "kind": "espresso",
+      "cells": [[1, 1], [2, 1]],
+      "uses": [{"cell": [1, 2], "pose": "stand", "facing": "n"}, {"cell": [2, 2], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "barista"]
+    },
+    {
+      "id": "counter",
+      "kind": "counter",
+      "cells": [[4, 2], [5, 2], [6, 2]],
+      "uses": [{"cell": [4, 1], "pose": "stand", "facing": "s"}, {"cell": [5, 1], "pose": "stand", "facing": "s"}],
+      "tags": ["work", "barista"]
+    },
+    {
+      "id": "oven",
+      "kind": "oven",
+      "cells": [[7, 1]],
+      "uses": [{"cell": [7, 2], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "barista"]
+    },
+    {"id": "plant", "kind": "plant", "cells": [[8, 1]], "uses": [], "tags": []},
+    {
+      "id": "table_1",
+      "kind": "table",
+      "cells": [[2, 4]],
+      "uses": [{"cell": [1, 4], "pose": "sit", "facing": "e"}, {"cell": [3, 4], "pose": "sit", "facing": "w"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "table_2",
+      "kind": "table",
+      "cells": [[6, 4]],
+      "uses": [{"cell": [5, 4], "pose": "sit", "facing": "e"}, {"cell": [7, 4], "pose": "sit", "facing": "w"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "table_3",
+      "kind": "table",
+      "cells": [[6, 6]],
+      "uses": [{"cell": [5, 6], "pose": "sit", "facing": "e"}, {"cell": [7, 6], "pose": "sit", "facing": "w"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "window_bench",
+      "kind": "sofa",
+      "cells": [[1, 5], [1, 6]],
+      "uses": [{"cell": [1, 5], "pose": "sit", "facing": "e"}, {"cell": [1, 6], "pose": "sit", "facing": "e"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "armchairs",
+      "kind": "armchair",
+      "cells": [[8, 5], [8, 6]],
+      "uses": [{"cell": [8, 5], "pose": "sit", "facing": "w"}, {"cell": [8, 6], "pose": "sit", "facing": "w"}],
+      "tags": ["eat", "socialize", "rest"]
+    }
+  ],
+  "rooms": [
+    {"id": "bar", "label": "Coffee bar", "rect": [1, 1, 8, 2]},
+    {"id": "seating", "label": "Seating", "rect": [1, 3, 8, 4]}
+  ]
+}

@@ -47,6 +47,12 @@ importers:
       '@runloop-world/replay':
         specifier: workspace:*
         version: link:../../packages/replay
+      '@runloop-world/sim':
+        specifier: workspace:*
+        version: link:../../packages/sim
+      '@runloop-world/town':
+        specifier: workspace:*
+        version: link:../../packages/town
       '@runloop-world/world-engine':
         specifier: workspace:*
         version: link:../../packages/world-engine
@@ -133,6 +139,12 @@ importers:
       '@runloop-world/events':
         specifier: workspace:*
         version: link:../events
+      '@runloop-world/sim':
+        specifier: workspace:*
+        version: link:../sim
+      '@runloop-world/town':
+        specifier: workspace:*
+        version: link:../town
       '@runloop-world/world-engine':
         specifier: workspace:*
         version: link:../world-engine
@@ -144,11 +156,30 @@ importers:
         specifier: workspace:*
         version: link:../testkit
 
+  packages/sim:
+    dependencies:
+      '@runloop-world/events':
+        specifier: workspace:*
+        version: link:../events
+      '@runloop-world/town':
+        specifier: workspace:*
+        version: link:../town
+
   packages/testkit:
     dependencies:
       '@runloop-world/events':
         specifier: workspace:*
         version: link:../events
+
+  packages/town:
+    dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@runloop-world/world-engine':
+        specifier: workspace:*
+        version: link:../world-engine
 
   packages/world-engine:
     dependencies:

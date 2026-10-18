@@ -1,0 +1,1681 @@
+{
+  "format": "runloop.town",
+  "version": 1,
+  "id": "runloop-commons",
+  "name": "Runloop Commons",
+  "description": "A small walkable town inside a ring road. Hearth Row and Brookside are homes; Market Street has the café, bakery, diner, tavern and shops; the Civic Atrium holds the Town Hall, the Library, the clock and the fountain; the Research Park has the lab, the greenhouse and the pond. The Agent District reserves six lots on Foundry Road for real agents.",
+  "size": [96, 72],
+  "walkCellsPerMinute": 3,
+  "startTime": "08:00",
+  "population": {"default": 80, "max": 136},
+  "districts": [
+    {
+      "id": "dst_civic_atrium",
+      "label": "Civic Atrium",
+      "kind": "civic",
+      "rects": [[46, 19, 4, 10], [34, 29, 28, 16]],
+      "ground": "#d8ccb2"
+    },
+    {
+      "id": "dst_hearth_row",
+      "label": "Hearth Row",
+      "kind": "residential",
+      "rects": [[5, 5, 41, 10], [5, 19, 41, 10], [5, 29, 19, 16], [24, 29, 10, 6]],
+      "ground": "#a9c08e"
+    },
+    {
+      "id": "dst_market_street",
+      "label": "Market Street",
+      "kind": "market",
+      "rects": [[24, 35, 10, 10], [20, 49, 26, 9], [50, 49, 41, 9]],
+      "ground": "#b6bd96"
+    },
+    {
+      "id": "dst_agent_district",
+      "label": "Agent District",
+      "kind": "engineering",
+      "rects": [[50, 5, 41, 10], [50, 19, 41, 10], [62, 29, 29, 16]],
+      "ground": "#a2b59d"
+    },
+    {
+      "id": "dst_research_park",
+      "label": "Research Park",
+      "kind": "research",
+      "rects": [[5, 49, 15, 9], [5, 58, 41, 9]],
+      "ground": "#98bc8e"
+    },
+    {
+      "id": "dst_brookside",
+      "label": "Brookside",
+      "kind": "residential",
+      "rects": [[50, 58, 41, 9]],
+      "ground": "#a7c294"
+    }
+  ],
+  "roads": [
+    {"id": "road_ridge", "name": "Ridge Road", "kind": "ring", "rect": [2, 2, 92, 2], "sidewalks": ["s"]},
+    {"id": "road_brook", "name": "Brook Road", "kind": "ring", "rect": [2, 68, 92, 2], "sidewalks": ["n"]},
+    {"id": "road_westway", "name": "Westway", "kind": "ring", "rect": [2, 2, 2, 68], "sidewalks": ["e"]},
+    {"id": "road_eastway", "name": "Eastway", "kind": "ring", "rect": [92, 2, 2, 68], "sidewalks": ["w"]},
+    {
+      "id": "road_commons_north",
+      "name": "Commons Avenue",
+      "kind": "avenue",
+      "rect": [47, 4, 2, 12],
+      "sidewalks": ["w", "e"]
+    },
+    {
+      "id": "road_hearth_lane",
+      "name": "Hearth Lane",
+      "kind": "street",
+      "rect": [4, 16, 43, 2],
+      "sidewalks": ["n", "s"]
+    },
+    {
+      "id": "road_foundry",
+      "name": "Foundry Road",
+      "kind": "street",
+      "rect": [47, 16, 45, 2],
+      "sidewalks": ["n", "s"]
+    },
+    {
+      "id": "road_market",
+      "name": "Market Street",
+      "kind": "avenue",
+      "rect": [4, 46, 88, 2],
+      "sidewalks": ["n", "s"]
+    },
+    {
+      "id": "road_commons_south",
+      "name": "Commons Avenue",
+      "kind": "avenue",
+      "rect": [47, 48, 2, 20],
+      "sidewalks": ["w", "e"]
+    }
+  ],
+  "crossings": [
+    {"id": "xing_ridge_commons", "rect": [47, 4, 2, 1]},
+    {"id": "xing_commons_lane", "rect": [47, 15, 2, 1]},
+    {"id": "xing_lane_west", "rect": [46, 16, 1, 2]},
+    {"id": "xing_lane_east", "rect": [49, 16, 1, 2]},
+    {"id": "xing_lane_westway", "rect": [4, 16, 1, 2]},
+    {"id": "xing_lane_eastway", "rect": [91, 16, 1, 2]},
+    {"id": "xing_hearth_lane_mid", "rect": [24, 16, 1, 2]},
+    {"id": "xing_foundry_mid_a", "rect": [63, 16, 1, 2]},
+    {"id": "xing_foundry_mid_b", "rect": [76, 16, 1, 2]},
+    {"id": "xing_market_westway", "rect": [4, 46, 1, 2]},
+    {"id": "xing_market_eastway", "rect": [91, 46, 1, 2]},
+    {"id": "xing_market_west", "rect": [46, 46, 1, 2]},
+    {"id": "xing_market_east", "rect": [49, 46, 1, 2]},
+    {"id": "xing_market_commons", "rect": [47, 48, 2, 1]},
+    {"id": "xing_market_lab", "rect": [19, 46, 1, 2]},
+    {"id": "xing_market_cafe", "rect": [29, 46, 1, 2]},
+    {"id": "xing_market_tools", "rect": [59, 46, 1, 2]},
+    {"id": "xing_market_tavern", "rect": [79, 46, 1, 2]},
+    {"id": "xing_commons_mid", "rect": [47, 57, 2, 1]},
+    {"id": "xing_brook_commons", "rect": [47, 67, 2, 1]}
+  ],
+  "areas": [
+    {"id": "area_commons_walk", "kind": "plaza", "rect": [46, 19, 4, 10], "label": "Commons Walk"},
+    {"id": "area_atrium", "kind": "plaza", "rect": [34, 29, 28, 16], "label": "Civic Atrium"},
+    {"id": "area_hearth_green", "kind": "park", "rect": [5, 29, 29, 6], "label": "Hearth Green"},
+    {"id": "area_community_garden", "kind": "garden", "rect": [6, 33, 8, 2], "label": "Community garden"},
+    {"id": "area_green_walk", "kind": "path", "rect": [5, 31, 29, 2], "label": "Green Walk"},
+    {"id": "area_green_circle", "kind": "plaza", "rect": [15, 29, 6, 6], "label": "Green Circle"},
+    {"id": "area_foundry_yard", "kind": "plaza", "rect": [62, 29, 29, 6], "label": "Foundry Yard"},
+    {"id": "area_research_park", "kind": "park", "rect": [5, 58, 41, 9], "label": "Research Park"},
+    {"id": "area_lab_walk", "kind": "path", "rect": [19, 49, 1, 10]},
+    {"id": "area_park_loop_n", "kind": "path", "rect": [7, 59, 14, 1]},
+    {"id": "area_park_loop_s", "kind": "path", "rect": [7, 64, 14, 1]},
+    {"id": "area_park_loop_w", "kind": "path", "rect": [7, 59, 1, 6]},
+    {"id": "area_park_loop_e", "kind": "path", "rect": [20, 59, 1, 6]},
+    {"id": "area_park_gate_w", "kind": "path", "rect": [5, 62, 2, 1]},
+    {"id": "area_park_gate_s", "kind": "path", "rect": [13, 65, 1, 2]},
+    {"id": "area_pond", "kind": "water", "rect": [9, 60, 10, 4], "label": "Lattice Pond"}
+  ],
+  "landmarks": [
+    {"id": "lmk_clock_tower", "kind": "clock_tower", "label": "Commons Clock", "rect": [47, 30, 2, 2]},
+    {"id": "lmk_signal_board", "kind": "signal_board", "label": "Signal Board", "rect": [47, 35, 2, 1]},
+    {"id": "lmk_fountain", "kind": "fountain", "label": "Commons Fountain", "rect": [46, 39, 4, 3]},
+    {"id": "lmk_first_commit", "kind": "statue", "label": "First Commit", "rect": [75, 31, 2, 2]}
+  ],
+  "lots": [
+    {
+      "id": "lot_hearth_n1",
+      "districtId": "dst_hearth_row",
+      "rect": [5, 5, 10, 10],
+      "frontage": "s",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_hearth_n2",
+      "districtId": "dst_hearth_row",
+      "rect": [15, 5, 10, 10],
+      "frontage": "s",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_hearth_n3",
+      "districtId": "dst_hearth_row",
+      "rect": [25, 5, 10, 10],
+      "frontage": "s",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_hearth_n4",
+      "districtId": "dst_hearth_row",
+      "rect": [35, 5, 11, 10],
+      "frontage": "s",
+      "use": "building"
+    },
+    {
+      "id": "lot_hearth_m1",
+      "districtId": "dst_hearth_row",
+      "rect": [5, 19, 10, 10],
+      "frontage": "n",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_hearth_m2",
+      "districtId": "dst_hearth_row",
+      "rect": [15, 19, 10, 10],
+      "frontage": "n",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_hearth_m3",
+      "districtId": "dst_hearth_row",
+      "rect": [25, 19, 10, 10],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_hearth_m4",
+      "districtId": "dst_hearth_row",
+      "rect": [35, 19, 11, 10],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_hearth_s1",
+      "districtId": "dst_hearth_row",
+      "rect": [5, 35, 10, 10],
+      "frontage": "s",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_hearth_s2",
+      "districtId": "dst_hearth_row",
+      "rect": [15, 35, 9, 10],
+      "frontage": "s",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_corner_cafe",
+      "districtId": "dst_market_street",
+      "rect": [24, 35, 10, 10],
+      "frontage": "s",
+      "use": "building"
+    },
+    {
+      "id": "lot_town_hall",
+      "districtId": "dst_civic_atrium",
+      "rect": [35, 29, 10, 9],
+      "frontage": "s",
+      "use": "building"
+    },
+    {
+      "id": "lot_library",
+      "districtId": "dst_civic_atrium",
+      "rect": [51, 29, 10, 9],
+      "frontage": "s",
+      "use": "building"
+    },
+    {
+      "id": "lot_northwind",
+      "districtId": "dst_agent_district",
+      "rect": [62, 35, 13, 10],
+      "frontage": "s",
+      "use": "building"
+    },
+    {
+      "id": "lot_foundry_works",
+      "districtId": "dst_agent_district",
+      "rect": [76, 35, 14, 10],
+      "frontage": "s",
+      "use": "building"
+    },
+    {
+      "id": "lot_lattice_lab",
+      "districtId": "dst_research_park",
+      "rect": [5, 49, 14, 9],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_sunrise_bakery",
+      "districtId": "dst_market_street",
+      "rect": [20, 49, 8, 8],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_inkwell_books",
+      "districtId": "dst_market_street",
+      "rect": [28, 49, 8, 8],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_bluebird_diner",
+      "districtId": "dst_market_street",
+      "rect": [36, 49, 10, 9],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_green_basket",
+      "districtId": "dst_market_street",
+      "rect": [50, 49, 9, 9],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_tinker_tools",
+      "districtId": "dst_market_street",
+      "rect": [59, 49, 9, 9],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_lantern_tavern",
+      "districtId": "dst_market_street",
+      "rect": [68, 49, 12, 9],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_signal_house",
+      "districtId": "dst_market_street",
+      "rect": [80, 49, 11, 9],
+      "frontage": "n",
+      "use": "building"
+    },
+    {
+      "id": "lot_greenhouse",
+      "districtId": "dst_research_park",
+      "rect": [32, 58, 10, 9],
+      "frontage": "s",
+      "use": "building"
+    },
+    {
+      "id": "lot_brook_1",
+      "districtId": "dst_brookside",
+      "rect": [50, 58, 10, 9],
+      "frontage": "s",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_brook_2",
+      "districtId": "dst_brookside",
+      "rect": [60, 58, 10, 9],
+      "frontage": "s",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_brook_3",
+      "districtId": "dst_brookside",
+      "rect": [70, 58, 10, 9],
+      "frontage": "s",
+      "use": "building",
+      "fence": true
+    },
+    {
+      "id": "lot_brook_4",
+      "districtId": "dst_brookside",
+      "rect": [80, 58, 11, 9],
+      "frontage": "s",
+      "use": "building"
+    },
+    {
+      "id": "lot_agent_1",
+      "districtId": "dst_agent_district",
+      "rect": [51, 5, 12, 10],
+      "frontage": "s",
+      "use": "agent",
+      "buildingId": "bld_agent_hq_1"
+    },
+    {
+      "id": "lot_agent_2",
+      "districtId": "dst_agent_district",
+      "rect": [64, 5, 12, 10],
+      "frontage": "s",
+      "use": "agent",
+      "buildingId": "bld_agent_hq_2"
+    },
+    {
+      "id": "lot_agent_3",
+      "districtId": "dst_agent_district",
+      "rect": [77, 5, 12, 10],
+      "frontage": "s",
+      "use": "agent",
+      "buildingId": "bld_agent_hq_3"
+    },
+    {
+      "id": "lot_agent_4",
+      "districtId": "dst_agent_district",
+      "rect": [51, 19, 12, 10],
+      "frontage": "n",
+      "use": "agent",
+      "buildingId": "bld_agent_hq_4"
+    },
+    {
+      "id": "lot_agent_5",
+      "districtId": "dst_agent_district",
+      "rect": [64, 19, 12, 10],
+      "frontage": "n",
+      "use": "agent",
+      "buildingId": "bld_agent_hq_5"
+    },
+    {
+      "id": "lot_agent_6",
+      "districtId": "dst_agent_district",
+      "rect": [77, 19, 12, 10],
+      "frontage": "n",
+      "use": "agent",
+      "buildingId": "bld_agent_hq_6"
+    }
+  ],
+  "buildings": [
+    {
+      "id": "bld_hearth_n1",
+      "lotId": "lot_hearth_n1",
+      "name": "Juniper House",
+      "archetype": "house",
+      "footprint": [6, 7, 8, 7],
+      "facing": "s",
+      "door": [9, 13],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#f2e3c9", "roof": "#c2674a", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_hearth_n2",
+      "lotId": "lot_hearth_n2",
+      "name": "Thistle House",
+      "archetype": "house",
+      "footprint": [16, 7, 8, 7],
+      "facing": "s",
+      "door": [19, 13],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#efd4bb", "roof": "#4a8b86", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_hearth_n3",
+      "lotId": "lot_hearth_n3",
+      "name": "Larkspur House",
+      "archetype": "house",
+      "footprint": [26, 7, 8, 7],
+      "facing": "s",
+      "door": [29, 13],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#e9cfae", "roof": "#a8623f", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_hearth_flats_n",
+      "lotId": "lot_hearth_n4",
+      "name": "Hearth Flats North",
+      "archetype": "flats",
+      "footprint": [36, 6, 10, 8],
+      "facing": "s",
+      "door": [40, 13],
+      "interior": "flats",
+      "floors": 3,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#ecd9c6", "roof": "#b5573f", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_hearth_m1",
+      "lotId": "lot_hearth_m1",
+      "name": "Rowan House",
+      "archetype": "house",
+      "footprint": [6, 20, 8, 7],
+      "facing": "n",
+      "door": [10, 20],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#e6d6c3", "roof": "#5d6b78", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_hearth_m2",
+      "lotId": "lot_hearth_m2",
+      "name": "Hazel House",
+      "archetype": "house",
+      "footprint": [16, 20, 8, 7],
+      "facing": "n",
+      "door": [20, 20],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#f3e8d8", "roof": "#4f6f8a", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_hearth_flats_w",
+      "lotId": "lot_hearth_m3",
+      "name": "Hearth Flats West",
+      "archetype": "flats",
+      "footprint": [25, 20, 10, 8],
+      "facing": "n",
+      "door": [30, 20],
+      "interior": "flats",
+      "floors": 3,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#f0dccb", "roof": "#3f7f7a", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_hearth_flats_e",
+      "lotId": "lot_hearth_m4",
+      "name": "Hearth Flats East",
+      "archetype": "flats",
+      "footprint": [36, 20, 10, 8],
+      "facing": "n",
+      "door": [41, 20],
+      "interior": "flats",
+      "floors": 3,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#e9cfae", "roof": "#7b5a6b", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_hearth_s1",
+      "lotId": "lot_hearth_s1",
+      "name": "Bramble House",
+      "archetype": "house",
+      "footprint": [6, 37, 8, 7],
+      "facing": "s",
+      "door": [9, 43],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#f2e3c9", "roof": "#c2674a", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_hearth_s2",
+      "lotId": "lot_hearth_s2",
+      "name": "Clover House",
+      "archetype": "house",
+      "footprint": [15, 37, 8, 7],
+      "facing": "s",
+      "door": [18, 43],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#efd4bb", "roof": "#4a8b86", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_corner_cafe",
+      "lotId": "lot_corner_cafe",
+      "name": "Corner Café",
+      "archetype": "cafe",
+      "footprint": [24, 37, 10, 8],
+      "facing": "s",
+      "door": [28, 44],
+      "interior": "cafe",
+      "floors": 1,
+      "orgId": "org_corner_cafe",
+      "access": "public",
+      "hours": {"open": "06:00", "close": "19:00"},
+      "sign": {"text": "Corner Café", "hue": "#c2674a"},
+      "palette": {"wall": "#f3e8d8", "roof": "#c2674a", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_town_hall",
+      "lotId": "lot_town_hall",
+      "name": "Town Hall",
+      "archetype": "town_hall",
+      "footprint": [35, 30, 10, 8],
+      "facing": "s",
+      "door": [39, 37],
+      "interior": "town_hall",
+      "floors": 2,
+      "orgId": "org_commons_council",
+      "access": "public",
+      "hours": {"open": "07:00", "close": "17:30"},
+      "sign": {"text": "Town Hall", "hue": "#8a6a3a"},
+      "palette": {"wall": "#efe6d6", "roof": "#5d6b78", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_library",
+      "lotId": "lot_library",
+      "name": "Commons Library",
+      "archetype": "library",
+      "footprint": [51, 30, 10, 8],
+      "facing": "s",
+      "door": [55, 37],
+      "interior": "library",
+      "floors": 2,
+      "orgId": "org_commons_council",
+      "access": "public",
+      "hours": {"open": "07:00", "close": "20:00"},
+      "sign": {"text": "Library", "hue": "#7a5a8f"},
+      "palette": {"wall": "#ecd9c6", "roof": "#4a8b86", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_northwind_studio",
+      "lotId": "lot_northwind",
+      "name": "Northwind Studio",
+      "archetype": "office",
+      "footprint": [62, 37, 12, 8],
+      "facing": "s",
+      "door": [67, 44],
+      "interior": "office",
+      "floors": 3,
+      "orgId": "org_northwind",
+      "access": "staff",
+      "hours": {"open": "07:00", "close": "20:00"},
+      "sign": {"text": "Northwind", "hue": "#3f7f9a"},
+      "palette": {"wall": "#e6d6c3", "roof": "#4f6f8a", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_foundry_works",
+      "lotId": "lot_foundry_works",
+      "name": "Foundry Works",
+      "archetype": "workshop",
+      "footprint": [77, 37, 12, 8],
+      "facing": "s",
+      "door": [82, 44],
+      "interior": "workshop",
+      "floors": 1,
+      "orgId": "org_foundry_works",
+      "access": "staff",
+      "hours": {"open": "07:00", "close": "19:00"},
+      "sign": {"text": "Foundry Works", "hue": "#a5603a"},
+      "palette": {"wall": "#e4cdb6", "roof": "#a8623f", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_lattice_lab",
+      "lotId": "lot_lattice_lab",
+      "name": "Lattice Lab",
+      "archetype": "lab",
+      "footprint": [6, 49, 12, 8],
+      "facing": "n",
+      "door": [12, 49],
+      "interior": "lab",
+      "floors": 3,
+      "orgId": "org_lattice_labs",
+      "access": "staff",
+      "hours": {"open": "07:00", "close": "21:00"},
+      "sign": {"text": "Lattice Lab", "hue": "#3f8f8a"},
+      "palette": {"wall": "#f2e3c9", "roof": "#3f7f7a", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_sunrise_bakery",
+      "lotId": "lot_sunrise_bakery",
+      "name": "Sunrise Bakery",
+      "archetype": "bakery",
+      "footprint": [20, 49, 8, 7],
+      "facing": "n",
+      "door": [24, 49],
+      "interior": "bakery",
+      "floors": 1,
+      "orgId": "org_sunrise_bakery",
+      "access": "public",
+      "hours": {"open": "05:30", "close": "15:00"},
+      "sign": {"text": "Bakery", "hue": "#d9963b"},
+      "palette": {"wall": "#f3e8d8", "roof": "#c99a3b", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_inkwell_books",
+      "lotId": "lot_inkwell_books",
+      "name": "Inkwell Books",
+      "archetype": "shop",
+      "footprint": [28, 49, 8, 7],
+      "facing": "n",
+      "door": [32, 49],
+      "interior": "shop",
+      "floors": 1,
+      "orgId": "org_market_guild",
+      "access": "public",
+      "hours": {"open": "07:00", "close": "19:00"},
+      "sign": {"text": "Inkwell Books", "hue": "#5a6fa8"},
+      "palette": {"wall": "#efd4bb", "roof": "#5d6b78", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_bluebird_diner",
+      "lotId": "lot_bluebird_diner",
+      "name": "Bluebird Diner",
+      "archetype": "diner",
+      "footprint": [36, 49, 10, 8],
+      "facing": "n",
+      "door": [41, 49],
+      "interior": "diner",
+      "floors": 1,
+      "orgId": "org_bluebird_diner",
+      "access": "public",
+      "hours": {"open": "07:00", "close": "21:00"},
+      "sign": {"text": "Bluebird Diner", "hue": "#4a86b8"},
+      "palette": {"wall": "#f0dccb", "roof": "#4f6f8a", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_green_basket",
+      "lotId": "lot_green_basket",
+      "name": "Green Basket Grocer",
+      "archetype": "shop",
+      "footprint": [51, 49, 8, 7],
+      "facing": "n",
+      "door": [55, 49],
+      "interior": "shop",
+      "floors": 1,
+      "orgId": "org_market_guild",
+      "access": "public",
+      "hours": {"open": "07:00", "close": "20:00"},
+      "sign": {"text": "Green Basket", "hue": "#5e9a5a"},
+      "palette": {"wall": "#e9cfae", "roof": "#a8623f", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_tinker_tools",
+      "lotId": "lot_tinker_tools",
+      "name": "Tinker Tools",
+      "archetype": "shop",
+      "footprint": [60, 49, 8, 7],
+      "facing": "n",
+      "door": [64, 49],
+      "interior": "shop",
+      "floors": 1,
+      "orgId": "org_market_guild",
+      "access": "public",
+      "hours": {"open": "07:00", "close": "18:00"},
+      "sign": {"text": "Tinker Tools", "hue": "#b0563f"},
+      "palette": {"wall": "#e6d6c3", "roof": "#7b5a6b", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_lantern_tavern",
+      "lotId": "lot_lantern_tavern",
+      "name": "Lantern Tavern",
+      "archetype": "tavern",
+      "footprint": [68, 49, 12, 8],
+      "facing": "n",
+      "door": [74, 49],
+      "interior": "tavern",
+      "floors": 1,
+      "orgId": "org_lantern_tavern",
+      "access": "public",
+      "hours": {"open": "16:00", "close": "01:00"},
+      "sign": {"text": "Lantern Tavern", "hue": "#c58a2e"},
+      "palette": {"wall": "#ecd9c6", "roof": "#b5573f", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_signal_house",
+      "lotId": "lot_signal_house",
+      "name": "Signal House",
+      "archetype": "office",
+      "footprint": [80, 49, 10, 8],
+      "facing": "n",
+      "door": [85, 49],
+      "interior": "office_small",
+      "floors": 2,
+      "orgId": "org_signal_co",
+      "access": "staff",
+      "hours": {"open": "07:00", "close": "22:00"},
+      "sign": {"text": "Signal House", "hue": "#6a5fa8"},
+      "palette": {"wall": "#e4cdb6", "roof": "#5d6b78", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_greenhouse",
+      "lotId": "lot_greenhouse",
+      "name": "Lattice Greenhouse",
+      "archetype": "greenhouse",
+      "footprint": [32, 59, 10, 7],
+      "facing": "s",
+      "door": [36, 65],
+      "interior": "greenhouse",
+      "floors": 1,
+      "orgId": "org_lattice_labs",
+      "access": "staff",
+      "hours": {"open": "05:30", "close": "18:00"},
+      "palette": {"wall": "#dfeee8", "roof": "#bcd9d2", "trim": "#f7fbf9"}
+    },
+    {
+      "id": "bld_brook_1",
+      "lotId": "lot_brook_1",
+      "name": "Willow Cottage",
+      "archetype": "house",
+      "footprint": [51, 59, 8, 7],
+      "facing": "s",
+      "door": [54, 65],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#f2e3c9", "roof": "#c2674a", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_brook_2",
+      "lotId": "lot_brook_2",
+      "name": "Alder Cottage",
+      "archetype": "house",
+      "footprint": [61, 59, 8, 7],
+      "facing": "s",
+      "door": [64, 65],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#efd4bb", "roof": "#4a8b86", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_brook_3",
+      "lotId": "lot_brook_3",
+      "name": "Sedge Cottage",
+      "archetype": "house",
+      "footprint": [71, 59, 8, 7],
+      "facing": "s",
+      "door": [74, 65],
+      "interior": "house",
+      "floors": 1,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#e9cfae", "roof": "#a8623f", "trim": "#fbf6ee"}
+    },
+    {
+      "id": "bld_brook_flats",
+      "lotId": "lot_brook_4",
+      "name": "Brookside Flats",
+      "archetype": "flats",
+      "footprint": [80, 58, 10, 8],
+      "facing": "s",
+      "door": [84, 65],
+      "interior": "flats",
+      "floors": 3,
+      "orgId": null,
+      "access": "residents",
+      "hours": null,
+      "palette": {"wall": "#f2e3c9", "roof": "#4a8b86", "trim": "#fbf6ee"}
+    }
+  ],
+  "spots": [
+    {
+      "id": "spot_fountain_rim",
+      "label": "Fountain rim",
+      "kind": "fountain",
+      "districtId": "dst_civic_atrium",
+      "pose": "sit",
+      "cells": [
+        [46, 38],
+        [47, 38],
+        [48, 38],
+        [49, 38],
+        [45, 39],
+        [45, 40],
+        [45, 41],
+        [50, 39],
+        [50, 40],
+        [50, 41],
+        [46, 42],
+        [47, 42],
+        [48, 42],
+        [49, 42]
+      ],
+      "tags": ["socialize", "rest", "stroll"]
+    },
+    {
+      "id": "spot_town_hall_steps",
+      "label": "Town Hall steps",
+      "kind": "steps",
+      "districtId": "dst_civic_atrium",
+      "pose": "sit",
+      "cells": [[36, 38], [37, 38], [38, 38], [40, 38], [41, 38], [42, 38]],
+      "tags": ["socialize", "rest"]
+    },
+    {
+      "id": "spot_clock_square",
+      "label": "Clock square",
+      "kind": "plaza",
+      "districtId": "dst_civic_atrium",
+      "pose": "stand",
+      "cells": [[47, 29], [48, 29], [47, 32], [48, 32], [46, 30], [49, 31]],
+      "tags": ["stroll", "socialize"]
+    },
+    {
+      "id": "spot_signal_board",
+      "label": "Signal Board",
+      "kind": "board",
+      "districtId": "dst_civic_atrium",
+      "pose": "stand",
+      "cells": [[46, 36], [47, 36], [48, 36], [49, 36]],
+      "tags": ["stroll"]
+    },
+    {
+      "id": "spot_cafe_patio",
+      "label": "Café patio",
+      "kind": "patio",
+      "districtId": "dst_civic_atrium",
+      "pose": "sit",
+      "cells": [[34, 39], [35, 39], [34, 40], [35, 40], [34, 42], [35, 42], [34, 43], [35, 43]],
+      "tags": ["eat", "socialize"],
+      "hours": {"open": "07:00", "close": "19:00"}
+    },
+    {
+      "id": "spot_commons_walk",
+      "label": "Commons Walk benches",
+      "kind": "bench",
+      "districtId": "dst_civic_atrium",
+      "pose": "sit",
+      "cells": [[46, 21], [46, 23], [46, 25], [49, 21], [49, 23], [49, 25]],
+      "tags": ["rest", "socialize", "eat"]
+    },
+    {
+      "id": "spot_green_circle",
+      "label": "Green Circle",
+      "kind": "bench",
+      "districtId": "dst_hearth_row",
+      "pose": "sit",
+      "cells": [[15, 29], [16, 29], [19, 29], [20, 29], [15, 34], [16, 34], [19, 34], [20, 34]],
+      "tags": ["socialize", "rest", "stroll", "eat"]
+    },
+    {
+      "id": "spot_green_walk",
+      "label": "Green Walk",
+      "kind": "lawn",
+      "districtId": "dst_hearth_row",
+      "pose": "stand",
+      "cells": [[23, 31], [25, 32], [27, 31], [29, 32], [31, 31]],
+      "tags": ["stroll"]
+    },
+    {
+      "id": "spot_community_garden",
+      "label": "Community garden",
+      "kind": "garden",
+      "districtId": "dst_hearth_row",
+      "pose": "stand",
+      "cells": [[6, 32], [8, 32], [10, 32], [12, 32]],
+      "tags": ["stroll", "socialize"]
+    },
+    {
+      "id": "spot_foundry_yard",
+      "label": "Foundry Yard benches",
+      "kind": "bench",
+      "districtId": "dst_agent_district",
+      "pose": "sit",
+      "cells": [[66, 30], [68, 30], [70, 30], [80, 30], [82, 30], [84, 30]],
+      "tags": ["rest", "socialize", "eat"]
+    },
+    {
+      "id": "spot_byte_bites",
+      "label": "Byte Bites food truck",
+      "kind": "stall",
+      "districtId": "dst_agent_district",
+      "pose": "stand",
+      "cells": [[86, 33], [87, 33], [88, 33], [89, 33]],
+      "tags": ["eat", "socialize"],
+      "hours": {"open": "11:00", "close": "15:00"}
+    },
+    {
+      "id": "spot_first_commit",
+      "label": "First Commit statue",
+      "kind": "plaza",
+      "districtId": "dst_agent_district",
+      "pose": "stand",
+      "cells": [[74, 31], [77, 32], [75, 30], [76, 33]],
+      "tags": ["stroll"]
+    },
+    {
+      "id": "spot_pond_benches",
+      "label": "Pond benches",
+      "kind": "bench",
+      "districtId": "dst_research_park",
+      "pose": "sit",
+      "cells": [[11, 59], [13, 59], [15, 59], [11, 64], [13, 64], [15, 64]],
+      "tags": ["rest", "socialize", "stroll", "eat"]
+    },
+    {
+      "id": "spot_reading_lawn",
+      "label": "Reading lawn",
+      "kind": "lawn",
+      "districtId": "dst_research_park",
+      "pose": "stand",
+      "cells": [[7, 60], [7, 61], [7, 63], [20, 60], [20, 62]],
+      "tags": ["stroll", "rest"]
+    }
+  ],
+  "orgs": [
+    {"id": "org_home", "name": "Your organisation", "kind": "home"},
+    {"id": "org_commons_council", "name": "Commons Council", "kind": "civic"},
+    {"id": "org_corner_cafe", "name": "Corner Café", "kind": "business"},
+    {"id": "org_sunrise_bakery", "name": "Sunrise Bakery", "kind": "business"},
+    {"id": "org_bluebird_diner", "name": "Bluebird Diner", "kind": "business"},
+    {"id": "org_lantern_tavern", "name": "Lantern Tavern", "kind": "business"},
+    {"id": "org_market_guild", "name": "Market Guild", "kind": "business"},
+    {"id": "org_lattice_labs", "name": "Lattice Labs", "kind": "research"},
+    {"id": "org_northwind", "name": "Northwind Studio", "kind": "engineering"},
+    {"id": "org_foundry_works", "name": "Foundry Works", "kind": "engineering"},
+    {"id": "org_signal_co", "name": "Signal & Co.", "kind": "engineering"}
+  ],
+  "roles": [
+    {
+      "id": "engineer",
+      "label": "Engineer",
+      "outfit": "hoodie",
+      "schedule": "office",
+      "share": 14,
+      "work": {"buildings": ["bld_northwind_studio", "bld_signal_house"], "tag": "desk"}
+    },
+    {
+      "id": "researcher",
+      "label": "Researcher",
+      "outfit": "labcoat",
+      "schedule": "lab",
+      "share": 8,
+      "work": {"buildings": ["bld_lattice_lab"], "tag": "research"}
+    },
+    {
+      "id": "gardener",
+      "label": "Gardener",
+      "outfit": "overalls",
+      "schedule": "early",
+      "share": 3,
+      "work": {"buildings": ["bld_greenhouse"], "tag": "gardener"}
+    },
+    {
+      "id": "student",
+      "label": "Student",
+      "outfit": "backpack",
+      "schedule": "student",
+      "share": 9,
+      "work": {"buildings": ["bld_library"], "tag": "study"}
+    },
+    {
+      "id": "librarian",
+      "label": "Librarian",
+      "outfit": "cardigan",
+      "schedule": "day",
+      "share": 2,
+      "work": {"buildings": ["bld_library"], "tag": "librarian"}
+    },
+    {
+      "id": "clerk",
+      "label": "Town clerk",
+      "outfit": "blazer",
+      "schedule": "day",
+      "share": 4,
+      "work": {"buildings": ["bld_town_hall"], "tag": "clerk"}
+    },
+    {
+      "id": "barista",
+      "label": "Barista",
+      "outfit": "apron",
+      "schedule": "early",
+      "share": 2,
+      "work": {"buildings": ["bld_corner_cafe"], "tag": "barista"}
+    },
+    {
+      "id": "baker",
+      "label": "Baker",
+      "outfit": "apron",
+      "schedule": "early",
+      "share": 2,
+      "work": {"buildings": ["bld_sunrise_bakery"], "tag": "baker"}
+    },
+    {
+      "id": "cook",
+      "label": "Cook",
+      "outfit": "apron",
+      "schedule": "day",
+      "share": 2,
+      "work": {"buildings": ["bld_bluebird_diner"], "tag": "cook"}
+    },
+    {
+      "id": "bartender",
+      "label": "Bartender",
+      "outfit": "vest",
+      "schedule": "late",
+      "share": 3,
+      "work": {"buildings": ["bld_lantern_tavern"], "tag": "bartender"}
+    },
+    {
+      "id": "shopkeeper",
+      "label": "Shopkeeper",
+      "outfit": "vest",
+      "schedule": "day",
+      "share": 4,
+      "work": {"buildings": ["bld_green_basket", "bld_tinker_tools", "bld_inkwell_books"], "tag": "shopkeeper"}
+    },
+    {
+      "id": "artisan",
+      "label": "Artisan",
+      "outfit": "overalls",
+      "schedule": "day",
+      "share": 3,
+      "work": {"buildings": ["bld_foundry_works"], "tag": "artisan"}
+    },
+    {
+      "id": "retiree",
+      "label": "Retiree",
+      "outfit": "cardigan",
+      "schedule": "leisure",
+      "share": 20,
+      "work": null
+    },
+    {
+      "id": "lamplighter",
+      "label": "Lamplighter",
+      "outfit": "vest",
+      "schedule": "night",
+      "share": 5,
+      "work": null
+    }
+  ],
+  "schedules": [
+    {
+      "id": "office",
+      "label": "Office hours",
+      "blocks": [
+        {"id": "night", "label": "Night", "from": "23:00", "to": "07:00", "bias": {"sleep": 260}},
+        {
+          "id": "morning",
+          "label": "Morning",
+          "from": "07:00",
+          "to": "07:45",
+          "bias": {"eat": 90, "stroll": 20}
+        },
+        {"id": "work_am", "label": "Morning work", "from": "07:45", "to": "10:00", "bias": {"work": 190}},
+        {
+          "id": "coffee",
+          "label": "Coffee break",
+          "from": "10:00",
+          "to": "10:30",
+          "bias": {"stroll": 140, "socialize": 110}
+        },
+        {
+          "id": "work_mid",
+          "label": "Late-morning work",
+          "from": "10:30",
+          "to": "12:00",
+          "bias": {"work": 190}
+        },
+        {
+          "id": "lunch",
+          "label": "Lunch",
+          "from": "12:00",
+          "to": "13:00",
+          "bias": {"eat": 130, "socialize": 40}
+        },
+        {"id": "work_pm", "label": "Afternoon work", "from": "13:00", "to": "14:30", "bias": {"work": 190}},
+        {
+          "id": "tea",
+          "label": "Tea break",
+          "from": "14:30",
+          "to": "15:00",
+          "bias": {"stroll": 140, "socialize": 110}
+        },
+        {
+          "id": "work_late",
+          "label": "Late-afternoon work",
+          "from": "15:00",
+          "to": "17:15",
+          "bias": {"work": 190}
+        },
+        {
+          "id": "evening",
+          "label": "Evening",
+          "from": "17:15",
+          "to": "23:00",
+          "bias": {"socialize": 80, "eat": 60, "stroll": 40, "rest": 40}
+        }
+      ]
+    },
+    {
+      "id": "lab",
+      "label": "Lab hours",
+      "blocks": [
+        {"id": "night", "label": "Night", "from": "23:00", "to": "07:00", "bias": {"sleep": 260}},
+        {
+          "id": "morning",
+          "label": "Morning",
+          "from": "07:00",
+          "to": "07:30",
+          "bias": {"eat": 90, "stroll": 20}
+        },
+        {"id": "work_am", "label": "Morning work", "from": "07:30", "to": "10:30", "bias": {"work": 190}},
+        {
+          "id": "break",
+          "label": "Break",
+          "from": "10:30",
+          "to": "11:00",
+          "bias": {"stroll": 140, "socialize": 110}
+        },
+        {
+          "id": "work_mid",
+          "label": "Late-morning work",
+          "from": "11:00",
+          "to": "11:45",
+          "bias": {"work": 190}
+        },
+        {
+          "id": "lunch",
+          "label": "Lunch",
+          "from": "11:45",
+          "to": "12:45",
+          "bias": {"eat": 130, "socialize": 40}
+        },
+        {"id": "work_pm", "label": "Afternoon work", "from": "12:45", "to": "13:45", "bias": {"work": 190}},
+        {
+          "id": "break_pm",
+          "label": "Afternoon break",
+          "from": "13:45",
+          "to": "14:15",
+          "bias": {"stroll": 140, "socialize": 110}
+        },
+        {
+          "id": "work_late",
+          "label": "Late-afternoon work",
+          "from": "14:15",
+          "to": "17:00",
+          "bias": {"work": 190}
+        },
+        {
+          "id": "evening",
+          "label": "Evening",
+          "from": "17:00",
+          "to": "23:00",
+          "bias": {"socialize": 80, "eat": 60, "stroll": 40, "rest": 40}
+        }
+      ]
+    },
+    {
+      "id": "day",
+      "label": "Day shift",
+      "blocks": [
+        {"id": "night", "label": "Night", "from": "23:00", "to": "07:00", "bias": {"sleep": 260}},
+        {
+          "id": "morning",
+          "label": "Morning",
+          "from": "07:00",
+          "to": "07:45",
+          "bias": {"eat": 90, "stroll": 20}
+        },
+        {"id": "work_am", "label": "Morning work", "from": "07:45", "to": "11:15", "bias": {"work": 190}},
+        {
+          "id": "break",
+          "label": "Break",
+          "from": "11:15",
+          "to": "11:45",
+          "bias": {"stroll": 140, "socialize": 110}
+        },
+        {
+          "id": "work_mid",
+          "label": "Late-morning work",
+          "from": "11:45",
+          "to": "12:30",
+          "bias": {"work": 190}
+        },
+        {
+          "id": "lunch",
+          "label": "Lunch",
+          "from": "12:30",
+          "to": "13:30",
+          "bias": {"eat": 130, "socialize": 40}
+        },
+        {"id": "work_pm", "label": "Afternoon work", "from": "13:30", "to": "15:45", "bias": {"work": 190}},
+        {
+          "id": "break_pm",
+          "label": "Afternoon break",
+          "from": "15:45",
+          "to": "16:15",
+          "bias": {"stroll": 140, "socialize": 110}
+        },
+        {
+          "id": "work_late",
+          "label": "Late-afternoon work",
+          "from": "16:15",
+          "to": "17:30",
+          "bias": {"work": 190}
+        },
+        {
+          "id": "evening",
+          "label": "Evening",
+          "from": "17:30",
+          "to": "23:00",
+          "bias": {"socialize": 80, "eat": 60, "stroll": 40, "rest": 40}
+        }
+      ]
+    },
+    {
+      "id": "early",
+      "label": "Early shift",
+      "blocks": [
+        {"id": "night", "label": "Night", "from": "21:30", "to": "05:30", "bias": {"sleep": 260}},
+        {"id": "dawn", "label": "Dawn", "from": "05:30", "to": "06:00", "bias": {"eat": 90}},
+        {"id": "work", "label": "Early work", "from": "06:00", "to": "09:00", "bias": {"work": 190}},
+        {
+          "id": "break",
+          "label": "Break",
+          "from": "09:00",
+          "to": "09:30",
+          "bias": {"stroll": 140, "socialize": 110}
+        },
+        {"id": "work_mid", "label": "Mid-morning work", "from": "09:30", "to": "11:30", "bias": {"work": 190}},
+        {"id": "lunch", "label": "Early lunch", "from": "11:30", "to": "12:00", "bias": {"eat": 140}},
+        {"id": "work_late", "label": "Midday work", "from": "12:00", "to": "14:00", "bias": {"work": 190}},
+        {
+          "id": "afternoon",
+          "label": "Afternoon",
+          "from": "14:00",
+          "to": "18:00",
+          "bias": {"stroll": 90, "socialize": 80, "eat": 50, "rest": 30}
+        },
+        {
+          "id": "evening",
+          "label": "Evening",
+          "from": "18:00",
+          "to": "21:30",
+          "bias": {"socialize": 70, "eat": 60, "rest": 40}
+        }
+      ]
+    },
+    {
+      "id": "late",
+      "label": "Late shift",
+      "blocks": [
+        {"id": "night", "label": "Night", "from": "02:00", "to": "10:00", "bias": {"sleep": 260}},
+        {
+          "id": "late_morning",
+          "label": "Late morning",
+          "from": "10:00",
+          "to": "12:30",
+          "bias": {"eat": 90, "stroll": 70}
+        },
+        {
+          "id": "afternoon",
+          "label": "Afternoon",
+          "from": "12:30",
+          "to": "16:00",
+          "bias": {"stroll": 90, "socialize": 80, "eat": 50, "rest": 30}
+        },
+        {"id": "work", "label": "Evening work", "from": "16:00", "to": "19:30", "bias": {"work": 190}},
+        {"id": "dinner", "label": "Dinner break", "from": "19:30", "to": "20:00", "bias": {"eat": 150}},
+        {"id": "work_late", "label": "Night work", "from": "20:00", "to": "01:00", "bias": {"work": 190}},
+        {
+          "id": "wind_down",
+          "label": "Wind down",
+          "from": "01:00",
+          "to": "02:00",
+          "bias": {"rest": 60, "eat": 30}
+        }
+      ]
+    },
+    {
+      "id": "student",
+      "label": "Student",
+      "blocks": [
+        {"id": "night", "label": "Night", "from": "23:30", "to": "07:30", "bias": {"sleep": 260}},
+        {
+          "id": "morning",
+          "label": "Morning",
+          "from": "07:30",
+          "to": "08:00",
+          "bias": {"eat": 90, "stroll": 20}
+        },
+        {"id": "study_am", "label": "Morning study", "from": "08:00", "to": "09:15", "bias": {"work": 170}},
+        {
+          "id": "recess",
+          "label": "Recess",
+          "from": "09:15",
+          "to": "09:45",
+          "bias": {"stroll": 130, "socialize": 120}
+        },
+        {
+          "id": "study_mid",
+          "label": "Late-morning study",
+          "from": "09:45",
+          "to": "12:00",
+          "bias": {"work": 170}
+        },
+        {
+          "id": "lunch",
+          "label": "Lunch",
+          "from": "12:00",
+          "to": "13:00",
+          "bias": {"eat": 130, "socialize": 40}
+        },
+        {"id": "study_pm", "label": "Afternoon study", "from": "13:00", "to": "14:30", "bias": {"work": 170}},
+        {
+          "id": "afternoon",
+          "label": "Free afternoon",
+          "from": "14:30",
+          "to": "19:00",
+          "bias": {"socialize": 100, "stroll": 90, "eat": 30}
+        },
+        {
+          "id": "evening",
+          "label": "Evening",
+          "from": "19:00",
+          "to": "23:30",
+          "bias": {"socialize": 70, "eat": 60, "rest": 40}
+        }
+      ]
+    },
+    {
+      "id": "leisure",
+      "label": "Retired",
+      "blocks": [
+        {"id": "night", "label": "Night", "from": "22:00", "to": "06:30", "bias": {"sleep": 260}},
+        {
+          "id": "morning",
+          "label": "Morning",
+          "from": "06:30",
+          "to": "08:00",
+          "bias": {"eat": 80, "stroll": 60}
+        },
+        {
+          "id": "late_morning",
+          "label": "Late morning",
+          "from": "08:00",
+          "to": "12:00",
+          "bias": {"stroll": 110, "socialize": 90, "rest": 20}
+        },
+        {
+          "id": "lunch",
+          "label": "Lunch",
+          "from": "12:00",
+          "to": "13:00",
+          "bias": {"eat": 130, "socialize": 40}
+        },
+        {
+          "id": "afternoon",
+          "label": "Afternoon",
+          "from": "13:00",
+          "to": "17:30",
+          "bias": {"stroll": 100, "socialize": 90, "rest": 10}
+        },
+        {
+          "id": "evening",
+          "label": "Evening",
+          "from": "17:30",
+          "to": "22:00",
+          "bias": {"eat": 60, "socialize": 70, "rest": 50}
+        }
+      ]
+    },
+    {
+      "id": "night",
+      "label": "Night rounds",
+      "blocks": [
+        {"id": "day_sleep", "label": "Daytime sleep", "from": "09:15", "to": "16:30", "bias": {"sleep": 260}},
+        {
+          "id": "afternoon",
+          "label": "Afternoon",
+          "from": "16:30",
+          "to": "19:30",
+          "bias": {"eat": 110, "socialize": 60, "rest": 40}
+        },
+        {"id": "rounds", "label": "Night rounds", "from": "19:30", "to": "08:30", "bias": {"stroll": 220}},
+        {
+          "id": "breakfast",
+          "label": "Breakfast",
+          "from": "08:30",
+          "to": "09:15",
+          "bias": {"eat": 140, "rest": 60}
+        }
+      ]
+    }
+  ],
+  "needs": [
+    {"id": "hunger", "label": "Hunger", "threshold": 60, "start": [15, 45]},
+    {"id": "energy", "label": "Tiredness", "threshold": 80, "start": [10, 35]},
+    {"id": "social", "label": "Loneliness", "threshold": 65, "start": [20, 55]}
+  ],
+  "names": {
+    "first": [
+      "Ada",
+      "Bram",
+      "Cleo",
+      "Dev",
+      "Esme",
+      "Farah",
+      "Gus",
+      "Hana",
+      "Idris",
+      "Juno",
+      "Kai",
+      "Lena",
+      "Milo",
+      "Nadia",
+      "Oren",
+      "Priya",
+      "Quinn",
+      "Rosa",
+      "Sami",
+      "Tova",
+      "Uma",
+      "Vik",
+      "Wren",
+      "Xiomara",
+      "Yusuf",
+      "Zara",
+      "Amara",
+      "Bodhi",
+      "Chiara",
+      "Dario",
+      "Elif",
+      "Felix",
+      "Greta",
+      "Hugo",
+      "Ines",
+      "Jonah",
+      "Keiko",
+      "Luca",
+      "Mira",
+      "Nico",
+      "Olu",
+      "Pia",
+      "Rafa",
+      "Sol",
+      "Theo",
+      "Vera",
+      "Wes",
+      "Yara",
+      "Zeke",
+      "Anya",
+      "Cyrus",
+      "Dalia",
+      "Emeka",
+      "Freya",
+      "Gael",
+      "Hiro",
+      "Isla",
+      "Jalen",
+      "Kofi",
+      "Lior",
+      "Mei",
+      "Noor",
+      "Otto",
+      "Paz",
+      "Rumi",
+      "Sana",
+      "Tariq",
+      "Ivo"
+    ],
+    "last": [
+      "Abara",
+      "Bell",
+      "Castell",
+      "Dorsey",
+      "Ekwueme",
+      "Fontaine",
+      "Garza",
+      "Holm",
+      "Ito",
+      "Jensen",
+      "Kowal",
+      "Lindqvist",
+      "Mbeki",
+      "Novak",
+      "Okafor",
+      "Park",
+      "Quill",
+      "Ramos",
+      "Sato",
+      "Umber",
+      "Varga",
+      "Whitlow",
+      "Xu",
+      "Yilmaz",
+      "Zhou",
+      "Ash",
+      "Brook",
+      "Calder",
+      "Delacroix",
+      "Esposito",
+      "Farrow",
+      "Gill",
+      "Haddad",
+      "Iqbal",
+      "Juarez",
+      "Kim",
+      "Larkin",
+      "Moreau",
+      "Nakamura",
+      "Osei",
+      "Petrov",
+      "Reyes",
+      "Silva",
+      "Thorne",
+      "Vance",
+      "Wu",
+      "Young",
+      "Abe"
+    ]
+  },
+  "weights": {
+    "need": {"hunger": 3, "energy": 3, "social": 2},
+    "travelPerMinute": 3,
+    "jitter": 30,
+    "trait": 40,
+    "stay": 25,
+    "foodChoices": 2,
+    "traitOf": {"socialize": 0, "work": 1},
+    "satisfies": {
+      "sleep": ["energy"],
+      "rest": ["energy"],
+      "eat": ["hunger"],
+      "work": [],
+      "socialize": ["social"],
+      "stroll": ["social"]
+    },
+    "rates": {
+      "sleep": [35, -210, 25],
+      "rest": [90, -80, 50],
+      "eat": [-2500, 40, -40],
+      "work": [110, 95, 15],
+      "socialize": [100, 60, -650],
+      "stroll": [120, 45, -150],
+      "walk": [120, 90, 40]
+    },
+    "durations": {
+      "sleep": [420, 510],
+      "rest": [30, 75],
+      "eat": [25, 45],
+      "work": [120, 210],
+      "socialize": [40, 100],
+      "stroll": [10, 30]
+    }
+  },
+  "look": {
+    "skin": ["#f3d2b8", "#e8b896", "#d39b76", "#b97c5a", "#8d5a3c", "#6b4329", "#4f311f"],
+    "hair": ["#2b2118", "#4a3326", "#6f4a2f", "#a8743f", "#d6b16b", "#b9b4ad", "#7a2e24", "#1f1f24"],
+    "bottoms": ["#3d4451", "#5b4a3a", "#2f3b4c", "#6b6f5a", "#7c5b4b", "#454545"],
+    "tops": {
+      "casual": ["#d98c6a", "#7fa8c9", "#c9a46b", "#9b8bc4", "#d97f8e", "#79a89a"],
+      "apron": ["#f2e6d0", "#e8d3b0", "#d9c2a0"],
+      "hoodie": ["#5b7fa6", "#6e6e8c", "#4f8a83", "#8a5a6e", "#a0674f"],
+      "labcoat": ["#f4f4f0", "#eef2f5"],
+      "vest": ["#7a5c3e", "#5f6b4a", "#6b4e5e"],
+      "backpack": ["#c96f53", "#5a87b0", "#d4a24a", "#7d6bb0"],
+      "blazer": ["#3f4a5c", "#5a4e6b", "#6b5a48"],
+      "overalls": ["#4f6f8f", "#6b7d4f", "#8a6f4f"],
+      "cardigan": ["#b5835a", "#8f6f9b", "#a7856b", "#7f8f9f"]
+    }
+  },
+  "decoration": {
+    "rules": [
+      {"kind": "tree_cone", "on": ["grass"], "density": 14, "minSpacing": 2},
+      {"kind": "tree_round", "on": ["grass", "park"], "density": 6, "minSpacing": 3},
+      {"kind": "tree_blossom", "on": ["yard"], "district": "dst_hearth_row", "density": 5, "minSpacing": 4},
+      {"kind": "tree_round", "on": ["yard"], "district": "dst_brookside", "density": 5, "minSpacing": 4},
+      {"kind": "bush", "on": ["yard", "park"], "density": 8, "minSpacing": 2},
+      {"kind": "flowerbed", "on": ["yard", "garden"], "density": 10, "minSpacing": 2},
+      {"kind": "lamp", "on": ["sidewalk_edge"], "density": 7, "minSpacing": 6},
+      {
+        "kind": "planter",
+        "on": ["plaza_edge"],
+        "district": "dst_civic_atrium",
+        "density": 10,
+        "minSpacing": 4
+      },
+      {
+        "kind": "planter",
+        "on": ["plaza_edge"],
+        "district": "dst_agent_district",
+        "density": 8,
+        "minSpacing": 4
+      },
+      {"kind": "reeds", "on": ["water_edge"], "density": 30, "minSpacing": 1}
+    ],
+    "fixed": [
+      {"kind": "lamp", "cell": [34, 29]},
+      {"kind": "lamp", "cell": [61, 29]},
+      {"kind": "lamp", "cell": [34, 44]},
+      {"kind": "lamp", "cell": [61, 44]},
+      {"kind": "parasol", "cell": [34, 39]},
+      {"kind": "parasol", "cell": [34, 42]},
+      {"kind": "bike_rack", "cell": [50, 37], "yaw": 90},
+      {"kind": "bike_rack", "cell": [61, 34], "yaw": 90},
+      {"kind": "mailbox", "cell": [45, 18]},
+      {"kind": "hydrant", "cell": [33, 45]},
+      {"kind": "hydrant", "cell": [62, 45]},
+      {"kind": "signpost", "cell": [46, 45], "yaw": 0},
+      {"kind": "signpost", "cell": [49, 18], "yaw": 180},
+      {"kind": "crate", "cell": [89, 32]},
+      {"kind": "bike_rack", "cell": [19, 48], "yaw": 0}
+    ]
+  },
+  "agentHq": {"interior": "agent_hq"}
+}

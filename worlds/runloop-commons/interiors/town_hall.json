@@ -1,0 +1,68 @@
+{
+  "id": "town_hall",
+  "kind": "grid",
+  "label": "Town hall",
+  "archetype": "town_hall",
+  "grid": [
+    "##w#ww#w##",
+    "#........#",
+    "#........#",
+    "w........w",
+    "#........#",
+    "#........#",
+    "#........#",
+    "####D#####"
+  ],
+  "furniture": [
+    {
+      "id": "desk_1",
+      "kind": "desk",
+      "cells": [[1, 1]],
+      "uses": [{"cell": [1, 2], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "clerk"]
+    },
+    {
+      "id": "desk_2",
+      "kind": "desk",
+      "cells": [[3, 1]],
+      "uses": [{"cell": [3, 2], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "clerk"]
+    },
+    {
+      "id": "desk_3",
+      "kind": "desk",
+      "cells": [[5, 1]],
+      "uses": [{"cell": [5, 2], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "clerk"]
+    },
+    {
+      "id": "desk_4",
+      "kind": "desk",
+      "cells": [[7, 1]],
+      "uses": [{"cell": [7, 2], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "clerk"]
+    },
+    {
+      "id": "counter",
+      "kind": "counter",
+      "cells": [[2, 4], [3, 4], [4, 4], [5, 4], [6, 4]],
+      "uses": [{"cell": [3, 3], "pose": "stand", "facing": "s"}, {"cell": [5, 3], "pose": "stand", "facing": "s"}],
+      "tags": ["work", "clerk"]
+    },
+    {"id": "notice_board", "kind": "whiteboard", "cells": [[8, 4]], "uses": [], "tags": []},
+    {
+      "id": "bench_a",
+      "kind": "sofa",
+      "cells": [[1, 6], [2, 6]],
+      "uses": [{"cell": [1, 6], "pose": "sit", "facing": "n"}, {"cell": [2, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["rest", "socialize"]
+    },
+    {
+      "id": "bench_b",
+      "kind": "sofa",
+      "cells": [[7, 6], [8, 6]],
+      "uses": [{"cell": [7, 6], "pose": "sit", "facing": "n"}, {"cell": [8, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["rest", "socialize"]
+    }
+  ]
+}

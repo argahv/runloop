@@ -1,0 +1,37 @@
+{
+  "id": "greenhouse",
+  "kind": "grid",
+  "label": "Greenhouse",
+  "archetype": "greenhouse",
+  "grid": ["wwwwwwwwww", "w........w", "w........w", "w........w", "w........w", "w........w", "wwwwDwwwww"],
+  "furniture": [
+    {
+      "id": "bed_a",
+      "kind": "plant_bed",
+      "cells": [[2, 2], [3, 2], [4, 2]],
+      "uses": [{"cell": [3, 1], "pose": "stand", "facing": "s"}, {"cell": [3, 3], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "gardener"]
+    },
+    {
+      "id": "bed_b",
+      "kind": "plant_bed",
+      "cells": [[6, 2], [7, 2]],
+      "uses": [{"cell": [6, 1], "pose": "stand", "facing": "s"}, {"cell": [7, 3], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "gardener"]
+    },
+    {
+      "id": "bed_c",
+      "kind": "plant_bed",
+      "cells": [[2, 4], [3, 4], [4, 4]],
+      "uses": [{"cell": [2, 5], "pose": "stand", "facing": "n"}, {"cell": [4, 5], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "gardener"]
+    },
+    {
+      "id": "bed_d",
+      "kind": "plant_bed",
+      "cells": [[6, 4], [7, 4]],
+      "uses": [{"cell": [6, 5], "pose": "stand", "facing": "n"}, {"cell": [7, 5], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "gardener"]
+    }
+  ]
+}

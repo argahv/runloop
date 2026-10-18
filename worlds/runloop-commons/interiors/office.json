@@ -1,0 +1,86 @@
+{
+  "id": "office",
+  "kind": "grid",
+  "label": "Studio office",
+  "archetype": "office",
+  "grid": [
+    "##ww#ww#ww##",
+    "#..........#",
+    "#..........#",
+    "w..........w",
+    "#..........#",
+    "w..........w",
+    "#..........#",
+    "#####D######"
+  ],
+  "furniture": [
+    {
+      "id": "desk_1",
+      "kind": "desk",
+      "cells": [[1, 1]],
+      "uses": [{"cell": [1, 2], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_2",
+      "kind": "desk",
+      "cells": [[3, 1]],
+      "uses": [{"cell": [3, 2], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_3",
+      "kind": "desk",
+      "cells": [[5, 1]],
+      "uses": [{"cell": [5, 2], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_4",
+      "kind": "desk",
+      "cells": [[7, 1]],
+      "uses": [{"cell": [7, 2], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_5",
+      "kind": "desk",
+      "cells": [[9, 1]],
+      "uses": [{"cell": [9, 2], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "island_a",
+      "kind": "desk",
+      "cells": [[2, 4], [3, 4]],
+      "uses": [
+        {"cell": [2, 3], "pose": "sit", "facing": "s"},
+        {"cell": [3, 3], "pose": "sit", "facing": "s"},
+        {"cell": [2, 5], "pose": "sit", "facing": "n"},
+        {"cell": [3, 5], "pose": "sit", "facing": "n"}
+      ],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "island_b",
+      "kind": "desk",
+      "cells": [[7, 4], [8, 4]],
+      "uses": [
+        {"cell": [7, 3], "pose": "sit", "facing": "s"},
+        {"cell": [8, 3], "pose": "sit", "facing": "s"},
+        {"cell": [7, 5], "pose": "sit", "facing": "n"},
+        {"cell": [8, 5], "pose": "sit", "facing": "n"}
+      ],
+      "tags": ["work", "desk"]
+    },
+    {"id": "whiteboard", "kind": "whiteboard", "cells": [[10, 3]], "uses": [], "tags": []},
+    {
+      "id": "lounge",
+      "kind": "sofa",
+      "cells": [[9, 6], [10, 6]],
+      "uses": [{"cell": [9, 6], "pose": "sit", "facing": "n"}, {"cell": [10, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["rest", "socialize"]
+    },
+    {"id": "coffee", "kind": "counter", "cells": [[1, 6]], "uses": [], "tags": []}
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "agent_hq",
+  "kind": "world",
+  "label": "Agent headquarters",
+  "archetype": "agent_hq",
+  "world": "research-campus",
+  "scale": 0.5,
+  "size": [12, 10]
+}

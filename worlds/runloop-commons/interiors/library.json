@@ -1,0 +1,58 @@
+{
+  "id": "library",
+  "kind": "grid",
+  "label": "Library",
+  "archetype": "library",
+  "grid": [
+    "#####w####",
+    "#........#",
+    "#........#",
+    "w........w",
+    "#........#",
+    "w........w",
+    "#........#",
+    "####D#####"
+  ],
+  "furniture": [
+    {"id": "books_a", "kind": "bookcase", "cells": [[1, 1], [2, 1], [3, 1], [4, 1]], "uses": [], "tags": []},
+    {"id": "books_b", "kind": "bookcase", "cells": [[6, 1], [7, 1], [8, 1]], "uses": [], "tags": []},
+    {
+      "id": "table_a",
+      "kind": "table",
+      "cells": [[2, 3], [3, 3]],
+      "uses": [
+        {"cell": [2, 2], "pose": "sit", "facing": "s"},
+        {"cell": [3, 2], "pose": "sit", "facing": "s"},
+        {"cell": [2, 4], "pose": "sit", "facing": "n"},
+        {"cell": [3, 4], "pose": "sit", "facing": "n"}
+      ],
+      "tags": ["work", "study", "rest"]
+    },
+    {
+      "id": "table_b",
+      "kind": "table",
+      "cells": [[6, 3], [7, 3]],
+      "uses": [
+        {"cell": [6, 2], "pose": "sit", "facing": "s"},
+        {"cell": [7, 2], "pose": "sit", "facing": "s"},
+        {"cell": [6, 4], "pose": "sit", "facing": "n"},
+        {"cell": [7, 4], "pose": "sit", "facing": "n"}
+      ],
+      "tags": ["work", "study", "rest"]
+    },
+    {
+      "id": "desk",
+      "kind": "desk",
+      "cells": [[7, 6], [8, 6]],
+      "uses": [{"cell": [7, 5], "pose": "sit", "facing": "s"}, {"cell": [8, 5], "pose": "sit", "facing": "s"}],
+      "tags": ["work", "librarian"]
+    },
+    {
+      "id": "armchairs",
+      "kind": "armchair",
+      "cells": [[1, 5], [1, 6]],
+      "uses": [{"cell": [1, 5], "pose": "sit", "facing": "e"}, {"cell": [1, 6], "pose": "sit", "facing": "e"}],
+      "tags": ["rest", "socialize"]
+    }
+  ]
+}
