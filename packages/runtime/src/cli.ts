@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { serve } from '@hono/node-server';
-import { DEFAULT_RUNTIME_HOST, DEFAULT_RUNTIME_PORT } from '@runloop-world/events';
+import { DEFAULT_RUNTIME_HOST, DEFAULT_RUNTIME_PORT, formatClock } from '@runloop-world/events';
 import { findRepoRoot, resolveDataDir } from './config';
 import { isLoopbackAddress } from './http/app';
 import { createRuntime, type Runtime } from './runtime';
@@ -21,7 +21,10 @@ Environment:
   RUNLOOP_ALLOWED_ORIGINS      extra comma-separated browser origins
   RUNLOOP_TRACE=off            do not accept Claude Code hook events
   RUNLOOP_TRACE_IDLE_MINUTES   close traced sessions after this long without events (default 120)
-  RUNLOOP_INGEST_TOKEN_FILE    ingest token file (default ~/.config/runloop/ingest-token)`;
+  RUNLOOP_INGEST_TOKEN_FILE    ingest token file (default ~/.config/runloop/ingest-token)
+  RUNLOOP_WORLD=off            do not run the town simulation (/api/world, /api/agents answer 404)
+  RUNLOOP_DISPATCH=off         do not let Studio assign tasks to Claude Code (/api/dispatches answers 404)
+  RUNLOOP_DISPATCH_ENV         extra variable names passed to dispatched claude (e.g. HTTPS_PROXY,NODE_EXTRA_CA_CERTS)`;
 
 /**
  * One runtime process per data dir: boot recovery would otherwise mark
@@ -149,6 +152,11 @@ export async function main(argv: string[]): Promise<number> {
         ? `Claude Code tracing on: POST ${server!.url}/api/ingest/claude-code (token: ${rt.ingestTokenFile})`
         : 'Claude Code tracing off',
     );
+    if (rt.world) {
+      const w = rt.world.info();
+      console.log(`World: ${rt.world.town.def.name} · ${formatClock(w.tick)} · ${w.population} residents · ${w.speed}× (${server!.url}/api/world)`);
+      console.log(rt.dispatch ? 'Task dispatch on (Studio asks you to approve each one)' : 'Task dispatch off');
+    } else console.log('World off (RUNLOOP_WORLD=off)');
     return new Promise<number>(() => {}); // until a signal arrives
   }
 

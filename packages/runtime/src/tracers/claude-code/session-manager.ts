@@ -13,6 +13,15 @@ import type { Recorder } from '../../recorder';
 import { ingestKey, redactHook, type HookEnvelope } from './hook-input';
 import { DEFAULT_MAP_CONTEXT, initialSessionState, mapHook, sweep, type MapContext, type MapResult, type SessionState } from './mapper';
 
+/** A session that delivered an accepted envelope (see TraceSessionManagerOptions.onSessionSeen). */
+export interface SessionSeen {
+  sessionId: string;
+  /** The session's current (or just closed) run; null before its first run. */
+  runId: string | null;
+  /** The working directory Claude Code reported. Keep it in memory only (never store or return it). */
+  cwd: string | null;
+}
+
 export interface TraceSessionManagerOptions {
   recorder: Recorder;
   db: Db;
@@ -21,6 +30,12 @@ export interface TraceSessionManagerOptions {
   secrets?: readonly string[];
   now?: () => Date;
   onError?: (err: unknown) => void;
+  /**
+   * Called for every accepted delivery, after mapping and before its events
+   * are recorded, so a binding made here is in place when they are published.
+   * It never changes what is recorded; a throw is reported to onError.
+   */
+  onSessionSeen?: (seen: SessionSeen) => void;
 }
 
 export interface IngestOutcome {
@@ -35,6 +50,7 @@ export class TraceSessionManager {
   private readonly db: Db;
   private readonly now: () => Date;
   private readonly onError: (err: unknown) => void;
+  private readonly onSessionSeen: ((seen: SessionSeen) => void) | null;
   private readonly sessions = new Map<string, SessionState>();
   /** Wall-clock time each session last delivered an envelope (the idle sweep's clock; observedAt can be far older). */
   private readonly lastReceived = new Map<string, number>();
@@ -48,6 +64,7 @@ export class TraceSessionManager {
     this.secrets = opts.secrets ?? [];
     this.now = opts.now ?? (() => new Date());
     this.onError = opts.onError ?? ((err) => console.error('[tracer]', err));
+    this.onSessionSeen = opts.onSessionSeen ?? null;
   }
 
   /** Record a batch of envelopes in order. Never throws for a bad envelope: it is counted as ignored. */
@@ -66,6 +83,7 @@ export class TraceSessionManager {
         const prev = this.load(sessionId);
         const result = mapHook(prev, env, this.ctx);
         const mark = { sessionId, key, hookEvent: env.hook.hook_event_name, observedAt: env.observedAt };
+        if (result.batch || !result.ignored) this.notifySeen(result.state);
         if (result.batch) {
           this.apply(result, mark);
           out.accepted++;
@@ -117,6 +135,26 @@ export class TraceSessionManager {
     return closed;
   }
 
+  /**
+   * Close a session's open run because Runloop stopped the process (a
+   * dispatched session that was cancelled or timed out sends no SessionEnd).
+   * Stamped now, all inferred; deliveries observed before now are late.
+   * Returns the closed run id, or null when nothing was open.
+   */
+  closeStopped(sessionId: string, now: Date = this.now()): string | null {
+    const state = this.sessions.get(sessionId);
+    if (!state || state.status !== 'open' || !state.runId) return null;
+    try {
+      const result = sweep(state, this.ctx, 'stopped', now.toISOString());
+      this.apply(result, null);
+      this.sessions.set(sessionId, result.state);
+      return state.runId;
+    } catch (err) {
+      this.onError(err);
+      return null;
+    }
+  }
+
   /** Run the idle sweep every `intervalMs` (unref'd, so it never keeps the process alive). */
   start(intervalMs = 60_000): void {
     this.stop();
@@ -143,6 +181,15 @@ export class TraceSessionManager {
   }
 
   // ── internals ──────────────────────────────────────────────────────
+
+  private notifySeen(state: SessionState): void {
+    if (!this.onSessionSeen) return;
+    try {
+      this.onSessionSeen({ sessionId: state.sessionId, runId: state.runId, cwd: state.cwd ?? state.pending.cwd });
+    } catch (err) {
+      this.onError(err);
+    }
+  }
 
   private apply(result: MapResult, mark: Parameters<Recorder['markIngested']>[0] | null): void {
     const { batch } = result;

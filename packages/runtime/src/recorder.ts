@@ -317,6 +317,11 @@ export class Recorder {
     return this.bus.subscribe(runId, fn);
   }
 
+  /** Every run's events, after each commit and in publish order (the world projector). */
+  subscribeAll(fn: Listener): Unsubscribe {
+    return this.bus.subscribeAll(fn);
+  }
+
   /**
    * Store artifact bytes (text is redacted first) before the matching
    * `artifact.created` event is appended. Returns the size and hash to put in it.

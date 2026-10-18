@@ -23,6 +23,13 @@ export {
 } from './tracers/claude-code/mapper';
 export { slimHook, ingestKey, type HookEnvelope } from './tracers/claude-code/hook-input';
 export { streamRunEvents } from './http/sse';
+export { mountWorldRoutes } from './http/world';
+export { mountAgentRoutes } from './http/agents';
+export { mountDispatchRoutes, type DispatchRouteOptions } from './http/dispatch';
+export { WorldHost } from './world/world-host';
+export { WorldProjector } from './world/projector';
+export { AgentService, type AgentServiceOptions } from './agents/service';
+export { DispatchManager, createDispatchManager, type DispatchManagerOptions } from './dispatch/dispatch-manager';
 export { openDb, migrate, tx, type Db } from './store/db';
 export { SandboxError, resolveInside } from './sandbox/paths';
 export { ALLOWED_COMMANDS, isAllowedCommand, minimalEnv, runCommand, type CommandResult } from './sandbox/command';
