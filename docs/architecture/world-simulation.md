@@ -2,7 +2,7 @@
 
 > **Status:** plan of record, 2026-10-18. This covers W1, W2 and a thin W4 of `docs/product/world-vision.md`, and replaces the four drafts.
 >
-> **Decision log:** add DL-010 (architecture), DL-011 (town lighting) and DL-012 (agents and dispatch). `world-vision.md` cites DL-009, which is the light-world decision; change that citation to DL-010.
+> **Decision log:** DL-009 (the living-world pivot), DL-010 (this architecture), DL-011 (town lighting) and DL-012 (agents and dispatch).
 
 ## 0. Decisions (one per conflict)
 
