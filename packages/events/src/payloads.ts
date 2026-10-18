@@ -93,6 +93,12 @@ const runStartedSchema = z
     adapter: AdapterInfoSchema,
     /** Workspace path relative to the runtime data dir (never an absolute host path). Executed runs only. */
     workspace: z.string().optional(),
+    /**
+     * Executed runs: the scripted adapter's pacing multiplier (1 = normal,
+     * 0 = no delays). Durations of runs at different paces are not comparable.
+     * Absent = not recorded (logs before 2026-10-18, and traced runs).
+     */
+    speed: z.number().min(0).optional(),
     /** Absent means executed. */
     mode: RunModeSchema.optional(),
     /** Traced runs only. */
@@ -212,6 +218,13 @@ export const payloadSchemas = {
     /** Traced runs: the coarse kind of call (drives the station in the world). */
     category: ToolCategorySchema.optional(),
     inputSummary: z.string(),
+    /**
+     * What the call acts on, when the source names it: a file or directory
+     * path (relative to the project/workspace when inside it, otherwise
+     * shortened like inputSummary) or a command's first word. Absent = not
+     * reported. Compare uses it for "files touched" (DL-008).
+     */
+    target: z.string().min(1).max(300).optional(),
   }),
   /** The tool ran. A failing test run is status "error" with real metrics. */
   'tool.call_completed': z.object({

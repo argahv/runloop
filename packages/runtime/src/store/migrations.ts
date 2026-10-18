@@ -66,4 +66,8 @@ export const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (session_id, ingest_key)
   ) WITHOUT ROWID;
   `,
+  // 2: baselines (Milestone C). A pinned run is a baseline to compare others against.
+  `
+  ALTER TABLE runs ADD COLUMN pinned_at TEXT;
+  `,
 ];

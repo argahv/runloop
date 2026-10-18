@@ -1,7 +1,7 @@
 import { foldExecution } from '@runloop-world/core';
 import { deliver, uuidFor } from '@runloop-world/testkit';
 import { describe, expect, it } from 'vitest';
-import { fakeNow, openFixture, wire } from './test-utils';
+import { detailFor, fakeNow, openFixture, wire } from './test-utils';
 
 const ms = (iso: string) => Date.parse(iso);
 
@@ -298,5 +298,27 @@ describe('studio store: effects', () => {
     store.getState().seekToSeq(1);
     store.getState().seekToSeq(22); // big jump forward: no bulk effects
     expect(fired.slice(1).flat()).toEqual(seen);
+  });
+});
+
+describe('studio store: baselines', () => {
+  it('updateRun replaces the run in the list and the open run, without touching the event state', () => {
+    const { store, events } = openFixture();
+    store.getState().ingest(events.map(wire), 'backlog');
+    const open = { ...detailFor(events, 'succeeded').run, endedAt: events.at(-1)!.timestamp };
+    const other = { ...open, runId: 'other-run', title: 'Other' };
+    store.getState().setRuns([other, open]);
+    const pinnedAt = '2026-10-18T09:00:00.000Z';
+    store.getState().updateRun({ ...open, pinnedAt });
+    const s = store.getState();
+    expect(s.runs.map((r) => [r.runId, r.pinnedAt ?? null])).toEqual([
+      ['other-run', null],
+      [open.runId, pinnedAt],
+    ]);
+    expect(s.run?.pinnedAt).toBe(pinnedAt);
+    expect(s.lastSequence).toBe(events.length);
+    // A run not in the list is not added (the next poll brings it).
+    store.getState().updateRun({ ...other, runId: 'unknown' });
+    expect(store.getState().runs).toHaveLength(2);
   });
 });

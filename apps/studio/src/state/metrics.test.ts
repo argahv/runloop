@@ -1,7 +1,7 @@
 import { foldExecution } from '@runloop-world/core';
 import { codingMissionFixture, runBuilder } from '@runloop-world/testkit';
 import { describe, expect, it } from 'vitest';
-import { computeRunMetrics } from './metrics';
+import { computeRunMetrics, toolsInCategory } from './metrics';
 import { tracedFixture } from './test-utils';
 
 const metricsOf = (events: ReturnType<typeof tracedFixture>) => computeRunMetrics(foldExecution(events), events);
@@ -68,10 +68,16 @@ describe('run metrics: executed demo', () => {
   const events = codingMissionFixture();
   const m = computeRunMetrics(foldExecution(events), events);
 
-  it('has no categories, tokens or turns: they stay unreported, not zero', () => {
+  it('categories come from Runloop’s own tools (as in compare); tokens and turns stay unreported, not zero', () => {
     expect(m.traced).toBe(false);
-    expect(m.calls.categorised).toBe(0);
-    expect(m.calls.byCategory).toEqual([]);
+    expect(m.calls.categorised).toBe(m.calls.total);
+    expect(m.calls.byCategory.map((r) => [r.key, r.count, r.errors])).toEqual([
+      ['read', 4, 0],
+      ['edit', 2, 0],
+      ['test', 2, 1],
+      ['search', 1, 0],
+    ]);
+    expect(toolsInCategory(foldExecution(events), 'test')).toEqual(['run_command']);
     expect(m.calls.byTool.length).toBeGreaterThan(0);
     expect(m.usage.reportedTotal).toBeNull();
     expect(m.usage.agents.every((a) => a.totalTokens === null)).toBe(true);

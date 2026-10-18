@@ -2,30 +2,40 @@
 import { useFrame } from '@react-three/fiber';
 import type { RunExecStatus } from '@runloop-world/core';
 import type { Zone } from '@runloop-world/world-engine';
-import { memo, useLayoutEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Color, Object3D, Vector3, type InstancedMesh, type MeshBasicMaterial } from 'three';
 import { useScene } from './context';
 import { useLabel } from './labels';
-import { BACK_WALL_H, CURB_H, FLOOR_Y, ROOM_Y, cellNoise, classifyWalls, floorTiles, isWall, toScene, zoneSignCell } from './layout';
-import { desaturate, mixHex, stateGlow, zoneAccent, zoneCap, zoneFloor, type ScenePalette } from './palette';
+import { BACK_WALL_H, CURB_H, FLOOR_Y, ROOM_Y, SLAB_DEPTH, SLAB_MARGIN, blockedCells, cellNoise, classifyWalls, floorTiles, isWall, occlusionAt, toScene, zoneSignCell } from './layout';
+import { desaturate, mixHex, stateGlow, zoneAccent, zoneCap, zoneFloor, zoneWall, type ScenePalette } from './palette';
+import { boardShadowTexture, footShadedBox } from './textures';
 
 const tmp = new Object3D();
 const tmpColor = new Color();
 
 /**
- * The diorama: an obsidian base slab, graphite floor tiles, rooms raised as
- * quietly tinted platforms, cutaway walls in slate, and the Atrium core whose
- * ring shows the run's status. Nothing here glows except that ring.
+ * The diorama: an obsidian base slab floating over a soft shadow, graphite
+ * floor tiles with contact shading, rooms raised as platforms in their
+ * environment's tint, cutaway walls, and the Atrium core whose ring shows
+ * the run's status. Nothing here glows except that ring.
  */
 export const Board = memo(function Board() {
   const { world, palette } = useScene();
-  const w = world.width + 1.6;
-  const d = world.height + 1.6;
+  const w = world.width + 2 * SLAB_MARGIN;
+  const d = world.height + 2 * SLAB_MARGIN;
+  const slabGeo = useMemo(() => footShadedBox(palette.wallFoot), [palette.wallFoot]);
+  useEffect(() => () => slabGeo.dispose(), [slabGeo]);
   return (
     <group>
-      <mesh position={[0, -0.36, 0]}>
-        <boxGeometry args={[w, 0.7, d]} />
-        <meshLambertMaterial color={palette.slabSide} />
+      {/* The board floats: a soft shadow on the stage below it (light stage only: on the dark stage it would not show, but would still cost a blended pass over most of the canvas). */}
+      {palette.boardShadow > 0 && (
+        <mesh position={[0.6, -SLAB_DEPTH - 0.6, 0.9]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-1}>
+          <planeGeometry args={[w * 1.32, d * 1.36]} />
+          <meshBasicMaterial map={boardShadowTexture()} color="#000000" transparent opacity={palette.boardShadow} depthWrite={false} />
+        </mesh>
+      )}
+      <mesh position={[0, -SLAB_DEPTH / 2 - 0.01, 0]} scale={[w, SLAB_DEPTH, d]} geometry={slabGeo}>
+        <meshLambertMaterial color={palette.slabSide} vertexColors />
       </mesh>
       <mesh position={[0, -0.004, 0]}>
         <boxGeometry args={[w - 0.04, 0.01, d - 0.04]} />
@@ -62,34 +72,40 @@ function Edge({ w, d, palette }: { w: number; d: number; palette: ScenePalette }
   );
 }
 
-/** Every floor cell as one instanced tile with a barely visible per-tile shade. */
+/** Every floor cell as one instanced tile: tonal variation per tile, a soft checker in rooms, contact shading. */
 function Tiles() {
   const { world, palette } = useScene();
   const tiles = useMemo(() => floorTiles(world), [world]);
+  const blocked = useMemo(() => blockedCells(world), [world]);
   const ref = useRef<InstancedMesh>(null);
   useLayoutEffect(() => {
     const mesh = ref.current;
     if (!mesh) return;
     const floors = new Map<string, string>();
     for (const z of world.def.zones) floors.set(z.id, zoneFloor(palette, z.color));
-    const shade = palette.theme === 'light' ? palette.tokens.slateHi : palette.tokens.slate;
+    const light = palette.theme === 'light';
+    const lift = light ? '#ffffff' : palette.tokens.slateHi;
+    const shade = light ? palette.tokens.muted : '#000000';
     tiles.forEach((t, i) => {
       const [x, , z] = toScene(world, t.cell[0], t.cell[1]);
       const room = t.zone && t.zone.kind !== 'hub';
       const h = room ? 0.05 : t.top;
       tmp.position.set(x, t.top - h / 2, z);
-      tmp.scale.set(0.95, h, 0.95);
+      tmp.scale.set(0.94, h, 0.94);
       tmp.updateMatrix();
       mesh.setMatrixAt(i, tmp.matrix);
       const n = cellNoise(t.cell[0], t.cell[1]);
-      const base = room ? floors.get(t.zone!.id)! : palette.corridor;
-      tmpColor.set(mixHex(base, shade, n * 0.22));
+      const base = room || t.zone?.kind === 'hub' ? floors.get(t.zone!.id)! : palette.corridor;
+      const checker = room && (t.cell[0] + t.cell[1]) % 2 === 0 ? 0.06 : 0;
+      let c = mixHex(base, lift, (n * 0.16 + checker) * palette.tileVariation);
+      c = mixHex(c, shade, occlusionAt(blocked, t.cell[0], t.cell[1]) * palette.occlusion);
+      tmpColor.set(c);
       mesh.setColorAt(i, tmpColor);
     });
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [tiles, world, palette]);
+  }, [tiles, world, palette, blocked]);
   return (
     <instancedMesh ref={ref} args={[undefined, undefined, tiles.length]} frustumCulled={false}>
       <boxGeometry args={[1, 1, 1]} />
@@ -120,8 +136,9 @@ function RoomPlatforms() {
 
 /**
  * Walls: back (north/west) room walls are tall, front (south/east) walls are
- * low curbs so the inside stays visible. A thin cap in the room's muted tint
- * runs along the tops, and back walls carry dark glass panels.
+ * low curbs so the inside stays visible. Faces carry a trace of the room's
+ * tint and darken towards the floor; a thin cap in the room's tint runs
+ * along the tops, and back walls carry dark glass panels.
  */
 function Walls() {
   const { world, palette } = useScene();
@@ -129,6 +146,8 @@ function Walls() {
   const blocks = useRef<InstancedMesh>(null);
   const caps = useRef<InstancedMesh>(null);
   const panels = useRef<InstancedMesh>(null);
+  const wallGeo = useMemo(() => footShadedBox(palette.wallFoot), [palette.wallFoot]);
+  useEffect(() => () => wallGeo.dispose(), [wallGeo]);
 
   const panelInst = useMemo(() => {
     const out: { pos: [number, number, number]; rotY: number; color: string; wide: boolean }[] = [];
@@ -166,7 +185,8 @@ function Walls() {
         tmp.updateMatrix();
         b.setMatrixAt(i, tmp.matrix);
         const n = cellNoise(wc.cell[0] + 7, wc.cell[1] + 3);
-        tmpColor.set(mixHex(wc.kind === 'back' ? palette.wall : palette.curb, palette.tokens.slateHi, n * 0.25));
+        const face = wc.kind === 'back' ? (wc.zone ? zoneWall(palette, wc.zone.color) : palette.wall) : palette.curb;
+        tmpColor.set(mixHex(face, palette.tokens.slateHi, n * 0.2));
         b.setColorAt(i, tmpColor);
         tmp.position.set(x, h + 0.02, z);
         tmp.scale.set(1.002, 0.04, 1.002);
@@ -189,20 +209,21 @@ function Walls() {
         tmp.scale.set(pi.wide ? 0.78 : 0.5, pi.wide ? 0.42 : 0.62, 1);
         tmp.updateMatrix();
         p.setMatrixAt(i, tmp.matrix);
-        tmpColor.set(mixHex(palette.screenOff, desaturate(pi.color, 0.4), pi.wide ? 0.14 : 0.08));
+        // Dark glass in the room's tint (lighter in the light theme, where near-black panels would read as holes).
+        const glass = palette.theme === 'light' ? mixHex(palette.screenOff, palette.tokens.slateHi, 0.55) : palette.screenOff;
+        tmpColor.set(mixHex(glass, desaturate(pi.color, 0.5), pi.wide ? 0.22 : 0.12));
         p.setColorAt(i, tmpColor);
       });
       p.instanceMatrix.needsUpdate = true;
       if (p.instanceColor) p.instanceColor.needsUpdate = true;
       p.computeBoundingSphere();
     }
-  }, [walls, world, palette, panelInst]);
+  }, [walls, world, palette, panelInst, wallGeo]);
 
   return (
     <group>
-      <instancedMesh ref={blocks} args={[undefined, undefined, walls.length]} frustumCulled={false}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshLambertMaterial />
+      <instancedMesh ref={blocks} args={[wallGeo, undefined, walls.length]} frustumCulled={false}>
+        <meshLambertMaterial vertexColors />
       </instancedMesh>
       <instancedMesh ref={caps} args={[undefined, undefined, walls.length]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
@@ -211,7 +232,7 @@ function Walls() {
       {panelInst.length > 0 && (
         <instancedMesh ref={panels} args={[undefined, undefined, panelInst.length]} frustumCulled={false}>
           <planeGeometry args={[1, 1]} />
-          <meshStandardMaterial roughness={0.25} metalness={0.2} />
+          <meshStandardMaterial roughness={0.2} metalness={0.3} />
         </instancedMesh>
       )}
     </group>
@@ -281,13 +302,13 @@ function HubCore() {
         <ringGeometry args={[r * 0.9, r * 0.98, 64]} />
         <meshBasicMaterial ref={ring} toneMapped={false} />
       </mesh>
-      {/* Monolith: a quiet obsidian column with a lighter cap. */}
-      <mesh position={[0, 0.78, 0]}>
-        <boxGeometry args={[r * 0.62, 1.08, r * 0.62]} />
+      {/* Core: a low obsidian plinth with a lighter cap (low, so robots homed behind it stay visible). */}
+      <mesh position={[0, 0.55, 0]}>
+        <boxGeometry args={[r * 0.7, 0.62, r * 0.7]} />
         <meshStandardMaterial color={palette.theme === 'light' ? palette.metalDark : palette.tokens.obsidian} roughness={0.3} metalness={0.5} />
       </mesh>
-      <mesh position={[0, 1.335, 0]}>
-        <boxGeometry args={[r * 0.66, 0.03, r * 0.66]} />
+      <mesh position={[0, 0.875, 0]}>
+        <boxGeometry args={[r * 0.74, 0.03, r * 0.74]} />
         <meshStandardMaterial color={palette.metalLight} roughness={0.35} metalness={0.5} />
       </mesh>
     </group>

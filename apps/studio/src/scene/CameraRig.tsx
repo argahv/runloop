@@ -18,8 +18,11 @@ const fromAngles = (out: Vector3, a: Angles) =>
   out.set(Math.sin(a.polar) * Math.sin(a.azimuth), Math.cos(a.polar), Math.sin(a.polar) * Math.cos(a.azimuth));
 const DIST = 80;
 /** Zoom relative to the fitted board when focusing one entity, and when following. */
-const FOCUS_ZOOM = 2.3;
-const FOLLOW_ZOOM = 1.8;
+const FOCUS_ZOOM = 2.2;
+const FOLLOW_ZOOM = 1.7;
+/** Zoom limits relative to the fitted board: never lose the board in the stage, never closer than a robot's face. */
+const MIN_ZOOM = 0.6;
+const MAX_ZOOM = 6;
 
 /** overview: the whole board, re-fitted on resize. free: the viewer (or a focus) set the view. follow: tracking the selected agent. */
 type Mode = 'overview' | 'free' | 'follow';
@@ -71,6 +74,15 @@ export function CameraRig({
   const placed = useRef(false);
   const tmp = useRef(new Vector3()).current;
 
+  /** Remember the overview's zoom and keep the viewer's zoom limits relative to it. */
+  const setFit = useCallback((zoom: number) => {
+    fitZoom.current = zoom;
+    const c = controls.current;
+    if (!c) return;
+    c.minZoom = zoom * MIN_ZOOM;
+    c.maxZoom = zoom * MAX_ZOOM;
+  }, []);
+
   const setMode = useCallback(
     (m: Mode) => {
       mode.current = m;
@@ -117,13 +129,13 @@ export function CameraRig({
     if (!c || placed.current || size.width === 0 || size.height === 0) return;
     placed.current = true;
     const f = frameBoard(world, dir.current, size.width, size.height);
-    fitZoom.current = f.zoom;
+    setFit(f.zoom);
     camera.zoom = f.zoom;
     camera.updateProjectionMatrix();
     c.target.copy(f.target);
     camera.position.copy(f.target).addScaledVector(dir.current, DIST);
     camera.lookAt(f.target);
-  }, [camera, size.width, size.height, world]);
+  }, [camera, size.width, size.height, world, setFit]);
 
   // Resize: the overview re-fits at once; a custom view keeps its target and scales with the fit.
   useEffect(() => {
@@ -132,7 +144,7 @@ export function CameraRig({
     if (!c) return;
     const f = frameBoard(world, fromAngles(new Vector3(), ANGLES[cameraMode]), size.width, size.height);
     const ratio = f.zoom / fitZoom.current;
-    fitZoom.current = f.zoom;
+    setFit(f.zoom);
     if (mode.current === 'overview') {
       if (tween.current) {
         tween.current.toTarget.copy(f.target);
@@ -161,7 +173,7 @@ export function CameraRig({
     if (!c) return;
     const f = frameBoard(world, fromAngles(new Vector3(), ANGLES[cameraMode]), size.width, size.height);
     const ratio = f.zoom / fitZoom.current;
-    fitZoom.current = f.zoom;
+    setFit(f.zoom);
     if (mode.current === 'overview') moveTo(f.target, f.zoom, cameraMode);
     else moveTo(c.target, camera.zoom * ratio, cameraMode);
   }, [cameraMode]);
@@ -171,7 +183,7 @@ export function CameraRig({
     () =>
       bus.listen((r: CameraRequest) => {
         const fit = frameBoard(world, fromAngles(new Vector3(), ANGLES[cameraMode]), size.width, size.height);
-        fitZoom.current = fit.zoom;
+        setFit(fit.zoom);
         if (r.kind === 'overview') {
           setMode('overview');
           moveTo(fit.target, fit.zoom);
@@ -182,7 +194,7 @@ export function CameraRig({
         setMode('free');
         moveTo(p, Math.max(camera.zoom, fit.zoom * FOCUS_ZOOM));
       }),
-    [bus, world, cameraMode, size.width, size.height, moveTo, entityPoint, setMode, camera],
+    [bus, world, cameraMode, size.width, size.height, moveTo, entityPoint, setMode, setFit, camera],
   );
 
   // Follow: move in a little closer, then track the selected agent every frame.
@@ -245,8 +257,6 @@ export function CameraRig({
       enableRotate={false}
       enableDamping={!reducedMotion}
       dampingFactor={0.15}
-      minZoom={4}
-      maxZoom={240}
       zoomToCursor
       onStart={onUserStart}
     />

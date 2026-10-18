@@ -41,6 +41,8 @@ describe('RunManager adapter guards', () => {
     const summary = await r.manager.whenDone(runId);
     const events = r.recorder.listAll(runId);
     expect(events.map((e) => e.type)).toEqual(['run.started', 'task.created', 'task.started', 'run.completed']);
+    // The pace is recorded, so compare can tell paced and unpaced durations apart.
+    expect(events[0]!.payload).toMatchObject({ speed: 0 });
     expect(summary.status).toBe('failed');
     expect(events.at(-1)!.payload).toMatchObject({ outcome: 'failed', summary: expect.stringContaining('art-99') });
   });

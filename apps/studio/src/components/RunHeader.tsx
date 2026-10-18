@@ -8,12 +8,14 @@ import { selectRun, useTicker } from '../state/hooks';
 import { runProvenance } from '../state/provenance';
 import { activityText, isTracedRun, runSubtitle } from '../state/runs';
 import { runStatusView } from '../state/view';
+import { isPinned } from '../state/baselines';
 import { Button, ButtonLink } from '../ui/Button';
 import { Chip, StatusBadge } from '../ui/Chip';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { GlyphIcon, Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { toast } from '../ui/Toast';
+import { CompareWithBaseline, PinButton } from './Baseline';
 import styles from './RunHeader.module.css';
 
 /** Run title, status, provenance and the run's actions; `page` decides the cross-link. */
@@ -87,6 +89,8 @@ export default function RunHeader({ page }: { page: 'world' | 'traces' }) {
         )}
       </div>
       <div className={styles.actions}>
+        {run && <PinButton run={run} />}
+        {run && <CompareWithBaseline run={run} />}
         {runs.length > 1 && (
           <Popover label="Switch run" icon="traces" align="end">
             <ul className={styles.runList} aria-label="Runs">
@@ -103,9 +107,11 @@ export default function RunHeader({ page }: { page: 'world' | 'traces' }) {
                       </span>
                       <span className={styles.runName}>
                         #{runs.length - i} · {r.title}
+                        {isPinned(r) && <span className="sr-only"> (baseline)</span>}
                         {sub && <span className={styles.runSub}>{sub}</span>}
                       </span>
                       <span className={styles.runWhen}>
+                        {isPinned(r) && <Icon name="pin" size={11} label="Baseline" />}
                         <Icon name={rTraced ? 'eye' : 'terminal'} size={11} label={rTraced ? 'Traced · Claude Code' : 'Executed'} />
                         {formatWhen(r.createdAt)}
                       </span>

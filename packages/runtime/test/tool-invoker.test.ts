@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { isAbortError } from '../src/adapter';
-import { ToolInvoker } from '../src/tool-invoker';
+import { ToolInvoker, targetOf } from '../src/tool-invoker';
 import { MANIFEST, openRecorder, tempDir } from './helpers';
 
 const RUN = '55555555-5555-4555-8555-555555555555';
@@ -25,7 +25,7 @@ describe('ToolInvoker', () => {
     const r = await invoker.invoke('builder', 'T2', { tool: 'read_file', path: 'src/a.js' });
     expect(r).toMatchObject({ callId: 'call-1', status: 'success', outputSummary: 'read 20 bytes', output: 'export const a = 1;\n' });
     const [, started, done] = recorder.list(RUN);
-    expect(started).toMatchObject({ type: 'tool.call_started', actorId: 'builder', taskId: 'T2', payload: { tool: 'read_file', inputSummary: 'src/a.js' } });
+    expect(started).toMatchObject({ type: 'tool.call_started', actorId: 'builder', taskId: 'T2', payload: { tool: 'read_file', inputSummary: 'src/a.js', target: 'src/a.js' } });
     expect(done).toMatchObject({ type: 'tool.call_completed', parentEventId: started!.eventId, actorId: 'builder', taskId: 'T2' });
     expect(JSON.stringify(done)).not.toContain('export const'); // file content is not put in events
   });
@@ -61,6 +61,13 @@ describe('ToolInvoker', () => {
     expect(done).toMatchObject({ payload: { outputArtifactIds: ['art-1'] } });
     expect(r.artifactIds).toEqual(['art-1']);
     expect(recorder.getArtifact(RUN, 'art-1')!.content.toString()).toBe('const key = "[REDACTED]";\n');
+  });
+
+  it('names each call\'s target: the workspace path, or the program for run_command', () => {
+    expect(targetOf({ tool: 'read_file', path: './src//a.js' })).toBe('src/a.js');
+    expect(targetOf({ tool: 'write_file', path: 'src/b.js', content: '' })).toBe('src/b.js');
+    expect(targetOf({ tool: 'list_files' })).toBe('.');
+    expect(targetOf({ tool: 'run_command', argv: ['/usr/bin/node', '--test'] })).toBe('node');
   });
 
   it('refuses to start a call once the run is stopped', async () => {

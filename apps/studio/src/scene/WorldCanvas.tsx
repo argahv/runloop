@@ -144,13 +144,15 @@ const Lights = memo(function Lights({ palette }: { palette: ScenePalette }) {
     <>
       <ambientLight intensity={l.ambient} color="#ffffff" />
       <hemisphereLight args={[l.hemiSky, l.hemiGround, l.hemi]} />
-      <directionalLight position={[10, 16, 7]} intensity={l.key} color={l.keyColor} />
-      <directionalLight position={[-12, 7, -6]} intensity={l.fill} color={l.fillColor} />
-      {/* Neutral studio reflections for the glossy shells (no network: lightformers render on the GPU). */}
+      {/* Warm key from the south-west, high: tops and south faces (left on screen). */}
+      <directionalLight position={[-5, 14, 11]} intensity={l.key} color={l.keyColor} />
+      {/* Cool rim from the north-east, low: east faces (right on screen) and top edges. */}
+      <directionalLight position={[14, 5, -9]} intensity={l.rim} color={l.rimColor} />
+      {/* Studio reflections for the glossy shells, warm on the key side and cool on the rim side (no network: lightformers render on the GPU). */}
       <Environment resolution={64} environmentIntensity={l.env}>
-        <Lightformer form="rect" intensity={2} color="#ffffff" position={[0, 6, 4]} scale={[8, 3, 1]} />
-        <Lightformer form="rect" intensity={0.8} color="#dfe5ee" position={[-6, 3, -2]} scale={[4, 4, 1]} />
-        <Lightformer form="rect" intensity={0.6} color="#eef1f6" position={[6, 3, -4]} scale={[4, 4, 1]} />
+        <Lightformer form="rect" intensity={2.2} color={l.keyColor} position={[-3, 7, 5]} scale={[8, 3, 1]} />
+        <Lightformer form="rect" intensity={1.1} color={l.rimColor} position={[6, 3, -4]} scale={[4, 4, 1]} />
+        <Lightformer form="rect" intensity={0.5} color="#ffffff" position={[0, -4, 6]} scale={[10, 2, 1]} />
       </Environment>
     </>
   );

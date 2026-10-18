@@ -4,17 +4,21 @@ import { codingMissionFixture, runBuilder } from '@runloop-world/testkit';
 import { loadWorld, type Cell } from '@runloop-world/world-engine';
 import { describe, expect, it } from 'vitest';
 import { badgeDetail, STATE_BADGE } from './badges';
+import { bfs } from '@runloop-world/world-engine';
 import {
   FLOOR_Y,
   ROOM_Y,
+  blockedCells,
   classifyWalls,
   floorTiles,
   glowPaths,
   heightAt,
   hubRing,
   incidentStationId,
+  occlusionAt,
   pathPoints,
   stationFront,
+  walkwaysOnRoute,
   zoneSignCell,
 } from './layout';
 
@@ -71,6 +75,25 @@ describe('scene layout (derived from the world definition)', () => {
     expect(at('build')).toEqual([22.5, 0.5]);
     expect(at('test')).toEqual([0.5, 18.5]);
     expect(at('deploy')).toEqual([22.5, 18.5]);
+  });
+
+  it('lights only the walkway a walk actually travels (crossing the Atrium does not count)', () => {
+    const walkways = glowPaths(world).filter((p) => !p.branch);
+    const research = walkways.findIndex((w) => w.key === 'hub>research');
+    // The researcher's walk from its home by the Atrium to the archive terminal.
+    const route = bfs(world, [10, 8], world.stationsById['archive']!.slots[0]!)!;
+    expect(walkwaysOnRoute(walkways, route)).toEqual([research]);
+    // Stepping between two Atrium cells touches the start of several walkways, but travels none.
+    expect(walkwaysOnRoute(walkways, [hubRing(world)[0]!, hubRing(world)[1]!])).toEqual([]);
+  });
+
+  it('shades floor cells by how enclosed they are (walls, machines, props)', () => {
+    const blocked = blockedCells(world);
+    expect(occlusionAt(blocked, 5, 9)).toBe(0); // open corridor
+    const corner = occlusionAt(blocked, 3, 2); // north wall, a rack and the archive terminal around it
+    expect(corner).toBeGreaterThan(0.5);
+    expect(corner).toBeLessThanOrEqual(1);
+    expect(occlusionAt(blocked, 4, 2)).toBeLessThan(corner);
   });
 
   it('faces stations towards their first slot', () => {

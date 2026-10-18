@@ -11,3 +11,26 @@ export {
   selectOpenIncidents,
 } from './selectors';
 export { formatClock, formatEvent } from './format';
+export {
+  summarizeRun,
+  diffRuns,
+  callCategory,
+  reportedTokens,
+  type AgentDiff,
+  type AgentDigest,
+  type CallCategory,
+  type CountEntry,
+  type DiffNote,
+  type DigestCall,
+  type Divergence,
+  type FailureDigest,
+  type FieldDiff,
+  type FileDiff,
+  type FileTouch,
+  type KeyedCountDiff,
+  type PermissionDigest,
+  type RunDiff,
+  type RunDigest,
+  type TestChange,
+  type TestRunDigest,
+} from './compare';

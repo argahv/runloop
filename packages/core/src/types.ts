@@ -28,6 +28,8 @@ export interface RunExec {
   adapter: AdapterInfo | null;
   /** Executed runs only. */
   workspace: string | null;
+  /** Executed runs: the scripted adapter's pacing multiplier; null = not recorded. */
+  speed: number | null;
   /** executed: Runloop ran the tools. traced: recorded from an external agent's reports. */
   mode: RunMode;
   /** Traced runs: where the run came from. */
@@ -122,6 +124,8 @@ export interface ToolCallExec {
   /** Traced runs: the call's category; null when not given (executed runs). */
   category: ToolCategory | null;
   inputSummary: string;
+  /** File/directory path or command head the source named; null = not reported. */
+  target: string | null;
   status: ToolCallStatus;
   startedSeq: number;
   startedAt: string;
@@ -152,7 +156,9 @@ export interface PermissionExec {
   scope: string;
   status: 'pending' | 'approved' | 'denied';
   requestedSeq: number;
+  requestedAt: string;
   resolvedSeq: number | null;
+  resolvedAt: string | null;
   resolvedBy: string | null;
   /** Provenance of the resolution (inferred e.g. for a denial no hook reported). */
   resolvedProvenance: Provenance | null;

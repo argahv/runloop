@@ -69,7 +69,7 @@ export interface PlaceOptions {
   previous?: ReadonlyMap<string, Placement>;
 }
 
-/** Slot offsets in units of (label half-width + gap, label height + gap): on, beside, above. */
+/** Slot offsets in units of (label half-width + gap, label height + gap): on, beside, above (and below, for signs). */
 const SLOTS: readonly (readonly [number, number])[] = [
   [0, 0],
   [1, 0],
@@ -82,6 +82,10 @@ const SLOTS: readonly (readonly [number, number])[] = [
   [-1, -2],
   [0.5, 0],
   [-0.5, 0],
+  // Signs only: just below the anchor (on the wall it names), when the row above is taken.
+  [0, 1],
+  [0.5, 1],
+  [-0.5, 1],
 ];
 
 /** Slot rows, nearest first: on/beside the anchor, one row up, two rows up. */
@@ -92,8 +96,8 @@ const TIERS: readonly (readonly number[])[] = [
 ];
 const ALL_SLOTS = TIERS.flat();
 const ANCHOR_ONLY = [0];
-/** Signs: on the anchor, or shifted sideways (never stacked, no leader). */
-export const SIGN_SLOTS: readonly number[] = [0, 10, 9, 2, 1];
+/** Signs: on the anchor, shifted sideways, or just below it (never stacked above, no leader). */
+export const SIGN_SLOTS: readonly number[] = [0, 10, 9, 2, 1, 11, 12, 13];
 
 const overlaps = (a: Rect, b: Rect, gap: number) => a.l < b.r + gap && a.r > b.l - gap && a.t < b.b + gap && a.b > b.t - gap;
 

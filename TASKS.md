@@ -36,9 +36,17 @@ Still unverified with real sessions (outside B6's criteria): interactive approva
 
 | ID | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| C1 | Pin a run as a baseline; pick any two runs to compare | Not started | Survives a restart (persisted) |
-| C2 | Run diff: outcome, duration, tool calls by category, files touched, test results, tokens and cost where reported, permission waits, failures | Not started | Unit tests on the diff function; unknown values show as "not reported", never as zero |
-| C3 | Compare view in Studio (side by side, with links to the differing events) | Not started | Clicking a difference opens the event in that run |
+| C1 | Pin a run as a baseline; pick any two runs to compare | Verified | Survives a restart (persisted). **Evidence (2026-10-18):** `runs.pinned_at` (migration 2) and `POST`/`DELETE /api/runs/:id/baseline`; runtime tests for idempotence, guards, 404, upgrading an older database and a restart. On a copy of the real B6 database (schema 2 → 3): pin 200, no JSON 415, foreign Origin 403, unknown run 404; after SIGTERM and restart the pin kept the same `pinnedAt`. Through the Studio: pin, unpin, Undo and reload, 7/7. Pickers for any two runs, `?a=&b=` deep links. |
+| C2 | Run diff: outcome, duration, tool calls by category, files touched, test results, tokens and cost where reported, permission waits, failures | Verified | Unit tests on the diff function; unknown values show as "not reported", never as zero. **Evidence:** `packages/core/src/compare.ts`, 36 unit tests (plus 13 for the Studio wording and folding). Every number on the Experiments page was recomputed from the raw events by an independent script for two real Claude Code pairs and one executed pair: 25/25, 23/23 and 19/19 checks pass (verification report §6). Cost is not shown: no source reports it yet (subagent tokens only). |
+| C3 | Compare view in Studio (side by side, with links to the differing events) | Verified | Clicking a difference opens the event in that run. **Evidence:** Experiments page; on the real pair, the divergence call and result, the failures count and a usage report each opened Traces at the exact run and event (4/4); the builder's Playwright script passed 11/11; `pnpm screenshots` covers Experiments in both themes at four widths. |
+
+**Integration review (2026-10-18).** Checking the Experiments page against the raw events of the real B6 sessions found four places where compare claimed more than the data shows. All four were fixed at the root, with tests:
+1. A test was listed as "failed only in the candidate", although the baseline's piped test run had named only 1 of its 2 failures (core).
+2. A run recorded before `target` existed diverged from a newer one at call 1, only because its targets were missing (core).
+3. Two demo runs at different paces (speed 0 and 1) read "25.8 s faster". `run.started` now records `speed`, and compare does not judge durations across paces (events, runtime, core).
+4. "Compare" on a demo run offered the pinned Claude Code session as its baseline (Studio `baselineFor`).
+
+Seven presentation issues found in the screenshots were fixed too (verification report §6).
 
 ## Milestone D: Runloop Signature design system and core observability
 
@@ -48,14 +56,15 @@ Spec: `docs/design/design-system.md` (founder brief). This milestone runs in par
 |---|---|---|---|
 | D1 | Tokens (dark and light), Geist and Geist Mono self-hosted, tabular numerals, motion tokens, reduced motion | Verified | `tokens.css` is the only colour source; contrast checked at AA in both themes |
 | D2 | Component library `src/ui/` (sidebar, tabs, split and resizable panels, command palette, chips, skeletons, empty, error, toast, confirm) | Verified | Keyboard reachable; used by every page; no colour-only state |
-| D3 | IA: Overview · Live World · Traces · Integrations · Settings (Experiments and Evaluations hidden until they work); deep links | Verified | Each page has loading, empty and error states; deep link restores run, view, event or agent card, and a paused playhead (`at=`) |
+| D3 | IA: Overview · Live World · Traces · Experiments · Integrations · Settings (Evaluations hidden until it works); deep links | Verified | Each page has loading, empty and error states; deep link restores run, view, event or agent card, and a paused playhead (`at=`) |
 | D4 | Synchronised selection across world, timeline and inspector; resizable inspector | Verified | Selecting in any view focuses the same entity in the others (tested in the store) |
 | D5 | World refresh: Signature palette, named environments (Atrium, Observatory, Workshop, Test Chamber, Launch Bay), lime only for active execution, fit to viewport, no label collisions | Verified | No clipped rooms at 1280–1920 px; labels never overlap at default zoom; screenshots in both themes |
 | D6 | 2D agent graph ("Network") view and a table fallback | Verified | Every world interaction has a 2D route |
 | D7 | Search and filter in the timeline and logs (agent, tool, category, status, text) | Verified | Filters compose; URL-addressable; tested |
 | D8 | Run metrics panel (duration, calls by category, failures, tokens and cost where reported) | Verified | Defined calculations; "not reported" never shown as zero |
 | D9 | Visual regression screenshots of every page and state | Verified | Script in the repo; images checked on each milestone |
-| D10 | World richness pass: the world fills its panel (tighter framing, collapsible timeline), robots read clearly at default zoom, warmer key/rim lighting and materials, restrained zone accent light; keep the Signature restraint | Not started | At 1440×900 a robot is ≥ 28 px tall at default zoom; the board fills ≥ 80% of the world panel width; founder-reference look (diorama, chibi robots) recognisable in screenshots of both themes |
+| D10 | World richness pass: the world fills its panel (tighter framing, collapsible timeline), robots read clearly at default zoom, warmer key/rim lighting and materials, restrained zone accent light; keep the Signature restraint | Verified (except the collapsible timeline, moved to D11) | At 1440×900 a robot is ≥ 28 px tall at default zoom; the board fills ≥ 80% of the world panel width; founder-reference look (diorama, chibi robots) recognisable in screenshots of both themes. **Evidence:** measured with the framing code at the stage sizes of real windows: at 1440×900 the board spans 97.0% of the stage and a robot projects to 44 px; at 1280, 96%; at 1920, 81–82%. Tests assert ≥ 80% and ≥ 28 px. Screenshots in both themes (verification report §6); light-theme look recorded as DL-009. |
+| D11 | Collapsible timeline on Live World, so the world can take the full height | Not started | The world panel grows when the timeline collapses; state survives a reload; keyboard reachable |
 
 ## Milestone E: Generalisation
 
@@ -79,7 +88,7 @@ Spec: `docs/design/design-system.md` (founder brief). This milestone runs in par
 
 | Item | Reason |
 |---|---|
-| Headless A/B runner (`runloop ab`) | Needs compare (C) first; costs real tokens per run |
+| Headless A/B runner (`runloop ab`) | Compare (C) now exists; still costs real tokens per run, so it waits for evidence that people use compare |
 | OTLP/HTTP ingest bridge | OTel GenAI conventions are still in development; build on demand |
 | OpenAI Agents SDK / LangGraph adapters | Different user (agent builders); revisit when demand appears |
 | Hosted sharing, teams, billing | No validated demand yet; see the monetisation hypothesis |

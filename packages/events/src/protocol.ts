@@ -27,6 +27,8 @@ export interface RunSummary {
   source?: RunSourceSummary | null;
   /** Timestamp of the last recorded event (null before any). */
   lastEventAt?: string | null;
+  /** When the run was pinned as a baseline (null = not pinned). Absent on older runtimes. */
+  pinnedAt?: string | null;
 }
 
 export interface RunSourceSummary {
@@ -72,6 +74,15 @@ export interface StartRunRequest {
 
 export interface StartRunResponse {
   runId: string;
+}
+
+/**
+ * POST /api/runs/:id/baseline pins the run as a baseline (idempotent: an
+ * already pinned run keeps its pinnedAt); DELETE unpins it. Both need
+ * `Content-Type: application/json` (send `{}`), like every other write.
+ */
+export interface BaselineResponse {
+  run: RunSummary;
 }
 
 export interface ErrorResponse {
@@ -132,6 +143,7 @@ export const apiPaths = {
   stop: (runId: string) => `/api/runs/${encodeURIComponent(runId)}/stop`,
   pause: (runId: string) => `/api/runs/${encodeURIComponent(runId)}/pause`,
   resume: (runId: string) => `/api/runs/${encodeURIComponent(runId)}/resume`,
+  baseline: (runId: string) => `/api/runs/${encodeURIComponent(runId)}/baseline`,
   artifact: (runId: string, artifactId: string) =>
     `/api/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}`,
   ingestClaudeCode: '/api/ingest/claude-code',

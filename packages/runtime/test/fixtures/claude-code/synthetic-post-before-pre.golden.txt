@@ -6,11 +6,11 @@
 #005 task.started main turn-1 reported public - {"taskId":"turn-1","agentId":"main"}
 #006 agent.message_sent user - reported sensitive - {"messageId":"msg-1","fromAgentId":"user","to":"main","text":"Find where the store is defined and run the vitest suite."}
 #007 agent.state_changed main - reported public - {"agentId":"main","state":"working","reason":"Prompt received"}
-#008 tool.call_started main turn-1 inferred public - {"callId":"toolu_syn_read1","agentId":"main","taskId":"turn-1","tool":"Read","category":"read","inputSummary":"src/task-store.js"}
+#008 tool.call_started main turn-1 inferred public - {"callId":"toolu_syn_read1","agentId":"main","taskId":"turn-1","tool":"Read","category":"read","inputSummary":"src/task-store.js","target":"src/task-store.js"}
 #009 tool.call_completed main turn-1 reported public ^8 {"callId":"toolu_syn_read1","status":"success","durationMs":8,"outputSummary":"Read 34 lines"}
-#010 tool.call_started main turn-1 reported public - {"callId":"toolu_syn_grep1","agentId":"main","taskId":"turn-1","tool":"Grep","category":"search","inputSummary":"\"createStore\" in src"}
+#010 tool.call_started main turn-1 reported public - {"callId":"toolu_syn_grep1","agentId":"main","taskId":"turn-1","tool":"Grep","category":"search","inputSummary":"\"createStore\" in src","target":"src"}
 #011 tool.call_completed main turn-1 reported public ^10 {"callId":"toolu_syn_grep1","status":"success","durationMs":12,"outputSummary":"1 file found"}
-#012 tool.call_started main turn-1 inferred sensitive - {"callId":"toolu_syn_bash1","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"pnpm vitest run"}
+#012 tool.call_started main turn-1 inferred sensitive - {"callId":"toolu_syn_bash1","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"pnpm vitest run","target":"pnpm"}
 #013 tool.call_completed main turn-1 reported public ^12 {"callId":"toolu_syn_bash1","status":"error","durationMs":880,"exitCode":1,"outputSummary":"Exit code 1 · 12 tests: 10 passed, 2 failed","metrics":{"tests":12,"passed":10,"failed":2},"errorType":"exit_nonzero"}
 #014 agent.message_sent main - reported sensitive - {"messageId":"msg-2","fromAgentId":"main","to":"user","text":"The store is in src/task-store.js. Two of 12 tests fail in listOpen."}
 #015 task.completed - turn-1 reported sensitive - {"taskId":"turn-1","summary":"The store is in src/task-store.js. Two of 12 tests fail in listOpen.","artifactIds":[]}

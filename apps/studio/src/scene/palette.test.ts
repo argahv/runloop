@@ -43,7 +43,7 @@ describe('scene palette from the design tokens', () => {
   it('never uses lime for architecture, outcomes or identity', () => {
     const p = buildPalette(DARK_TOKENS);
     const lime = p.active.toLowerCase();
-    const others = [p.slabTop, p.slabSide, p.corridor, p.room, p.wall, p.wallCap, p.curb, p.inlay, p.metal, p.success, p.warning, p.failure, ...p.identity];
+    const others = [p.slabTop, p.slabSide, p.corridor, p.room, p.wall, p.wallCap, p.curb, p.path, p.metal, p.visor, p.success, p.warning, p.failure, ...p.identity];
     expect(others.map((c) => c.toLowerCase())).not.toContain(lime);
   });
 
@@ -51,6 +51,35 @@ describe('scene palette from the design tokens', () => {
     const p = buildPalette(DARK_TOKENS);
     for (const zone of ['#38bdf8', '#818cf8', '#34d399', '#c084fc', '#f59e0b']) {
       expect(sat(zoneFloor(p, zone))).toBeLessThan(sat(zone) * 0.5);
+    }
+  });
+
+  it('keeps a visible but desaturated environment tint on light floors too', () => {
+    const p = buildPalette(readTokens((n) => light[n] ?? dark[n] ?? ''));
+    for (const zone of ['#38bdf8', '#818cf8', '#34d399', '#c084fc']) {
+      const s = sat(zoneFloor(p, zone));
+      expect(s).toBeGreaterThan(0.05);
+      expect(s).toBeLessThan(sat(zone) * 0.5);
+    }
+  });
+
+  it('gives robots a dark visor in both themes, with eyes in the dark-theme state colours so they always read', () => {
+    for (const p of [buildPalette(DARK_TOKENS), buildPalette(readTokens((n) => light[n] ?? dark[n] ?? ''))]) {
+      expect(new Color(p.visor).getHSL({ h: 0, s: 0, l: 0 }).l).toBeLessThan(0.1);
+      expect(p.eyes.active).toBe(DARK_TOKENS.lime);
+      expect(p.eyes.failure).toBe(DARK_TOKENS.failure);
+      expect(p.eyes.success).toBe(DARK_TOKENS.success);
+      expect(p.eyes.warning).toBe(DARK_TOKENS.warning);
+    }
+  });
+
+  it('lights the world with a warm key and a cool rim in both themes', () => {
+    for (const p of [buildPalette(DARK_TOKENS), buildPalette(readTokens((n) => light[n] ?? dark[n] ?? ''))]) {
+      const key = new Color(p.lights.keyColor);
+      const rim = new Color(p.lights.rimColor);
+      expect(key.r).toBeGreaterThan(key.b);
+      expect(rim.b).toBeGreaterThan(rim.r);
+      expect(p.lights.key).toBeGreaterThan(p.lights.rim);
     }
   });
 

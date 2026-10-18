@@ -6,7 +6,7 @@ import { Color, DoubleSide, FrontSide, Vector3, type Mesh, type MeshBasicMateria
 import { stationStatuses, useScene, type StationStatus } from './context';
 import { useLabel } from './labels';
 import { cellTop, stationColor, stationFront, toScene, yawFor } from './layout';
-import { desaturate, mixHex, stateGlow, zoneAccent, type ScenePalette } from './palette';
+import { stateGlow, zoneAccent, zoneScreen, type ScenePalette } from './palette';
 import { blobShadowTexture } from './textures';
 
 /** Animated parts a station model registers so the live status can drive them. */
@@ -29,11 +29,15 @@ function screenState(st: StationStatus): ScreenState {
   return st.occupant ? 'occupied' : 'idle';
 }
 
-/** Screen colours: lime only while a call runs here; failure and warning for outcomes; unlit otherwise. */
+/**
+ * Screen colours: at rest a dim glass in the environment's tint (a little
+ * brighter while someone stands at it); lime only while a call runs here;
+ * failure and warning for outcomes. Only the state colours glow.
+ */
 function screenColors(p: ScenePalette, zone: string): Record<ScreenState, Color> {
   return {
-    idle: new Color(mixHex(p.screenOff, desaturate(zone, 0.4), 0.14)),
-    occupied: new Color(p.theme === 'light' ? mixHex(p.screenOff, p.tokens.graphite, 0.45) : mixHex(p.screenOff, p.ice, 0.32)),
+    idle: new Color(zoneScreen(p, zone, 0)),
+    occupied: new Color(zoneScreen(p, zone, 1)),
     busy: stateGlow(p, p.active, 1.5),
     awaiting: stateGlow(p, p.warning, 1.4),
     incident: stateGlow(p, p.failure, 1.5),

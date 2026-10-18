@@ -89,6 +89,8 @@ export function codingMissionFixture(opts: RunBuilderOptions = {}): RunEvent[] {
       taskId,
       tool: toolName,
       inputSummary,
+      // Like the runtime's tool invoker: the path for file tools, the program for run_command.
+      target: toolName === 'run_command' ? inputSummary.split(' ')[0]! : inputSummary,
     });
     b.wait(result.durationMs);
     const artifactIds: string[] = [];
@@ -146,6 +148,8 @@ export function codingMissionFixture(opts: RunBuilderOptions = {}): RunEvent[] {
       seed: M.seed,
       adapter: { ...M.adapter },
       workspace: `workspaces/${b.runId}`,
+      // Like the runtime's run manager: the fixture's timing is the adapter's pacing at speed 1.
+      speed: 1,
     },
     { actorId: 'system' },
   );

@@ -103,6 +103,7 @@ interface RunRow {
   segment: number | null;
   project_label: string | null;
   last_event_at: string | null;
+  pinned_at: string | null;
 }
 
 /** Cached per-run write state. */
@@ -134,6 +135,7 @@ function toSummary(r: RunRow): RunSummary {
         ? { kind: 'claude-code', sessionId: r.external_session_id, segment: r.segment ?? 1, projectLabel: r.project_label ?? '' }
         : null,
     lastEventAt: r.last_event_at,
+    pinnedAt: r.pinned_at,
   };
 }
 
@@ -291,6 +293,19 @@ export class Recorder {
   getRun(runId: string): RunSummary | null {
     const row = this.findRow(runId);
     return row ? toSummary(row) : null;
+  }
+
+  /**
+   * Pin a run as a baseline, or unpin it. Pinning is idempotent (an already
+   * pinned run keeps its time). Works on runs in any state; it never touches
+   * the event log. Throws UnknownRunError for an unknown run.
+   */
+  setPinned(runId: string, pinned: boolean): RunSummary {
+    const row = this.findRow(runId);
+    if (!row) throw new UnknownRunError(runId);
+    const pinnedAt = pinned ? (row.pinned_at ?? this.now().toISOString()) : null;
+    if (pinnedAt !== row.pinned_at) this.db.prepare('UPDATE runs SET pinned_at = ? WHERE run_id = ?').run(pinnedAt, runId);
+    return toSummary({ ...row, pinned_at: pinnedAt });
   }
 
   listRuns(): RunSummary[] {

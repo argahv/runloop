@@ -1,4 +1,4 @@
-import type { ExecState, IncidentKind, TaskExec, ToolCallExec, UsageExec } from '@runloop-world/core';
+import { callCategory, type ExecState, type IncidentKind, type TaskExec, type ToolCallExec, type UsageExec } from '@runloop-world/core';
 import type { AnyEvent } from '@runloop-world/events';
 import { isTracedExec, usageSourceText, usageTotal } from './labels';
 
@@ -44,7 +44,10 @@ export interface RunMetrics {
     running: number;
     /** Calls whose start or end Runloop reconstructed (inferred) instead of the source reporting it. */
     inferred: number;
-    /** Calls with a category (traced runs); the rest are not categorised by their source. */
+    /**
+     * Calls with a category: as the source reported it (traced runs), or the
+     * category of Runloop's own tool (executed runs; the same mapping compare uses).
+     */
     categorised: number;
     byCategory: CountRow[];
     byTool: CountRow[];
@@ -107,6 +110,22 @@ function countBy(calls: readonly ToolCallExec[], keyOf: (c: ToolCallExec) => str
   return [...rows.values()].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
+/** A call's category (reported, or Runloop's own tool's for executed runs); null when it has none. */
+function categoryOf(exec: ExecState, c: ToolCallExec): string | null {
+  const { category } = callCategory(exec, c);
+  return category === 'uncategorised' ? null : category;
+}
+
+/** The tools whose calls fall in a category (to filter an executed run's timeline, which has no category filter). */
+export function toolsInCategory(exec: ExecState, category: string): string[] {
+  const tools = new Set<string>();
+  for (const id of exec.callOrder) {
+    const c = exec.toolCalls.get(id);
+    if (c && categoryOf(exec, c) === category) tools.add(c.tool);
+  }
+  return [...tools];
+}
+
 /** Metrics for a run from its latest folded state and its events (in sequence order). */
 export function computeRunMetrics(exec: ExecState, events: readonly AnyEvent[]): RunMetrics {
   const calls = exec.callOrder.map((id) => exec.toolCalls.get(id)!).filter(Boolean);
@@ -160,8 +179,8 @@ export function computeRunMetrics(exec: ExecState, events: readonly AnyEvent[]):
       couldNotRun: calls.filter((c) => c.status === 'failed').length,
       running: calls.filter((c) => c.status === 'running').length,
       inferred: calls.filter((c) => c.startProvenance === 'inferred' || c.endProvenance === 'inferred').length,
-      categorised: calls.filter((c) => c.category !== null).length,
-      byCategory: countBy(calls, (c) => c.category),
+      categorised: calls.filter((c) => categoryOf(exec, c) !== null).length,
+      byCategory: countBy(calls, (c) => categoryOf(exec, c)),
       byTool: countBy(calls, (c) => c.tool),
     },
     failures: {

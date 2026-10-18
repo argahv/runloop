@@ -5,6 +5,7 @@ import { useStudio, useStudioStore } from '../state/context';
 import { ROUTES } from '../state/deeplink';
 import { areaOf, formatWhen, isRunPage } from '../state/format';
 import { selectRun, useTicker } from '../state/hooks';
+import { isPinned } from '../state/baselines';
 import { activityText, groupRuns, isTracedRun, runSourceLabel, shortId } from '../state/runs';
 import { runStatusView } from '../state/view';
 import type { RunSummary } from '@runloop-world/events';
@@ -13,11 +14,12 @@ import { GlyphIcon, Icon } from '../ui/Icon';
 import { Sidebar, type NavItem } from '../ui/Sidebar';
 import styles from './StudioSidebar.module.css';
 
-/** Areas that work today; Experiments and Evaluations stay hidden until they do. */
+/** Areas that work today; Evaluations stays hidden until it does. */
 const AREAS = [
   { href: ROUTES.overview, label: 'Overview', icon: 'overview' },
   { href: ROUTES.world, label: 'Live World', icon: 'world' },
   { href: ROUTES.traces, label: 'Traces', icon: 'traces' },
+  { href: ROUTES.experiments, label: 'Experiments', icon: 'compare' },
   { href: ROUTES.integrations, label: 'Integrations', icon: 'integrations' },
   { href: ROUTES.settings, label: 'Settings', icon: 'settings' },
 ] as const;
@@ -62,7 +64,15 @@ export default function StudioSidebar({ pathname, rail, onNavigate }: { pathname
           <span className={styles.runTitle}>{r.title}</span>
           <span className={styles.runMeta}>
             <Icon name={traced ? 'eye' : 'terminal'} size={11} label={runSourceLabel(r)} />
-            {meta} · {activity ?? formatWhen(r.createdAt)}
+            {/* Before the text, which truncates first, so the baseline mark is never cut off. */}
+            {isPinned(r) && (
+              <span className={styles.baseline} title="Pinned as a baseline">
+                <Icon name="pin" size={11} label="Baseline" />
+              </span>
+            )}
+            <span className={styles.runMetaText}>
+              {meta} · {activity ?? formatWhen(r.createdAt)}
+            </span>
           </span>
         </button>
       </li>

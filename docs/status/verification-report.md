@@ -1,8 +1,8 @@
-# Verification report: Claude Code tracer and Runloop Signature Studio
+# Verification report: Claude Code tracer, Runloop Signature Studio and run compare
 
-> 2026-10-17 · branch `claude/amazing-wright-rzio6c` · Node 22.22.0 · pnpm 10.28.0 · Claude Code 2.1.302 · Linux, headless Chromium (SwiftShader WebGL) for screenshots.
+> 2026-10-17 (§1–§5) and 2026-10-18 (§6) · branch `claude/amazing-wright-rzio6c` · Node 22.22.0 · pnpm 10.28.0 · Claude Code 2.1.302 · Linux, headless Chromium (SwiftShader WebGL) for screenshots.
 >
-> Screenshots marked *(session)* were taken in this session's scratch directory and are not committed. The committed ones are in `docs/assets/`.
+> Screenshots marked *(session)* were taken in this session's scratch directory and are not committed. The committed ones are in `docs/assets/`; on 2026-10-18 they were re-captured from the same recorded sessions in the current Studio (§6).
 
 ## 1. Repository checks
 
@@ -56,7 +56,7 @@ Session 2 added "exactly `node --test`, no pipes". Session 3 used a shorter task
 
 | Criterion | Evidence | Result |
 |---|---|---|
-| A real `claude -p` session produces a **live** run in Studio | `/world/` opened with no run in the URL. The Studio opened the live session by itself (`?run=0d3a3dd9…`), and the header showed **Live** and **Traced · Claude Code · Live**. 4–5 captures per session while it ran. *(session)* `e2e/s1/live-0[1-5].png`, `e2e/s2/live-0[1-4].png`; committed `docs/assets/claude-code-live.png`. | Pass |
+| A real `claude -p` session produces a **live** run in Studio | `/world/` opened with no run in the URL. The Studio opened the live session by itself (`?run=0d3a3dd9…`), and the header showed **Live** and **Traced · Claude Code · Live**. 4–5 captures per session while it ran. *(session)* `e2e/s1/live-0[1-5].png`, `e2e/s2/live-0[1-4].png`; committed at the time as `docs/assets/claude-code-live.png` (in git history; replaced on 2026-10-18 by `claude-code-session.png`, a replay of the same session in the current Studio, see §6). | Pass |
 | **Main agent plus subagent robots** | Session 2 recorded `agent.registered` for `main` ("Claude"), `sa-a694bca8d14490c32` ("Explore #1") and `sa-a9bcb8b405054a668` ("Explore #2"). Each subagent's tool calls carry its own `agentId`, so they are attributed by `agent_id`. Three robots are visible in the live captures. | Pass |
 | **Stations by tool category** | Recorded categories: `test` (`node --test`), `delegate` (Agent), `execute` (subagent `ls`/`cat`), `read`, `edit`. In the world, the main agent walks to the Probe Bench (Test Chamber) for the test run, and the subagents work at the Workshop stations for their shell reads. This was checked with `ReplayIndex.stateAt` (intents: `test`, then `build` for `execute`). | Pass |
 | **A failing Bash test shown as an incident**, with the real failure | Session 2, seq 9: `tool.call_completed {status: error, errorType: exit_nonzero, exitCode: 1, outputSummary: "Exit code 1 · 12 tests: 10 passed, 2 failed"}`. The failing tests are `listOpen returns only tasks that are not done` and `listOpen reflects complete()`. It was delivered by `PostToolUseFailure` and is shown as a red **Tool error** incident at the Test Chamber, with a failure marker on the scrubber. Committed `docs/assets/claude-code-failure.png`. | Pass |
@@ -171,3 +171,107 @@ Remaining cosmetic items:
 - In crowded failure views, zone signs give way to the incident and agent labels (D7 above).
 - The world's incident label is cut at its maximum width ("… 12 tests:").
 
+
+## 6. Run compare, baselines and the world pass (2026-10-18)
+
+> Integration review after the compare (C1–C3) and world (D10) builders finished. Same machine and tools as above. **No new real Claude Code session was run** (no spend): the real-data checks use a copy of the B6 database (`data-e2e`, three real sessions and one demo run), served by a runtime on port 4403 with its own token file, and a static Studio on port 3033.
+
+**Checks**
+
+| Command | Result |
+|---|---|
+| `pnpm install --frozen-lockfile` | OK; lockfile unchanged, no new dependencies |
+| `pnpm -r typecheck` | 8/8 projects pass |
+| `pnpm test` | **52 files, 632 tests, all passed.** By project: events 70, core 77, world-engine 58, replay 13, runtime 173, testkit 3, claude-code-plugin 22, studio 216. |
+| `pnpm build` | Static export: `/`, `/overview`, `/world`, `/traces`, `/experiments`, `/integrations`, `/settings`, 404 |
+| `claude plugin validate --strict integrations/claude-code-plugin` and `--strict .` | Validation passed |
+| `RUNLOOP_DATA_DIR=<scratch> pnpm demo -- --speed 0 --port 0` | 58 events; `run_command` 10 passed / 2 failed (seq 36), then 12/12 (seq 55); `run.completed succeeded`; exit 0 |
+| `pnpm screenshots --studio … --api …` | **212 images in 12 min, exit 0, no page errors**: 27 states × {dark, light} × {1280, 1440, 1920}, and 25 at 390 (the Network graph is desktop-only). The new states are the default Experiments pair, each run kind's pair and its lower half, an unknown run in the link, Experiments offline, and a pinned baseline's Traces header. After a last copy change, the 7 Experiments states were captured again: 56 images, no page errors. |
+
+**Baselines (C1) on the real database**
+
+| Check | Result |
+|---|---|
+| Start the runtime on the copied database (schema 2) | Migration 2 applied: `user_version` 2 → 3; every run kept its status and event count |
+| `POST /api/runs/:id/baseline` without `Content-Type: application/json` | 415 |
+| The same with `Origin: http://evil.example` | 403 |
+| An unknown run | 404 |
+| Pin session 1, then pin it again | 200 both times, the same `pinnedAt` |
+| `DELETE` (the screenshot script's temporary pin, then a manual unpin) | 200, `pinnedAt: null` |
+| SIGTERM the runtime, start it again on the same data dir | The pin kept the same `pinnedAt` (`2026-10-18T03:27:20.001Z`); runs and event counts unchanged |
+| Pin through the Studio (run header of session 3), unpin, Undo, reload | 7/7: toast and `aria-pressed` follow the API's `pinnedAt`; Undo re-pins; the pin survives a reload; left unpinned |
+
+**Every number on the Experiments page against the raw events (C2, C3)**
+
+Method: a script (session scratch, `integ/check-compare.py`) reads `GET /api/runs/:id/events` and recomputes each value without `packages/core`:
+- duration from `run.started` to `run.completed`;
+- tool calls by category (as reported, or by Runloop's own tool for executed runs), and failed calls;
+- failures (error results, failed calls, failed tasks);
+- the latest test counts and the number of test runs;
+- reported tokens per agent (`totalTokens`);
+- turns and delegated tasks;
+- permission counts;
+- read and edit calls without a target;
+- the first divergence: calls in start order by category, tool and target, then by status and test counts.
+
+It then compares each value with the page's text, captured by Playwright.
+
+| Pair | Checks | Result |
+|---|---|---|
+| Session 1 (pinned, 47 events) vs session 2 (45 events) | 25 | **25 pass** |
+| Session 1 vs session 3 (the page's default pair: newest pin vs newest other run of the project) | 23 | **23 pass** |
+| Two demo runs at speed 1, recorded with targets | 19 | **19 pass** |
+
+For the record, session 1 → session 2:
+- **Duration:** 21.3 s → 16.4 s ("4.9 s faster").
+- **Tool calls:** 9 → 8. Command 3 → 2; Delegate 2, Test 2, Edit 1 and Read 1 in both.
+- **Failures:** 0 → 1 (seq 9, exit code 1). Failed calls 0 → 1.
+- **Tests:** latest run 12/12 in both, two test runs each.
+- **Tokens:** 42,902 → 42,490. Explore #1 20,938 → 20,847; Explore #2 21,964 → 21,643; Claude *not reported*.
+- **Delegation:** 1 turn and 2 subagents in both; no permission requests.
+- **First divergence:** call 1, `node --test` in both. Session 1 reported success with 10/12 (its command was piped through `tail`); session 2 reported an error with 10/12.
+- **Files:** not listed. The sessions predate `target`, and the page says so with the count of unnamed read and edit calls (2 and 2).
+
+**Event links.** On the real pair, four links each opened Traces at the right run and event, with no page errors:
+- the candidate's divergence result → `run=0d3a…&event=9`;
+- the baseline's divergence call → `run=680b…&event=8`;
+- the candidate's failures count → `run=0d3a…&event=9`;
+- the baseline's usage report for Explore #2 → `run=680b…&event=37`.
+
+**Found on real data, and fixed at the root**
+
+| # | Finding | Fix | Evidence |
+|---|---|---|---|
+| 1 | "Failed along the way, candidate only: *listOpen returns only tasks that are not done*", although session 1's first test run (piped through `tail -n 80`) named only 1 of its 2 failures | Core claims a name for one side only when the other side named every failure of every test run. Otherwise the page says how many were named ("the baseline's test runs named 1 of 2 failures"). | Core test modelled on these sessions |
+| 2 | An executed run recorded before `target` existed diverged from a newer one at call 1 (target missing vs `"."`) | A target only one side reported is unknown, not different | Core test; old vs new demo run: "No divergence: both runs made the same 9 calls" |
+| 3 | A speed-1 demo run against a speed-0 one read "25.8 s faster" in green | `run.started.speed` (additive) records the pacing. Durations at different paces are not comparable (`pace_differs`); an unrecorded pace adds a caveat (`pace_unknown`). | Core and runtime tests. Pages: "not comparable · the demo ran at a different pace (speed) in each run"; "10 ms slower · the demo's pace was not recorded for one run" |
+| 4 | "Compare" on a demo run's header (and in the palette) used the pinned Claude Code session as its baseline | `baselineFor` returns only pins of the same task | Studio test; demo-run headers show no "Compare" while only a session is pinned |
+| 5 | The divergence lead said "The runs differ from their first tool call. The 1st call is the same, with a different result." | Separate wording per case ("Both runs began with the same call, with a different result.") | Screenshots |
+| 6 | The sidebar's baseline mark was cut off on the pinned run | The pin comes before the text, which truncates instead | Screenshots; the mark's accessible name is "Baseline" |
+| 7 | Run pickers repeated the project ("e2e-ws · e2e-ws") | The subtitle drops the project when the title already names it | Screenshots |
+| 8 | Files said "Neither run read or edited a named file." for runs whose reads and edits had no target | "No file names to compare: 2 read or edit calls in the baseline and 2 in the candidate did not name their file." | Screenshots |
+| 9 | At 1280 px a change chip ran past its half-width card; at 390 px the tables scrolled sideways | Container queries: under 500 px the column headers shrink to their A/B tags (the words stay for screen readers); under 400 px each row's label takes its own line | Screenshots at 1280 and 390, both themes |
+| 10 | The Metrics panel said a demo run's "source does not categorise its tool calls", while Experiments showed Read, Edit, Test and Search for the same run | Metrics uses core's `callCategory` too: the categories of Runloop's own tools, labelled as such; a category bar filters an executed run's timeline by that category's tools | Studio test; screenshots |
+| 11 | At 390 px the run header's actions (Pin, Compare, Switch run, the cross-link) ran off the screen | They wrap on phones | Screenshots |
+
+**World pass (D10)**
+
+Measured with the framing code at the stage sizes the framing tests use (canvas sizes of real windows with the inspector open):
+
+| Window | Board width / stage width | Robot height (2.2 units) |
+|---|---|---|
+| 1280×800 | 96.2% | 35 px |
+| 1440×900 | **97.0%** | **44 px** |
+| 1600×1000 | 97.5% | 54 px |
+| 1920×1080 | 80.7–82.3% | 60 px |
+
+- **Criteria:** ≥ 80% and ≥ 28 px at 1440 both pass; the tests assert both.
+- **Look:** the diorama with chibi robots was reviewed in both themes in the screenshot matrix. The light theme is the "architectural model" look recorded as DL-009.
+- **Not built:** the collapsible timeline from the task's description (now D11).
+- **Performance:** the world builder's figures were not re-measured here: draw calls 273 → 286 (high quality), and frame time 263 → about 329 ms under software WebGL, from the larger board.
+
+**Not verified in this round**
+- **No real Claude Code session with targets.** The three real sessions predate `target`, so real file lists and target-based divergence are covered only by fixture goldens and unit tests.
+- **Cost:** not compared, because no source reports it.
+- **Real-GPU frame rate.**
+- **Keyboard and reduced-motion runs of Experiments were not repeated here.** The compare builder's Playwright script covered keyboard picking (11/11 before this round). This round re-checked pinning through the UI on the final build: pin from the run header (toast, `aria-pressed`, API `pinnedAt`), unpin, Undo, and a reload, 7/7 with no page errors; the run was left unpinned.

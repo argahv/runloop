@@ -4,6 +4,7 @@ import { inputHash, runIdFor, stableJson, subagentId, uuidv5 } from '../src/trac
 import { projectLabelOf } from '../src/tracers/claude-code/mapper';
 import {
   classifyCommand,
+  commandHead,
   failureSummary,
   inputSummary,
   parseTestOutput,
@@ -12,6 +13,7 @@ import {
   sanitizeText,
   successSummary,
   toolCategory,
+  toolTarget,
 } from '../src/tracers/claude-code/summarize';
 import { ALL_FIXTURES, readFixture } from './claude-code-helpers';
 
@@ -171,6 +173,33 @@ describe('paths and summaries', () => {
   it('labels the project by its base name only', () => {
     expect(projectLabelOf('/home/dev/demo/')).toBe('demo');
     expect(projectLabelOf(null)).toBe('unknown project');
+  });
+});
+
+describe('targets', () => {
+  it('names the file, directory or command head the input names, project-relative', () => {
+    expect(toolTarget('Read', { file_path: `${CWD}/src/app.ts`, offset: 1, limit: 20 }, CWD)).toBe('src/app.ts');
+    expect(toolTarget('Edit', { file_path: `${CWD}/src/app.ts`, old_string: 'a', new_string: 'b' }, CWD)).toBe('src/app.ts');
+    expect(toolTarget('Write', { file_path: 'notes/plan.md', content: 'x' }, CWD)).toBe('notes/plan.md');
+    expect(toolTarget('NotebookEdit', { notebook_path: `${CWD}/nb/a.ipynb` }, CWD)).toBe('nb/a.ipynb');
+    expect(toolTarget('Grep', { pattern: 'x', path: `${CWD}/src` }, CWD)).toBe('src');
+    expect(toolTarget('Glob', { pattern: '**/*.ts' }, CWD)).toBeUndefined();
+    expect(toolTarget('Read', { file_path: '/home/dev/other/secret.txt' }, CWD)).toBe('~/other/secret.txt');
+    expect(toolTarget('Read', { file_path: '/opt/data/sets/big.csv' }, CWD)).toBe('…/sets/big.csv');
+    expect(toolTarget('Bash', { command: 'node --test 2>&1 | tail -n 80' }, CWD)).toBe('node');
+    expect(toolTarget('WebFetch', { url: 'https://example.com' }, CWD)).toBeUndefined();
+    expect(toolTarget('Agent', { subagent_type: 'Explore', prompt: 'go' }, CWD)).toBeUndefined();
+    expect(toolTarget('Read', {}, CWD)).toBeUndefined();
+  });
+
+  it('a command head is the program only: env assignments, wrappers and arguments never reach it', () => {
+    const secret = 'sk' + '-live-' + 'a1b2c3d4e5f6a7b8';
+    expect(commandHead(`API_KEY=${secret} pnpm test`)).toBe('pnpm');
+    expect(commandHead(`sudo env FOO=1 ./node_modules/.bin/vitest run --token ${secret}`)).toBe('vitest');
+    expect(commandHead('  (cd src && make)')).toBe('cd');
+    expect(commandHead('"python3" -m pytest')).toBe('python3');
+    expect(commandHead('')).toBeUndefined();
+    expect(commandHead('$(echo rm) -rf /')).toBeUndefined();
   });
 });
 

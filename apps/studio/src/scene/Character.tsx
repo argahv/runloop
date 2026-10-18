@@ -9,13 +9,18 @@ import { identityColor } from '../state/identity';
 import { badgeDetail, compactDetail, presetIcon, usageLine } from './badges';
 import { poseAt, useScene } from './context';
 import { useLabel } from './labels';
-import { heightAt, toScene, yawForHeading } from './layout';
+import { ROBOT_HEIGHT, heightAt, toScene, yawForHeading } from './layout';
 import { identityHex, mix, mixHex, stateGlow, type ScenePalette } from './palette';
 import { blobShadowTexture } from './textures';
 
-/** Model scale: a chibi robot ~2.2 units tall to the antenna tip (1 cell = 1 unit). */
-const SCALE = 2;
-const BADGE_Y = 2.2;
+/** Model height (feet to antenna tip, model units); the model is scaled to ROBOT_HEIGHT scene units. */
+const MODEL_H = 1.1;
+const SCALE = ROBOT_HEIGHT / MODEL_H;
+/** Badges sit just above the antenna. */
+const BADGE_Y = ROBOT_HEIGHT + 0.05;
+/** States in which a robot is not facing a task: it turns towards the camera (south-east). */
+const FACES_VIEWER: ReadonlySet<PresentationState> = new Set(['idle', 'succeeded', 'failed']);
+const VIEWER_YAW = Math.PI / 4;
 
 interface View {
   state: PresentationState;
@@ -56,21 +61,24 @@ function ringFor(p: ScenePalette, state: PresentationState, walking: boolean): C
   }
 }
 
-/** Eye colour: the eyes carry state (their shape too), so they may glow. */
+/** Eye colour on the dark visor: the eyes carry state (their shape too), so they may glow. */
 function eyeColor(p: ScenePalette, state: PresentationState, dim: boolean): Color {
-  if (dim || state === 'paused') return new Color(mixHex(p.visor, p.muted, 0.6));
+  const e = p.eyes;
+  // On the dark visor the dark-theme values always read; they glow (and bloom) only where glow is allowed.
+  const glow = (c: string, k: number) => new Color(c).multiplyScalar(p.glow ? k : 1);
+  if (dim || state === 'paused') return new Color(e.off);
   switch (state) {
     case 'working':
-      return stateGlow(p, p.active, 1.7);
+      return glow(e.active, 1.7);
     case 'failed':
-      return stateGlow(p, p.failure, 1.8);
+      return glow(e.failure, 1.8);
     case 'awaiting_approval':
     case 'waiting':
-      return stateGlow(p, p.warning, 1.6);
+      return glow(e.warning, 1.6);
     case 'succeeded':
-      return stateGlow(p, p.success, 1.6);
+      return glow(e.success, 1.6);
     default:
-      return p.theme === 'light' ? new Color(p.tokens.graphite) : stateGlow(p, p.ice, 1.3);
+      return glow(e.idle, 1.25);
   }
 }
 
@@ -150,7 +158,8 @@ export const Character = memo(function Character({
     // Layer 2: position + heading.
     const [x, , z] = toScene(world, pose.x, pose.y);
     g.position.set(x, heightAt(world, pose.x, pose.y), z);
-    const targetYaw = yawForHeading(pose.heading);
+    // Walking and working follow the Layer-2 heading; a robot standing at rest turns to the viewer (presentation only).
+    const targetYaw = !pose.moving && FACES_VIEWER.has(pose.state) ? VIEWER_YAW : yawForHeading(pose.heading);
     if (yaw.current === null || reducedMotion) yaw.current = targetYaw;
     else {
       const diff = Math.atan2(Math.sin(targetYaw - yaw.current), Math.cos(targetYaw - yaw.current));
@@ -311,21 +320,23 @@ export const Character = memo(function Character({
     onSelect(agentId);
   };
   const shell = view.dim ? mixHex(palette.robotShell, palette.muted, 0.45) : palette.robotShell;
+  // Identity hue: body, visor rim, ear pods and antenna tip (identity never signals state).
   const accent = useMemo(() => (view.dim ? mix(color, palette.muted, 0.6) : new Color(color)), [color, palette, view.dim]);
-  const torso = useMemo(() => mix(palette.robotShell, color, view.dim ? 0.25 : 0.85), [palette, color, view.dim]);
+  const rim = useMemo(() => (view.dim ? mix(color, palette.muted, 0.6) : mix(color, '#ffffff', palette.theme === 'light' ? 0 : 0.12)), [color, palette, view.dim]);
+  const light = palette.theme === 'light';
 
   return (
     <group ref={root}>
       <mesh ref={shadow} position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={1}>
-        <planeGeometry args={[0.8, 0.8]} />
-        <meshBasicMaterial map={blobShadowTexture()} transparent opacity={palette.theme === 'light' ? 0.35 : 0.7} depthWrite={false} />
+        <planeGeometry args={[1.15, 1.15]} />
+        <meshBasicMaterial map={blobShadowTexture()} transparent opacity={light ? 0.32 : 0.75} depthWrite={false} />
       </mesh>
       <mesh ref={stateRing} position={[0, 0.016, 0]} rotation={[-Math.PI / 2, 0, 0]} material={stateMat} visible={false}>
-        <ringGeometry args={[0.36, 0.42, 40]} />
+        <ringGeometry args={[0.5, 0.58, 48]} />
       </mesh>
       {selected && (
         <mesh ref={select} position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.5, 0.56, 6]} />
+          <ringGeometry args={[0.66, 0.72, 6]} />
           <meshBasicMaterial color={palette.ice} transparent opacity={0.95} />
         </mesh>
       )}
@@ -343,72 +354,76 @@ export const Character = memo(function Character({
         }}
       >
         {/* Invisible, generous hit box for clicking. */}
-        <mesh position={[0, 0.5, 0]} visible={false}>
-          <boxGeometry args={[0.7, 1.1, 0.6]} />
+        <mesh position={[0, 0.52, 0]} visible={false}>
+          <boxGeometry args={[0.72, 1.08, 0.62]} />
         </mesh>
         <group ref={bounce}>
-          {/* Legs */}
+          {/* Stub legs */}
           {[-1, 1].map((side) => (
-            <group key={side} ref={side < 0 ? legL : legR} position={[side * 0.075, 0.15, 0]}>
-              <mesh position={[0, -0.07, 0]}>
-                <capsuleGeometry args={[0.05, 0.06, 4, 10]} />
-                <meshStandardMaterial color={palette.robotJoint} roughness={0.45} metalness={0.4} />
+            <group key={side} ref={side < 0 ? legL : legR} position={[side * 0.075, 0.13, 0]}>
+              <mesh position={[0, -0.06, 0.005]}>
+                <capsuleGeometry args={[0.052, 0.05, 4, 10]} />
+                <meshStandardMaterial color={palette.robotJoint} roughness={0.4} metalness={0.35} />
               </mesh>
             </group>
           ))}
           <group ref={body}>
-            <RoundedBox args={[0.32, 0.25, 0.25]} radius={0.085} smoothness={4} position={[0, 0.28, 0]}>
-              <meshStandardMaterial color={torso} roughness={0.4} metalness={0.1} />
+            {/* Small body in the identity hue, with a light chest plate */}
+            <RoundedBox args={[0.3, 0.25, 0.24]} radius={0.09} smoothness={4} position={[0, 0.25, 0]}>
+              <meshStandardMaterial color={accent} roughness={0.32} metalness={0.05} />
             </RoundedBox>
-            <mesh position={[0, 0.29, 0.127]}>
-              <circleGeometry args={[0.04, 20]} />
-              <meshStandardMaterial color={palette.robotShell} roughness={0.3} />
-            </mesh>
-            {/* Arms */}
+            <RoundedBox args={[0.16, 0.1, 0.02]} radius={0.01} smoothness={2} position={[0, 0.26, 0.12]}>
+              <meshStandardMaterial color={shell} roughness={0.3} metalness={0.05} />
+            </RoundedBox>
+            {/* Stub arms */}
             {[-1, 1].map((side) => (
-              <group key={side} ref={side < 0 ? armL : armR} position={[side * 0.185, 0.35, 0]}>
-                <group rotation={[0, 0, side * 0.18]}>
-                  <mesh position={[0, -0.07, 0]}>
-                    <capsuleGeometry args={[0.042, 0.08, 4, 10]} />
-                    <meshStandardMaterial color={shell} roughness={0.35} metalness={0.05} />
+              <group key={side} ref={side < 0 ? armL : armR} position={[side * 0.18, 0.33, 0]}>
+                <group rotation={[0, 0, side * 0.2]}>
+                  <mesh position={[0, -0.06, 0]}>
+                    <capsuleGeometry args={[0.046, 0.06, 4, 10]} />
+                    <meshStandardMaterial color={shell} roughness={0.28} metalness={0.02} />
                   </mesh>
-                  <mesh position={[0, -0.15, 0]}>
-                    <sphereGeometry args={[0.05, 12, 12]} />
-                    <meshStandardMaterial color={palette.robotJoint} roughness={0.45} metalness={0.4} />
+                  <mesh position={[0, -0.13, 0]}>
+                    <sphereGeometry args={[0.044, 12, 12]} />
+                    <meshStandardMaterial color={palette.robotJoint} roughness={0.4} metalness={0.35} />
                   </mesh>
                 </group>
               </group>
             ))}
-            <mesh position={[0, 0.43, 0]}>
-              <cylinderGeometry args={[0.05, 0.06, 0.06, 12]} />
-              <meshStandardMaterial color={palette.robotJoint} roughness={0.45} metalness={0.4} />
+            <mesh position={[0, 0.39, 0]}>
+              <cylinderGeometry args={[0.045, 0.055, 0.05, 12]} />
+              <meshStandardMaterial color={palette.robotJoint} roughness={0.4} metalness={0.4} />
             </mesh>
-            {/* Head */}
-            <group ref={head} position={[0, 0.66, 0]}>
-              <RoundedBox args={[0.6, 0.46, 0.48]} radius={0.17} smoothness={5}>
-                <meshPhysicalMaterial color={shell} roughness={0.22} metalness={0.02} clearcoat={0.8} clearcoatRoughness={0.12} />
+            {/* Oversized glossy head */}
+            <group ref={head} position={[0, 0.665, 0]}>
+              <RoundedBox args={[0.66, 0.52, 0.54]} radius={0.19} smoothness={5}>
+                <meshPhysicalMaterial color={shell} roughness={0.2} metalness={0.02} clearcoat={1} clearcoatRoughness={0.08} />
               </RoundedBox>
-              {/* Wrap-around visor: pokes through the head's rounded front corners so it reads from the side too. */}
-              <RoundedBox args={[0.52, 0.31, 0.3]} radius={0.1} smoothness={4} position={[0, -0.01, 0.1]}>
-                <meshPhysicalMaterial color={palette.visor} roughness={0.12} metalness={0.4} clearcoat={1} />
+              {/* Visor rim in the identity hue, then the dark glass visor (pokes through the rounded front so it reads from the side). */}
+              <RoundedBox args={[0.6, 0.4, 0.3]} radius={0.13} smoothness={4} position={[0, -0.015, 0.124]}>
+                <meshStandardMaterial color={rim} roughness={0.35} metalness={0.1} />
               </RoundedBox>
-              <group ref={eyes} position={[0, -0.01, 0.256]}>
+              <RoundedBox args={[0.52, 0.315, 0.3]} radius={0.1} smoothness={4} position={[0, -0.015, 0.136]}>
+                <meshPhysicalMaterial color={palette.visor} roughness={0.08} metalness={0.3} clearcoat={1} clearcoatRoughness={0.05} />
+              </RoundedBox>
+              <group ref={eyes} position={[0, -0.015, 0.287]}>
                 <Eyes state={view.state} mat={eyeMat} dots={dots} />
               </group>
-              {/* Ears and antenna tip carry the identity hue (identity never signals state). */}
+              {/* Ear pods */}
               {[-1, 1].map((side) => (
-                <mesh key={side} position={[side * 0.3, -0.02, -0.04]} rotation={[0, 0, Math.PI / 2]}>
-                  <cylinderGeometry args={[0.062, 0.062, 0.05, 20]} />
-                  <meshStandardMaterial color={accent} roughness={0.35} metalness={0.2} />
+                <mesh key={side} position={[side * 0.335, -0.02, -0.03]} rotation={[0, 0, Math.PI / 2]}>
+                  <cylinderGeometry args={[0.07, 0.07, 0.05, 20]} />
+                  <meshStandardMaterial color={accent} roughness={0.35} metalness={0.15} />
                 </mesh>
               ))}
-              <mesh position={[0, 0.3, 0]}>
-                <cylinderGeometry args={[0.013, 0.013, 0.14, 8]} />
-                <meshStandardMaterial color={palette.robotJoint} roughness={0.45} metalness={0.5} />
+              {/* Antenna, its tip in the identity hue */}
+              <mesh position={[0, 0.31, 0]}>
+                <cylinderGeometry args={[0.012, 0.016, 0.12, 8]} />
+                <meshStandardMaterial color={palette.robotJoint} roughness={0.4} metalness={0.5} />
               </mesh>
-              <mesh position={[0, 0.39, 0]}>
-                <sphereGeometry args={[0.048, 14, 14]} />
-                <meshStandardMaterial color={accent} roughness={0.35} metalness={0.2} />
+              <mesh position={[0, 0.385, 0]}>
+                <sphereGeometry args={[0.05, 16, 16]} />
+                <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={light ? 0 : 0.35} roughness={0.3} metalness={0.1} />
               </mesh>
             </group>
           </group>
@@ -434,8 +449,8 @@ function Eyes({
       return (
         <>
           {[-1, 1].map((s) => (
-            <mesh key={s} position={[s * 0.1, 0, 0]} rotation={[0, 0, s * 0.16]} material={mat}>
-              <boxGeometry args={[0.11, 0.024, 0.01]} />
+            <mesh key={s} position={[s * 0.115, 0, 0]} rotation={[0, 0, s * 0.16]} material={mat}>
+              <boxGeometry args={[0.13, 0.03, 0.01]} />
             </mesh>
           ))}
         </>
@@ -445,8 +460,8 @@ function Eyes({
       return (
         <>
           {[-1, 1].map((s) => (
-            <mesh key={s} position={[s * 0.1, -0.02, 0]} material={mat}>
-              <torusGeometry args={[0.042, 0.015, 6, 16, Math.PI]} />
+            <mesh key={s} position={[s * 0.115, -0.02, 0]} material={mat}>
+              <torusGeometry args={[0.05, 0.018, 6, 16, Math.PI]} />
             </mesh>
           ))}
         </>
@@ -457,8 +472,8 @@ function Eyes({
         <>
           {[-1, 1].map((s) =>
             [1, -1].map((r) => (
-              <mesh key={`${s}${r}`} position={[s * 0.1, 0, 0]} rotation={[0, 0, (r * Math.PI) / 4]} material={mat}>
-                <boxGeometry args={[0.1, 0.024, 0.01]} />
+              <mesh key={`${s}${r}`} position={[s * 0.115, 0, 0]} rotation={[0, 0, (r * Math.PI) / 4]} material={mat}>
+                <boxGeometry args={[0.12, 0.028, 0.01]} />
               </mesh>
             )),
           )}
@@ -474,10 +489,10 @@ function Eyes({
               ref={(m) => {
                 dots.current[i] = m;
               }}
-              position={[s * 0.085, -0.01, 0]}
+              position={[s * 0.095, -0.01, 0]}
               material={mat}
             >
-              <sphereGeometry args={[0.024, 10, 10]} />
+              <sphereGeometry args={[0.028, 10, 10]} />
             </mesh>
           ))}
         </>
@@ -502,8 +517,8 @@ function Eyes({
       return (
         <>
           {[-1, 1].map((s) => (
-            <mesh key={s} position={[s * 0.1, 0, 0]} material={mat}>
-              <capsuleGeometry args={[0.03, 0.045, 4, 10]} />
+            <mesh key={s} position={[s * 0.115, 0, 0]} material={mat}>
+              <capsuleGeometry args={[0.036, 0.06, 4, 10]} />
             </mesh>
           ))}
         </>

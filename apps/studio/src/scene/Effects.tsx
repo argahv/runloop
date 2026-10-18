@@ -113,27 +113,35 @@ function effectsFor(e: AnyEvent, frame: SceneFrame, ctx: SceneCtx): Fx[] {
       ];
     }
     case 'agent.message_sent': {
-      const { world } = ctx;
-      const from = poseAt(world, frame, e.payload.fromAgentId);
-      const start: Cell | undefined = from ? from.cell : hubRing(world)[0];
-      if (!start) return [];
       const color = identityHex(ctx.palette, frame.state.exec, e.payload.fromAgentId);
-      const targets =
-        e.payload.to === 'all'
-          ? frame.state.world.characterOrder.filter((id) => id !== e.payload.fromAgentId)
-          : [e.payload.to];
-      const out: Fx[] = [];
-      for (const id of targets) {
-        const to = poseAt(world, frame, id);
-        if (!to) continue;
-        const cells = bfs(world, start, to.cell) ?? [start, to.cell];
-        out.push({ id: nextId++, born: performance.now(), kind: 'packet', pts: pathPoints(world, cells, 1.05), color });
-      }
-      return out;
+      return messageRoutes(ctx.world, frame, e.payload.fromAgentId, e.payload.to).map((cells) => ({
+        id: nextId++,
+        born: performance.now(),
+        kind: 'packet' as const,
+        pts: pathPoints(ctx.world, cells, 1.05),
+        color,
+      }));
     }
     default:
       return [];
   }
+}
+
+/**
+ * The walkable routes a recorded message travels: from the sender (or the
+ * Atrium, for a sender without a robot) to each receiving robot.
+ */
+export function messageRoutes(world: SceneCtx['world'], frame: SceneFrame, fromAgentId: string, to: string): Cell[][] {
+  const from = poseAt(world, frame, fromAgentId);
+  const start: Cell | undefined = from ? from.cell : hubRing(world)[0];
+  if (!start) return [];
+  const targets = to === 'all' ? frame.state.world.characterOrder.filter((id) => id !== fromAgentId) : [to];
+  const out: Cell[][] = [];
+  for (const id of targets) {
+    const dest = poseAt(world, frame, id);
+    if (dest) out.push(bfs(world, start, dest.cell) ?? [start, dest.cell]);
+  }
+  return out;
 }
 
 const SPEED = 7; // cells per second

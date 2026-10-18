@@ -1,6 +1,6 @@
 # Architecture overview
 
-> Updated 2026-10-17. Paths are relative to the repo root.
+> Updated 2026-10-18 (run compare and baselines). Paths are relative to the repo root.
 
 Runloop records agent runs as an append-only event log on the local machine. It derives a world simulation from that log and draws it in a browser Studio. Everything runs on loopback; nothing leaves the machine.
 
@@ -10,7 +10,7 @@ Runloop records agent runs as an append-only event log on the local machine. It 
 |---|---|---|---|
 | 1. Execution truth | The event log and the state folded from it: runs, agents, tasks, tool calls, permissions, artifacts, incidents | `packages/events`, `packages/core` | Append-only. A tool result exists only if a tool ran (executed runs) or the source reported it (traced runs). |
 | 2. World simulation | Where each character is, where it walks and what it is doing | `packages/world-engine` | A pure function of layer 1 and a world definition. Deterministic, with no clock reads. |
-| 3. Presentation | The Studio: 3D scene, Network graph, timeline, inspector, metrics | `apps/studio` | Reads layers 1 and 2. Never writes back. |
+| 3. Presentation | The Studio: 3D scene, Network graph, timeline, inspector, metrics, run compare | `apps/studio` | Reads layers 1 and 2. Never writes back to them (pinning a baseline is run metadata, not an event). |
 
 `packages/replay` combines layers 1 and 2. `ReplayIndex.stateAt(seq)` is identical to the live fold, so live view and replay cannot disagree.
 
@@ -19,7 +19,7 @@ Runloop records agent runs as an append-only event log on the local machine. It 
 ```
 @runloop-world/events        zod schemas, parse (lenient/strict), redaction, SequenceBuffer, HTTP/SSE/ingest contract
         ▲
-@runloop-world/core          reduceExecution / foldExecution (Layer 1), selectors, formatEvent
+@runloop-world/core          reduceExecution / foldExecution (Layer 1), selectors, formatEvent, summarizeRun / diffRuns (compare)
         ▲
 @runloop-world/world-engine  world definition, BFS grid paths, motion, deriveIntent, reduceWorld (Layer 2)
         ▲
@@ -74,13 +74,20 @@ store ─► playhead (live or replay) ─► RunState at the playhead ─► 3D
 ```
 One selection (run, event, agent) drives the world, timeline, inspector and URL (`?run=&view=&event=&agent=`). Polling `/api/health` and `/api/runs` keeps the run lists fresh. When nothing is open, the Studio opens the active demo run, else the newest live traced session, else the newest run.
 
+**Compare (Experiments, DL-008)**
+```
+GET /api/runs (pinnedAt) ─► pair: ?a=<baseline>&b=<candidate>, defaulting to the newest pin and the newest other run of the same task
+GET /api/runs/:id/events (paged, both runs) ─► foldExecution ─► summarizeRun ─► diffRuns ─► Experiments page
+```
+`summarizeRun` and `diffRuns` (`packages/core/src/compare.ts`) are pure. Every field carries `{a, b, delta, comparable, note}`. A value a side did not report is never compared and never shown as 0; the note says why (not reported, still recording, tokens reported for different agents, executed vs traced, demo pace). Test runs, failures, files, categories, usage reports and the divergence link to their events in Traces.
+
 ## Storage
 
 SQLite through `node:sqlite` (`packages/runtime/src/store/`), with WAL, `synchronous = FULL` and foreign keys on.
 
 | Table | Holds |
 |---|---|
-| `runs` | One row per run: status, title, mission, world. For traced runs also mode, source kind, session id, segment, project label and last event time (migration 1). |
+| `runs` | One row per run: status, title, mission, world. For traced runs also mode, source kind, session id, segment, project label and last event time (migration 1). `pinned_at` marks a baseline (migration 2). |
 | `events` | The log: one row per event, unique by `(run_id, sequence)` |
 | `artifacts` | Artifact metadata. Bytes live in `<data>/artifacts/<runId>/<artifactId>`, checked against their sha256 when served. |
 | `trace_ingest` | Dedupe keys per Claude Code session (`pre:<id>`, `post:<id>`, `prompt:<id>`, `delivery:<id>`…), inserted in the same transaction as the events they produced |
@@ -94,6 +101,7 @@ The contract is `packages/events/src/protocol.ts`, and the route table is in `pa
 - **Runs:** `GET /api/runs` and `GET /api/runs/:id`.
 - **Events:** `GET /api/runs/:id/events` pages the log; `GET /api/runs/:id/stream` is SSE, resumable with `Last-Event-ID`.
 - **Control:** `POST /api/runs` starts a scripted run. `POST /api/runs/:id/{stop,pause,resume}` controls it; traced runs answer 409.
+- **Baselines:** `POST /api/runs/:id/baseline` pins a run (idempotent; it keeps its first `pinnedAt`), `DELETE` unpins it. Both need JSON and an allowed Origin, like every write. `RunSummary.pinnedAt` carries the pin.
 - **Ingest:** `POST /api/ingest/claude-code` takes hook envelopes and needs the ingest token.
 
 ## Adapters and integrations
@@ -110,7 +118,7 @@ There are two ways to get a run into Runloop:
 
 ## Trust boundaries
 
-- **Network:** loopback only, with a Host header guard. Browser origins are allowlisted for reads and control. Ingest rejects any `Origin`.
+- **Network:** loopback only, with a Host header guard. Browser origins are allowlisted for reads, control and baselines (POST and DELETE need JSON and an allowed Origin). Ingest rejects any `Origin`.
 - **Writes from other processes:** only through ingest, with the per-user token (`~/.config/runloop/ingest-token`, mode 0600), body and rate limits, and schema validation.
 - **Reads:** unauthenticated for local processes (known limitation).
 - **Secrets:** redacted before persistence. The plugin redacts first (well-known token shapes, credential `key=value` and headers, URL passwords, shell flags such as `-p`/`--password`, and the literal values of those secrets wherever else they appear), the trace manager again on arrival, the recorder again. A redacted event's visibility becomes `redacted`. Shell commands are stored as `sensitive`. Bare positional passwords (e.g. `tool login hunter2`) are not recognised.

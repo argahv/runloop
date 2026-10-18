@@ -6,21 +6,21 @@
 #005 task.started main turn-1 reported public - {"taskId":"turn-1","agentId":"main"}
 #006 agent.message_sent user - reported sensitive - {"messageId":"msg-1","fromAgentId":"user","to":"main","text":"Run: node --test . Then read src/task-store.js and answer in one line what listOpen does."}
 #007 agent.state_changed main - reported public - {"agentId":"main","state":"working","reason":"Prompt received"}
-#008 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_01JxFx5C6KoT3xBESpPe6Den","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"node --test . 2>&1; echo \"EXIT:$?\""}
+#008 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_01JxFx5C6KoT3xBESpPe6Den","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"node --test . 2>&1; echo \"EXIT:$?\"","target":"node"}
 #009 tool.permission_requested main - reported sensitive - {"permissionId":"perm-1","agentId":"main","callId":"toolu_01JxFx5C6KoT3xBESpPe6Den","action":"Bash node --test . 2>&1; echo \"EXIT:$?\"","scope":"default"}
-#010 tool.call_started main turn-1 reported public - {"callId":"toolu_012dGKaKo6gSNSFiHzW9uLdT","agentId":"main","taskId":"turn-1","tool":"Read","category":"read","inputSummary":"src/task-store.js"}
+#010 tool.call_started main turn-1 reported public - {"callId":"toolu_012dGKaKo6gSNSFiHzW9uLdT","agentId":"main","taskId":"turn-1","tool":"Read","category":"read","inputSummary":"src/task-store.js","target":"src/task-store.js"}
 #011 tool.call_completed main turn-1 reported public ^10 {"callId":"toolu_012dGKaKo6gSNSFiHzW9uLdT","status":"success","durationMs":44,"outputSummary":"Read 34 lines"}
 #012 tool.permission_resolved - - inferred public - {"permissionId":"perm-1","decision":"denied","by":"unknown"}
 #013 tool.call_failed main turn-1 inferred public ^8 {"callId":"toolu_01JxFx5C6KoT3xBESpPe6Den","errorType":"denied","message":"No result was reported after the permission request; treated as denied (inferred)","durationMs":2451}
-#014 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_019eW1gUUhDyBb1r2Eyfuj4J","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"node --test ."}
+#014 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_019eW1gUUhDyBb1r2Eyfuj4J","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"node --test .","target":"node"}
 #015 tool.call_completed main turn-1 reported public ^14 {"callId":"toolu_019eW1gUUhDyBb1r2Eyfuj4J","status":"error","durationMs":252,"exitCode":1,"outputSummary":"Exit code 1: Could not find '.'","errorType":"exit_nonzero"}
-#016 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_01PvxVqWBH3Qu4rdJgdQ12Sq","agentId":"main","taskId":"turn-1","tool":"Bash","category":"execute","inputSummary":"pwd && ls -la && node --version && cat package.json 2>/dev/null"}
+#016 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_01PvxVqWBH3Qu4rdJgdQ12Sq","agentId":"main","taskId":"turn-1","tool":"Bash","category":"execute","inputSummary":"pwd && ls -la && node --version && cat package.json 2>/dev/null","target":"pwd"}
 #017 tool.call_completed main turn-1 reported public ^16 {"callId":"toolu_01PvxVqWBH3Qu4rdJgdQ12Sq","status":"success","durationMs":65,"outputSummary":"Completed · 20 lines of output"}
-#018 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_01MSafyDQmufQRzNkbfyHoqF","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"npm test"}
+#018 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_01MSafyDQmufQRzNkbfyHoqF","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"npm test","target":"npm"}
 #019 tool.permission_requested main - reported sensitive - {"permissionId":"perm-2","agentId":"main","callId":"toolu_01MSafyDQmufQRzNkbfyHoqF","action":"Bash npm test","scope":"default"}
 #020 tool.permission_resolved - - inferred public - {"permissionId":"perm-2","decision":"denied","by":"unknown"}
 #021 tool.call_failed main turn-1 inferred public ^18 {"callId":"toolu_01MSafyDQmufQRzNkbfyHoqF","errorType":"denied","message":"No result was reported after the permission request; treated as denied (inferred)","durationMs":2279}
-#022 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_01Vrad1xT4AVq6JghFHZYpfT","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"node --test --test-reporter=tap"}
+#022 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_01Vrad1xT4AVq6JghFHZYpfT","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"node --test --test-reporter=tap","target":"node"}
 #023 tool.call_completed main turn-1 reported public ^22 {"callId":"toolu_01Vrad1xT4AVq6JghFHZYpfT","status":"error","durationMs":262,"exitCode":1,"outputSummary":"Exit code 1 · 12 tests: 10 passed, 2 failed","metrics":{"tests":12,"passed":10,"failed":2},"failingTests":["listOpen returns only tasks that are not done","listOpen reflects complete()"],"errorType":"exit_nonzero"}
 #024 task.completed - turn-1 inferred public - {"taskId":"turn-1","summary":"Ended with the session (inferred)","artifactIds":[]}
 #025 agent.state_changed main - inferred public - {"agentId":"main","state":"idle","reason":"Session closed"}
