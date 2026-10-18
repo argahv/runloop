@@ -4,10 +4,13 @@
  * by the fake as Claude Code would), and the contract-checking world host.
  *
  * Asserts: argv equals the preview; a bad, reused or expired nonce gets 403
- * or 409; a missing or foreign Origin gets 403; a moved root gets 409; cancel
- * kills the process group; restart → orphaned or lost; audit rows; world
- * commands with the right provenance; the session binds by dispatch; and the
- * workspace path appears in no API response, dispatch table or world event (P8).
+ * or 409; a missing or foreign Origin gets 403, and so does an allowed one
+ * that is not the runtime's own (a page on localhost:3000 cannot approve: a
+ * person approves on the runtime's page); a moved root gets 409; cancel kills
+ * the process group; restart → orphaned (still writing, still timed) or
+ * lost; audit rows, refusals included; world commands with the right
+ * provenance; the session binds by dispatch; and the workspace path appears
+ * in no API response, dispatch table or world event (P8).
  */
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
@@ -15,7 +18,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { serve, type ServerType } from '@hono/node-server';
 import {
+  INGEST_TOKEN_HEADER,
   SSE_END_EVENT,
+  apiPaths,
   worldApiPaths,
   type AgentDetailResponse,
   type CreateAgentResponse,
@@ -24,9 +29,11 @@ import {
   type DispatchPolicyResponse,
   type DispatchPreview,
   type DispatchPreviewResponse,
+  type DispatchPreviewStatusResponse,
   type DispatchResponse,
   type DispatchSummary,
   type ListDispatchesResponse,
+  type RunDetailResponse,
   type WorldEvent,
 } from '@runloop-world/events';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -41,16 +48,20 @@ import { Recorder } from '../src/recorder';
 import { RunManager } from '../src/run-manager';
 import { openDb, type Db } from '../src/store/db';
 import { TraceSessionManager } from '../src/tracers/claude-code/session-manager';
+import { envelopeOf, readFixture } from './claude-code-helpers';
 import { FAKE_VERSION, makeFakeClaude, type FakeClaude } from './fake-claude';
 import { REPO_ROOT } from './helpers';
 import { FakeWorldHost } from './world-fakes';
 
 const PLUGIN_DIR = path.join(REPO_ROOT, 'integrations', 'claude-code-plugin');
+/** Studio's origin (any app served on localhost:3000 has it too). */
 const ORIGIN = DEFAULT_ALLOWED_ORIGINS[0]!;
 const GRACE_MS = 600;
+const REVIEW_MS = 300;
 
 interface Booted {
   url: string;
+  token: string;
   db: Db;
   recorder: Recorder;
   agents: AgentService;
@@ -73,24 +84,29 @@ async function boot(o: { dataDir: string; tokenFile: string; host: FakeWorldHost
     world: o.host,
     pluginDir: PLUGIN_DIR,
     ingestTokenFile: o.tokenFile,
+    outputDir: path.join(o.dataDir, 'dispatch-output'),
     env: o.env,
     now: () => Date.now() + o.skew.ms,
     cancelGraceMs: GRACE_MS,
+    minReviewMs: REVIEW_MS,
     orphanPollMs: 50,
     // A "minute" of task timeout: 1.5 s, so the default 10 min (15 s) outlasts a fake run on a loaded machine.
     timeoutMinuteMs: 1500,
     onStopped: (s) => stoppedSessions.push(s),
     onError: (e) => console.error('[dispatch]', e),
   });
+  const token = ensureIngestToken(o.tokenFile);
   const app = createApp({
     recorder,
     manager,
     worldsDir: path.join(REPO_ROOT, 'worlds'),
     allowedOrigins: DEFAULT_ALLOWED_ORIGINS,
-    tracer: { manager: tracer, token: ensureIngestToken(o.tokenFile) },
+    tracer: { manager: tracer, token },
+    onRefusedWrite: (r) => dispatch.auditRequestRefusal(r),
+    dispatchOfRun: (runId) => dispatch.forRun(runId),
   });
   mountAgentRoutes(app, agents);
-  mountDispatchRoutes(app, { dispatch, allowedOrigins: DEFAULT_ALLOWED_ORIGINS, pingMs: 200 });
+  mountDispatchRoutes(app, { dispatch, pingMs: 200 });
   await agents.start();
   await dispatch.start();
   let server!: ServerType;
@@ -100,6 +116,7 @@ async function boot(o: { dataDir: string; tokenFile: string; host: FakeWorldHost
   const svc = agents;
   return {
     url,
+    token,
     db,
     recorder,
     agents: svc,
@@ -186,10 +203,35 @@ const preview = async (task: string, extra: Record<string, unknown> = {}) => {
   const r = await post<DispatchPreviewResponse & { code?: string }>(worldApiPaths.dispatchPreview(agentId), { task, preset: 'read_only', ...extra });
   return r;
 };
-const approve = (p: Pick<DispatchPreview, 'previewId' | 'approvalNonce'>, origin: string | null = ORIGIN) =>
+/** Approve over the API from the runtime's own origin (what a page the runtime serves sends). */
+const approve = (p: Pick<DispatchPreview, 'previewId' | 'approvalNonce'>, origin: string | null = rt.url) =>
   post<DispatchResponse & { code?: string }>(worldApiPaths.dispatches, { previewId: p.previewId, approvalNonce: p.approvalNonce }, origin);
+/** A preview as a local process asks for it (no Origin), so it carries the nonce. */
+const localPreview = (task: string, extra: Record<string, unknown> = {}) =>
+  post<DispatchPreviewResponse & { code?: string }>(worldApiPaths.dispatchPreview(agentId), { task, preset: 'read_only', ...extra }, null);
+const previewStatus = async (previewId: string) => (await api<DispatchPreviewStatusResponse>(worldApiPaths.dispatchPreviewStatus(previewId))).body;
+/** The approval page as a browser fetches it (HTML; its status and security headers). */
+async function approvalPage(previewId: string): Promise<{ status: number; html: string; headers: Headers }> {
+  const res = await fetch(`${rt.url}${worldApiPaths.approvePage(previewId)}`);
+  const html = await res.text();
+  bodies.push(html);
+  return { status: res.status, html, headers: res.headers };
+}
+/** Submit the approval page's form (origin and fetch-site as a browser would set them for that page). */
+async function submitPage(previewId: string, form: Record<string, string>, origin: string | null = rt.url, fetchSite = 'same-origin') {
+  const res = await fetch(`${rt.url}${worldApiPaths.approvePage(previewId)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', 'sec-fetch-site': fetchSite, ...(origin ? { origin } : {}) },
+    body: new URLSearchParams(form).toString(),
+  });
+  const html = await res.text();
+  bodies.push(html);
+  return { status: res.status, html };
+}
+const nonceIn = (html: string) => /name="nonce" value="([^"]+)"/.exec(html)?.[1] ?? '';
 const getDispatch = async (id: string) => (await api<DispatchResponse>(worldApiPaths.dispatch(id))).body.dispatch;
 const auditActions = (db: Db = rt.db) => (db.prepare('SELECT action, detail_json FROM audit_log ORDER BY id').all() as { action: string; detail_json: string }[]);
+const auditSince = (n: number) => auditActions().slice(n).map((a) => ({ action: a.action, ...(JSON.parse(a.detail_json) as Record<string, unknown>) }));
 const dispatchEvents = (dispatchId: string) =>
   host.events.filter((e): e is Extract<WorldEvent, { type: 'agent.dispatch_changed' }> => e.type === 'agent.dispatch_changed' && e.p.dispatchId === dispatchId);
 
@@ -288,24 +330,82 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
     expect(fake.runs()).toBe(0);
   });
 
-  it('approval needs an allowed Origin, JSON and the right nonce, once (403/409); nothing spawns otherwise', async () => {
-    const p = (await preview('Approve me [fake:exit]')).body.preview;
+  it('a page on an allowed origin (any app on localhost:3000) gets no nonce and cannot approve, even with one; the attempts are audited', async () => {
+    // What a page there could do: preview, read the response, approve.
+    const fromPage = (await preview('Rewrite the test script [fake:exit]')).body.preview;
+    expect(fromPage.approvalNonce).toBe('');
+    expect(fromPage.approveUrl).toBe(`${rt.url}/approve/${fromPage.previewId}`);
+    // Even holding a valid nonce (a local process got one), an approval from that origin is refused, and spends nothing.
+    const p = (await localPreview('Rewrite the test script [fake:exit]')).body.preview;
+    expect(p.approvalNonce.length).toBeGreaterThanOrEqual(43);
+    const before = auditActions().length;
+    expect(await approve(p, ORIGIN)).toMatchObject({ status: 403, body: { code: 'approve_in_runtime' } });
+    expect(await approve(p, 'http://evil.example')).toMatchObject({ status: 403 });
+    expect(await approve(p, null)).toMatchObject({ status: 403, body: { code: 'origin_required' } });
+    // A form post to the approval page from another origin is refused too (a top-level form on that page).
+    expect((await submitPage(p.previewId, { nonce: p.approvalNonce, action: 'approve' }, ORIGIN, 'same-site')).status).toBe(403);
+    expect(await previewStatus(p.previewId)).toEqual({ previewId: p.previewId, state: 'awaiting_approval', dispatchId: null, code: null });
+    expect(auditSince(before)).toEqual([
+      { action: 'dispatch.request_refused', method: 'POST', path: '/api/dispatches', code: 'approve_in_runtime', origin: ORIGIN },
+      { action: 'dispatch.request_refused', method: 'POST', path: '/api/dispatches', code: 'origin_not_allowed', origin: 'http://evil.example' },
+      { action: 'dispatch.request_refused', method: 'POST', path: '/api/dispatches', code: 'origin_required', origin: null },
+      { action: 'dispatch.request_refused', method: 'POST', path: `/approve/${p.previewId}`, code: 'approve_in_runtime', origin: ORIGIN },
+    ]);
+    expect(fake.runs()).toBe(0);
+  });
+
+  it('the approval page shows exactly what will run, escaped, and cannot be framed', async () => {
+    const p = (await preview('Summarise <script>alert(1)</script> & "quote" [fake:exit]')).body.preview;
+    const page = await approvalPage(p.previewId);
+    expect(page.status).toBe(200);
+    expect(page.headers.get('content-type')).toMatch(/^text\/html/);
+    expect(page.headers.get('x-frame-options')).toBe('DENY');
+    expect(page.headers.get('content-security-policy')).toMatch(/default-src 'none'.*form-action 'self'.*frame-ancestors 'none'/);
+    expect(page.headers.get('access-control-allow-origin')).toBeNull();
+    expect(page.headers.get('cache-control')).toBe('no-store');
+    // Not no-referrer: under it Chromium sends `Origin: null` with the page's own form post, and a person could never approve.
+    expect(page.headers.get('referrer-policy')).toBe('same-origin');
+    expect(page.html).not.toMatch(/name="referrer"/);
+    expect(page.html).not.toContain('<script>');
+    expect(page.html).toContain('Summarise &lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;quote&quot; [fake:exit]');
+    for (const text of ['Engineering House', 'acme-app', '…/code/acme-app', 'haiku', 'at most $0.25 · Billed to your Anthropic account', 'Read-only: no edits', 'Claude Code reports done', p.sessionId]) {
+      expect(page.html).toContain(text);
+    }
+    expect(page.html).toContain(`--session-id ${p.sessionId} --permission-mode dontAsk --allowedTools Read Grep Glob --model haiku`);
+    expect(page.html).not.toContain(repo);
+    expect(nonceIn(page.html).length).toBeGreaterThanOrEqual(43);
+    expect((await approvalPage('pvw_nope')).status).toBe(404);
+    expect(fake.runs()).toBe(0);
+  });
+
+  it('preview refusals are audited with their code', async () => {
+    const before = auditActions().length;
+    await preview('x', { model: 'opus' });
+    await post(worldApiPaths.dispatchPreview('agt_00000000-0000-4000-8000-00000000dead'), { task: 'x', preset: 'read_only' });
+    expect(auditSince(before)).toEqual([
+      { action: 'dispatch.preview_refused', agentId, code: 'model_not_allowed' },
+      { action: 'dispatch.preview_refused', agentId: 'agt_00000000-0000-4000-8000-00000000dead', code: 'unknown_agent' },
+    ]);
+  });
+
+  it('approval needs the runtime’s own Origin, JSON and the right nonce, once (403/409); nothing spawns otherwise', async () => {
+    const p = (await localPreview('Approve me [fake:exit]')).body.preview;
     expect(await approve(p, null)).toMatchObject({ status: 403, body: { code: 'origin_required' } });
     expect((await approve(p, 'http://evil.example')).status).toBe(403);
-    const asText = await fetch(`${rt.url}${worldApiPaths.dispatches}`, { method: 'POST', headers: { 'content-type': 'text/plain', origin: ORIGIN }, body: JSON.stringify(p) });
+    const asText = await fetch(`${rt.url}${worldApiPaths.dispatches}`, { method: 'POST', headers: { 'content-type': 'text/plain', origin: rt.url }, body: JSON.stringify(p) });
     expect(asText.status).toBe(415);
     // A wrong nonce spends the preview; the right one cannot be used after it.
     expect(await approve({ previewId: p.previewId, approvalNonce: 'x'.repeat(43) })).toMatchObject({ status: 403, body: { code: 'bad_nonce' } });
     expect(await approve(p)).toMatchObject({ status: 409, body: { code: 'nonce_used' } });
     expect(await approve({ previewId: 'pvw_unknown', approvalNonce: p.approvalNonce })).toMatchObject({ status: 409, body: { code: 'preview_unknown' } });
-    expect((await post(worldApiPaths.dispatches, { previewId: p.previewId, approvalNonce: p.approvalNonce, extra: 1 })).status).toBe(400);
+    expect((await post(worldApiPaths.dispatches, { previewId: p.previewId, approvalNonce: p.approvalNonce, extra: 1 }, rt.url)).status).toBe(400);
     expect(fake.runs()).toBe(0);
     const refused = auditActions().filter((a) => a.action === 'dispatch.refused').map((a) => (JSON.parse(a.detail_json) as { code: string }).code);
     expect(refused).toEqual(['bad_nonce', 'nonce_used', 'preview_unknown']);
   });
 
   it('an expired nonce gets 409', async () => {
-    const p = (await preview('Too late [fake:exit]')).body.preview;
+    const p = (await localPreview('Too late [fake:exit]')).body.preview;
     skew.ms = 5 * 60_000 + 1000;
     try {
       expect(await approve(p)).toMatchObject({ status: 409, body: { code: 'nonce_expired' } });
@@ -317,7 +417,7 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
   });
 
   it('a moved workspace root gets 409 and nothing runs', async () => {
-    const p = (await preview('Moved [fake:exit]')).body.preview;
+    const p = (await localPreview('Moved [fake:exit]')).body.preview;
     const moved = `${repo}-moved`;
     renameSync(repo, moved);
     try {
@@ -333,7 +433,7 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
   let firstPreview: DispatchPreview;
 
   it('runs exactly the previewed argv, binds the session by dispatch, and stores the result as reported', async () => {
-    firstPreview = (await preview('Summarise the repo [fake:exit]')).body.preview;
+    firstPreview = (await localPreview('Summarise the repo [fake:exit]')).body.preview;
     const created = await approve(firstPreview);
     expect(created.status).toBe(201);
     expect(created.body.dispatch).toMatchObject({ agentId, sessionId: firstPreview.sessionId, status: 'running', model: 'haiku', allowedTools: ['Read', 'Grep', 'Glob'], maxBudgetUsd: 0.25 });
@@ -354,6 +454,9 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
     expect(rt.recorder.listAll(first.runId!).filter((e) => e.type === 'tool.call_started').length).toBeGreaterThan(0);
     const agent = (await api<AgentDetailResponse>(worldApiPaths.agent(agentId))).body.agent;
     expect(agent.sessions.map((s) => s.bindingMethod)).toContain('dispatch');
+    // The run's detail carries the cost Claude Code reported for the session (compare shows it, labelled as reported).
+    const detail = (await api<RunDetailResponse>(apiPaths.run(first.runId!))).body;
+    expect(detail.dispatch).toEqual({ dispatchId: first.dispatchId, reportedCostUsd: 0.0123, sessionRuns: 1 });
   });
 
   it('tells the world approved (user), running and finished (system)', async () => {
@@ -391,8 +494,57 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
     expect((await resumed.text()).match(/^data: /gm)!.length).toBe(2); // the last frame + end
   });
 
-  it('a workspace that has sent hooks gets no --plugin-dir; a budget stop reads budget_exceeded', async () => {
-    const p = (await preview('Spend it all [fake:budget]', { maxBudgetUsd: 0.05 })).body.preview;
+  it('a person approves on the page: a click before it could be read spends nothing; declining runs nothing', async () => {
+    const p = (await preview('Approve on the page [fake:exit]')).body.preview;
+    const page = await approvalPage(p.previewId);
+    const early = await submitPage(p.previewId, { nonce: nonceIn(page.html), action: 'approve' });
+    expect(early.status).toBe(200);
+    expect(early.html).toContain('Take a moment to read what will run');
+    expect(await previewStatus(p.previewId)).toMatchObject({ state: 'awaiting_approval' });
+    await new Promise((r) => setTimeout(r, REVIEW_MS + 50));
+    expect((await submitPage(p.previewId, { nonce: 'x'.repeat(43), action: 'approve' })).status).toBe(403);
+    expect(await previewStatus(p.previewId)).toMatchObject({ state: 'refused', code: 'bad_nonce', dispatchId: null });
+
+    const q = (await preview('Approve on the page [fake:exit]')).body.preview;
+    const nonce = nonceIn((await approvalPage(q.previewId)).html);
+    await new Promise((r) => setTimeout(r, REVIEW_MS + 50));
+    const done = await submitPage(q.previewId, { nonce, action: 'approve' });
+    expect(done.status).toBe(200);
+    expect(done.html).toContain('Task started');
+    const st = await previewStatus(q.previewId);
+    expect(st).toMatchObject({ state: 'approved', code: null });
+    expect(done.html).toContain(st.dispatchId!);
+    expect(await finished(st.dispatchId!, 20_000)).toMatchObject({ outcome: 'completed', sessionId: q.sessionId });
+    expect((await approvalPage(q.previewId)).status).toBe(409);
+
+    const r = (await preview('Never mind [fake:exit]')).body.preview;
+    const declined = await submitPage(r.previewId, { nonce: nonceIn((await approvalPage(r.previewId)).html), action: 'decline' });
+    expect(declined.html).toContain('Declined');
+    expect(await previewStatus(r.previewId)).toMatchObject({ state: 'declined' });
+    expect(fake.log(r.sessionId)).toBeNull();
+    expect(auditActions().some((a) => a.action === 'dispatch.declined')).toBe(true);
+  });
+
+  it('when the CLI cannot say, only the workspace’s own sessions count as sending hooks, not Runloop’s --plugin-dir dispatches', async () => {
+    // So far only dispatches (traced through Runloop's --plugin-dir) sent hooks from this workspace.
+    expect(rt.agents.registry.ownSessionCount(agentId)).toBe(0);
+    expect((await localPreview('Still traced?')).body.preview.usesPluginDir).toBe(true);
+    // A session the user started in the folder, traced by a tracer of their own.
+    const ownSession = '5c0ffee0-0000-4000-8000-00000000c0de';
+    const line = readFixture('s1-basic')[0]!;
+    const envelope = envelopeOf('own', { ...line, input: { ...line.input, session_id: ownSession, cwd: repo } }, 0);
+    const res = await fetch(`${rt.url}${apiPaths.ingestClaudeCode}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', [INGEST_TOKEN_HEADER]: rt.token },
+      body: JSON.stringify({ envelopes: [envelope] }),
+    });
+    expect(res.ok).toBe(true);
+    expect(rt.agents.registry.bindingOf(ownSession)).toEqual({ agentId, method: 'path' });
+    expect((await localPreview('Now it is installed somewhere')).body.preview.usesPluginDir).toBe(false);
+  });
+
+  it('a workspace that has sent hooks of its own gets no --plugin-dir; a budget stop reads budget_exceeded', async () => {
+    const p = (await localPreview('Spend it all [fake:budget]', { maxBudgetUsd: 0.05 })).body.preview;
     expect(p.usesPluginDir).toBe(false);
     expect(p.argv.at(-1)).toBe('--verbose');
     expect(p.argv[p.argv.indexOf('--max-budget-usd') + 1]).toBe('0.05');
@@ -401,7 +553,7 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
   });
 
   it('a failure reads failed, with stderr in the stream', async () => {
-    const p = (await preview('Break [fake:fail]')).body.preview;
+    const p = (await localPreview('Break [fake:fail]')).body.preview;
     const d = await finished((await approve(p)).body.dispatch.dispatchId);
     expect(d).toMatchObject({ outcome: 'failed', exitCode: 1 });
     const s = await readStream(d.dispatchId);
@@ -409,7 +561,7 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
   });
 
   it('output past the 1 MiB cap is dropped from the stream, but the result is still read', async () => {
-    const p = (await preview('Talk a lot [fake:flood]')).body.preview;
+    const p = (await localPreview('Talk a lot [fake:flood]')).body.preview;
     const d = await finished((await approve(p)).body.dispatch.dispatchId, 20_000);
     expect(d).toMatchObject({ outcome: 'completed', outputTruncated: true, reportedCostUsd: 0.0123 });
     const s = await readStream(d.dispatchId);
@@ -417,7 +569,7 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
   });
 
   it('cancel at the first PreToolUse kills the process group (SIGTERM, then SIGKILL after the grace period)', async () => {
-    const p = (await preview('Stubborn [fake:ignore-term]')).body.preview;
+    const p = (await localPreview('Stubborn [fake:ignore-term]')).body.preview;
     const id = (await approve(p)).body.dispatch.dispatchId;
     const pids = await until(() => fake.pids(p.sessionId), 'the fake to start its child');
     expect(alive(pids.parent) && alive(pids.child)).toBe(true);
@@ -444,7 +596,7 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
   });
 
   it('a cancel honoured by SIGTERM reads cancelled within 2 s', async () => {
-    const p = (await preview('Polite [fake:hang]')).body.preview;
+    const p = (await localPreview('Polite [fake:hang]')).body.preview;
     const id = (await approve(p)).body.dispatch.dispatchId;
     const pids = await until(() => fake.pids(p.sessionId), 'the fake to start');
     const t0 = Date.now();
@@ -456,7 +608,7 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
   });
 
   it('the timeout stops it as timed_out', async () => {
-    const p = (await preview('Slow [fake:hang]', { timeoutMin: 1 })).body.preview;
+    const p = (await localPreview('Slow [fake:hang]', { timeoutMin: 1 })).body.preview;
     const d = await finished((await approve(p)).body.dispatch.dispatchId, 5000);
     expect(d.outcome).toBe('timed_out');
     expect(auditActions().some((a) => a.action === 'dispatch.timed_out')).toBe(true);
@@ -470,7 +622,7 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
   });
 
   it('after a restart a live process is orphaned (and can be cancelled); a dead one is lost', async () => {
-    const p = (await preview('Outlive the runtime [fake:hang]')).body.preview;
+    const p = (await localPreview('Outlive the runtime [fake:hang]')).body.preview;
     const id = (await approve(p)).body.dispatch.dispatchId;
     const pids = await until(() => fake.pids(p.sessionId), 'the fake to start');
     // A row whose process is gone, as a crash would leave it.
@@ -494,6 +646,49 @@ describe('dispatch v1 with a fake claude', { timeout: 30_000 }, () => {
     await until(() => !alive(pids.parent) && !alive(pids.child), 'the orphan to be gone', 3000);
     const actions = auditActions().map((a) => a.action);
     for (const a of ['dispatch.orphaned', 'dispatch.lost']) expect(actions).toContain(a);
+  });
+
+  it('a restart does not kill a task that is writing: it is adopted, its output is tailed again, and it ends as Claude Code reports', async () => {
+    const p = (await localPreview('Keep talking [fake:chatty]')).body.preview;
+    const id = (await approve(p)).body.dispatch.dispatchId;
+    const pids = await until(() => fake.pids(p.sessionId), 'the fake to start');
+    await until(() => (rt.dispatch.output(id)?.frames.length ?? 0) >= 3, 'some output');
+
+    await rt.close();
+    host = host.restart();
+    rt = await boot({ dataDir, tokenFile, host, env: runtimeEnv(), skew });
+
+    // Still writing (to its file, not to a pipe the old runtime closed).
+    expect(alive(pids.parent)).toBe(true);
+    expect(fake.exit(p.sessionId)).toBeNull();
+    expect(await getDispatch(id)).toMatchObject({ status: 'orphaned', outcome: null });
+    const d = await finished(id, 15_000);
+    expect(fake.exit(p.sessionId)).toEqual({ code: 0 });
+    // Its exit code was not observed; its own result line says how it ended.
+    expect(d).toMatchObject({ outcome: 'completed', exitCode: null, reportedCostUsd: 0.0123 });
+    const s = await readStream(id);
+    expect(s.frames.filter((f) => f.line.includes('"step ')).length).toBe(50);
+    expect(s.frames.at(-1)!.line).toContain('"type":"result"');
+    expect(readdirSync(path.join(dataDir, 'dispatch-output')).filter((f) => f.startsWith(id))).toEqual([]);
+  });
+
+  it('an adopted orphan keeps its time limit and counts as running for capabilities and capacity', async () => {
+    // timeoutMin 2 = 3 s here; the restart happens well within it.
+    const p = (await localPreview('Hang on [fake:hang]', { timeoutMin: 2 })).body.preview;
+    const id = (await approve(p)).body.dispatch.dispatchId;
+    const pids = await until(() => fake.pids(p.sessionId), 'the fake to start');
+    await rt.close();
+    host = host.restart();
+    rt = await boot({ dataDir, tokenFile, host, env: runtimeEnv(), skew });
+    expect(await getDispatch(id)).toMatchObject({ status: 'orphaned' });
+    const agent = (await api<AgentDetailResponse>(worldApiPaths.agent(agentId))).body.agent;
+    expect(agent.capabilities.cancel.state).toBe('available');
+    expect((await preview('Another one')).body).toMatchObject({ code: 'dispatch_running' });
+    const d = await finished(id, 8000);
+    expect(d.outcome).toBe('timed_out');
+    expect(Date.parse(d.endedAt!) - Date.parse(d.startedAt)).toBeGreaterThanOrEqual(2 * 1500 - 100);
+    await until(() => !alive(pids.parent) && !alive(pids.child), 'the orphan to be gone', 3000);
+    expect(auditActions().some((a) => a.action === 'dispatch.timed_out' && a.detail_json.includes(id))).toBe(true);
   });
 
   it('P8: the workspace path and the API key appear in no response, dispatch table, audit row or world event', () => {
@@ -575,7 +770,7 @@ describe('dispatch setup problems', () => {
   it('with dispatch off every route answers 404 dispatch_disabled', async () => {
     const { Hono } = await import('hono');
     const app = new Hono();
-    mountDispatchRoutes(app, { dispatch: null, allowedOrigins: DEFAULT_ALLOWED_ORIGINS });
+    mountDispatchRoutes(app, { dispatch: null });
     for (const [method, p] of [
       ['GET', worldApiPaths.dispatchPolicy],
       ['POST', worldApiPaths.dispatchPreview('agt_x')],

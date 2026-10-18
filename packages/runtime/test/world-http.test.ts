@@ -1,12 +1,16 @@
 /**
- * World API (plan §4.5, §8 S1): routes, the strict command body (P2), the
- * world switch, and the SSE stream: folding it reproduces the server's state
- * hash, a reconnect leaves no gap, and a client far behind gets a snapshot.
+ * World API (plan §4.5, §8 S1): routes, the strict command body (P2: only the
+ * user's own controls, never a runtime command id), the world switch, and the
+ * SSE stream: folding it reproduces the server's state hash, a reconnect
+ * leaves no gap, a client far behind, ahead, or of another world gets a
+ * snapshot, and a speed change is followed by a clock frame at once.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   WORLD_STREAM_RESNAPSHOT,
   WorldClockFrameSchema,
+  parseWorldStreamId,
+  worldStreamId,
   WorldEventsFrameSchema,
   WorldSnapshotSchema,
   apiPaths,
@@ -26,9 +30,9 @@ afterEach(async () => {
 
 const T0 = Date.parse('2026-10-18T10:00:00Z');
 
-function setup(env: NodeJS.ProcessEnv = {}) {
+function setup(env: NodeJS.ProcessEnv = {}, opts: { seed?: number } = {}) {
   const clock = { t: T0 };
-  rt = createRuntime({ repoRoot: REPO_ROOT, dataDir: tempDir('world-http'), env, world: { seed: 42, now: () => clock.t, tickMs: 0 } });
+  rt = createRuntime({ repoRoot: REPO_ROOT, dataDir: tempDir('world-http'), env, world: { seed: opts.seed ?? 42, now: () => clock.t, tickMs: 0 } });
   return { rt, app: rt.app, host: rt.world, clock };
 }
 
@@ -49,7 +53,7 @@ describe('world routes', () => {
     host!.start();
     advance(host!, clock, 5_000);
     const info = (await (await app.request(worldApiPaths.world)).json()) as WorldInfoResponse;
-    expect(info).toMatchObject({ worldId: 'runloop-commons', townId: 'runloop-commons', seed: 42, population: 80, speed: 1 });
+    expect(info).toMatchObject({ worldId: host!.worldId, townId: 'runloop-commons', seed: 42, population: 80, speed: 1 });
     const town = (await (await app.request(worldApiPaths.town)).json()) as { contentHash: string; interiors: Record<string, unknown> };
     expect(town.contentHash).toBe(info.contentHash);
     expect(Object.keys(town.interiors)).toContain('cafe');
@@ -88,10 +92,27 @@ describe('world routes', () => {
     expect((await post(app, { id: 'x2', prov: 'system', command: { type: 'clock.set', speed: 1 } })).status).toBe(400);
     expect((await post(app, { id: 'x3', command: { type: 'clock.set', speed: 3 } })).status).toBe(400);
     expect(host!.snapshot().speed).toBe(4);
-    // An HTTP command that only the system may send is rejected (and logged) as forbidden.
-    const forbidden = await post(app, { id: 'conn', command: { type: 'agent.connection', agentId: 'agt_5f1c2a8e-3b4d-4c6e-9a7b-1d2e3f405a61', health: 'live', attention: 'none' } });
-    expect(forbidden.status).toBe(202);
-    expect(await forbidden.json()).toEqual({ ok: false, code: 'forbidden_source' });
+    // Agent commands come from the runtime only: over HTTP they could house an agent nobody added,
+    // or forge a dispatch's outcome. They never reach the world.
+    const agentId = 'agt_00000000-0000-4000-8000-000000000001';
+    const seq = host!.seq;
+    for (const command of [
+      { type: 'agent.house', agentId, lotId: 'lot_agent_3', displayName: 'Claude (prod)', hue: '#5aa9f5' },
+      { type: 'agent.dispatch', agentId, dispatchId: 'dsp_00000000-0000-4000-8000-000000000002', phase: 'finished', outcome: 'completed' },
+      { type: 'agent.connection', agentId, health: 'live', attention: 'none' },
+      { type: 'agent.session', agentId, runId: '7c9e6679-7425-40de-944b-e07fc1f90ae7', phase: 'started' },
+    ]) {
+      expect((await post(app, { id: `phantom-${command.type}`, command })).status).toBe(400);
+    }
+    expect(host!.seq).toBe(seq);
+    expect(host!.snapshot().agents).toEqual([]);
+    // Nor may a client take one of the runtime's own command ids first (the world applies an id once).
+    for (const id of ['sess:7c9e6679-7425-40de-944b-e07fc1f90ae7:end', 'dsp:dsp_00000000-0000-4000-8000-000000000002:finished', 'act:x:1', 'conn:x', 'house:agt_x']) {
+      const res = await post(app, { id, command: { type: 'clock.set', speed: 1 } });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(/runtime’s own|runtime's own/);
+    }
+    expect(host!.seq).toBe(seq);
     // The app's guards apply: JSON only, allowed origins only.
     expect((await app.request(worldApiPaths.commands, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' })).status).toBe(415);
     expect((await post(app, { id: 'evil', command: { type: 'clock.set', speed: 0 } }, { origin: 'https://evil.example' })).status).toBe(403);
@@ -127,7 +148,7 @@ function fold(frames: readonly SseFrame[], into: SimState | null = null): { stat
         state = applyEvent(state, e);
         lastId = e.seq;
       }
-      expect(Number(f.id)).toBe(lastId);
+      expect(parseWorldStreamId(f.id!)).toEqual({ worldId: rt!.world!.worldId, seq: lastId });
     }
   }
   return { state, lastId };
@@ -141,8 +162,9 @@ describe('world stream (SSE)', () => {
     await sse.until((f) => f.some((x) => x.event === 'snapshot'));
     advance(host!, clock, 20_000);
     await post(app, { id: 'pause', command: { type: 'clock.set', speed: 0 } });
-    const frames = await sse.until((f) => f.some((x) => x.id === String(host!.seq)));
+    const frames = await sse.until((f) => f.some((x) => x.id === worldStreamId(host!.worldId, host!.seq)));
     expect(frames[0]!.event).toBe('snapshot');
+    expect(frames[0]!.id).toBe(worldStreamId(host!.worldId, WorldSnapshotSchema.parse(JSON.parse(frames[0]!.data!)).seq));
     const clocks = frames.filter((f) => f.event === 'clock').map((f) => WorldClockFrameSchema.parse(JSON.parse(f.data!)));
     expect(clocks.length).toBeGreaterThan(0);
     const { state } = fold(frames);
@@ -156,13 +178,13 @@ describe('world stream (SSE)', () => {
     await post(app, { id: 'fast', command: { type: 'clock.set', speed: 16 } });
     const first = sseReader(await app.request(worldApiPaths.stream));
     advance(host!, clock, 5_000);
-    const seen = await first.until((f) => f.some((x) => x.id === String(host!.seq)));
+    const seen = await first.until((f) => f.some((x) => x.id === worldStreamId(host!.worldId, host!.seq)));
     const part = fold(seen);
     await first.cancel();
     // Missed while away.
     advance(host!, clock, 5_000);
-    const again = sseReader(await app.request(worldApiPaths.stream, { headers: { 'last-event-id': String(part.lastId) } }));
-    const rest = await again.until((f) => f.some((x) => x.id === String(host!.seq)));
+    const again = sseReader(await app.request(worldApiPaths.stream, { headers: { 'last-event-id': worldStreamId(host!.worldId, part.lastId) } }));
+    const rest = await again.until((f) => f.some((x) => x.id === worldStreamId(host!.worldId, host!.seq)));
     expect(rest.some((f) => f.event === 'snapshot')).toBe(false);
     const firstEvents = WorldEventsFrameSchema.parse(JSON.parse(rest.find((f) => f.event === undefined && f.data)!.data!));
     expect(firstEvents.events[0]!.seq).toBe(part.lastId + 1);
@@ -178,4 +200,46 @@ describe('world stream (SSE)', () => {
     expect(lateFrames.find((f) => f.id !== undefined)!.event).toBe('snapshot');
     await late.cancel();
   }, 30_000);
+
+  it('a speed change is followed by a clock frame at once, re-based at the new speed', async () => {
+    const { app, host, clock } = setup();
+    host!.start();
+    await post(app, { id: 'fast', command: { type: 'clock.set', speed: 16 } });
+    const sse = sseReader(await app.request(worldApiPaths.stream));
+    await sse.until((f) => f.some((x) => x.event === 'clock'));
+    advance(host!, clock, 3_000);
+    const n = sse.frames.length;
+    await post(app, { id: 'pause', command: { type: 'clock.set', speed: 0 } });
+    // Well before the next 1 Hz frame: the batch with world.clock_changed, then a clock frame for it.
+    const frames = await sse.until((f) => f.slice(n).some((x) => x.event === 'clock'), 500);
+    const after = frames.slice(n);
+    const batchAt = after.findIndex((x) => x.event === undefined && x.data?.includes('world.clock_changed'));
+    const clockAt = after.findIndex((x) => x.event === 'clock');
+    expect(batchAt).toBeGreaterThanOrEqual(0);
+    expect(clockAt).toBeGreaterThan(batchAt);
+    expect(WorldClockFrameSchema.parse(JSON.parse(after[clockAt]!.data!))).toEqual({ tick: host!.tick, speed: 0, wallMs: clock.t, lagging: false });
+    await sse.cancel();
+  });
+
+  it('a client of another world never resumes into this one: it gets a snapshot, ahead or behind', async () => {
+    const { app, host, clock } = setup({}, { seed: 7 });
+    host!.start();
+    advance(host!, clock, 5_000);
+    const seq = host!.seq;
+    const opened = async (headers: Record<string, string>, query = '') => {
+      const sse = sseReader(await app.request(`${worldApiPaths.stream}${query}`, { headers }));
+      const frames = await sse.until((f) => f.some((x) => x.event === 'clock'));
+      await sse.cancel();
+      return frames.filter((f) => f.event !== 'clock').map((f) => f.event ?? 'events');
+    };
+    // The same world, behind: a backfill.
+    expect(await opened({ 'last-event-id': worldStreamId(host!.worldId, seq - 3) })).toEqual(['events']);
+    // Another world's id (the runtime restarted on a fresh data dir; same town, same contentHash): a snapshot,
+    expect(await opened({ 'last-event-id': worldStreamId('runloop-commons-0badc0de', seq - 3) })).toEqual(['snapshot']);
+    expect(await opened({}, `?after=${seq - 3}&world=runloop-commons-0badc0de`)).toEqual(['snapshot']);
+    // and so is a bare seq ahead of this world (an older client of a longer-lived world), which once got only clock frames.
+    expect(await opened({ 'last-event-id': String(seq + 400) })).toEqual(['snapshot']);
+    expect(await opened({ 'last-event-id': String(seq - 3) })).toEqual(['events']);
+    expect((await app.request(worldApiPaths.stream, { headers: { 'last-event-id': 'x:y' } })).status).toBe(400);
+  });
 });

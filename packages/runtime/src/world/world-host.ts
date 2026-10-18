@@ -19,7 +19,7 @@
  *
  * Never imports dispatch (P11).
  */
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import {
   CommandEnvelopeSchema,
   CommandIdSchema,
@@ -73,7 +73,11 @@ export interface WorldHostOptions {
   seed?: number;
   /** Residents of a new world (default: the town's population.default). */
   population?: number;
-  /** Default: the town id. */
+  /**
+   * For a new world (default: the town id plus a random suffix, so every
+   * world created is told apart, e.g. by a stream client resuming after the
+   * runtime restarted on a fresh data dir). An existing world keeps its id.
+   */
   worldId?: string;
   /** Wake interval; 0 = no timer (tests call pump()). Default 50 ms. */
   tickMs?: number;
@@ -139,7 +143,7 @@ export class WorldHost {
     } else {
       this.townFiles = opts.town;
       this.town = loadTown(opts.town.town, opts.town.interiors);
-      this.worldId = opts.worldId ?? this.town.def.id;
+      this.worldId = opts.worldId ?? `${this.town.def.id}-${randomBytes(4).toString('hex')}`;
       this.seed = opts.seed ?? randomInt(2 ** 31);
       this.createdAt = new Date(now).toISOString();
       this.world = { town: this.town, seed: this.seed };

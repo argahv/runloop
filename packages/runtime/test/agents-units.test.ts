@@ -19,7 +19,10 @@ describe('deriveHealth: the first matching rule wins', () => {
     ['no event yet, even with an open run', { firstEventAt: null }, 'awaiting_first_event'],
     ['an open run with a recent envelope', {}, 'live'],
     ['an open run quiet for 5 min', { lastEnvelopeAt: NOW - LIVE_WINDOW_MS }, 'idle'],
-    ['a running dispatch with no open run', { openRuns: 0, dispatchRunning: true, lastEnvelopeAt: null }, 'live'],
+    // Only arriving events make an agent live: an untraced dispatch (no hook for 5+ min, or never) is open but quiet.
+    ['a running dispatch whose session sends no hooks', { openRuns: 0, dispatchRunning: true, lastEnvelopeAt: NOW - LIVE_WINDOW_MS - 1 }, 'idle'],
+    ['a running dispatch, nothing ever received from its session', { openRuns: 0, dispatchRunning: true, lastEnvelopeAt: null }, 'idle'],
+    ['a running dispatch with a recent hook (its run not open yet)', { openRuns: 0, dispatchRunning: true }, 'live'],
     ['no open run (ended, swept or restarted)', { openRuns: 0 }, 'offline'],
   ])('%s → %s', (_label, patch, expected) => {
     expect(deriveHealth({ ...base, ...patch }, NOW)).toBe(expected);
@@ -30,6 +33,16 @@ describe('deriveHealth: the first matching rule wins', () => {
       for (const openRuns of [0, 1, 3]) {
         for (const lastEnvelopeAt of [null, NOW, NOW - 10]) {
           expect(deriveHealth({ ...base, firstEventAt: null, dispatchRunning, openRuns, lastEnvelopeAt }, NOW)).not.toBe('live');
+        }
+      }
+    }
+  });
+
+  it('live always means a hook arrived in the last 5 minutes', () => {
+    for (const dispatchRunning of [false, true]) {
+      for (const openRuns of [0, 1]) {
+        for (const lastEnvelopeAt of [null, NOW - LIVE_WINDOW_MS, NOW - 2 * LIVE_WINDOW_MS]) {
+          expect(deriveHealth({ ...base, dispatchRunning, openRuns, lastEnvelopeAt }, NOW)).not.toBe('live');
         }
       }
     }

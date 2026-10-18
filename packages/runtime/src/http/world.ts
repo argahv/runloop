@@ -4,12 +4,16 @@
  * Host, JSON-only writes from allowed Origins).
  *
  * - POST /api/world/commands: body `{id, command}` only (strict; `source` or
- *   `prov` in the body is a 400, P2). The source is always 'user'.
+ *   `prov` in the body is a 400, P2). The source is always 'user'. Only the
+ *   user's controls (clock.set, building.set_open) are accepted, and never an
+ *   id with a runtime prefix (`sess:`, `dsp:` …): agent commands come from the
+ *   runtime alone.
  * - GET /api/world/stream: SSE like http/sse.ts — subscribe first, then a
  *   `snapshot` (or a backfill after Last-Event-ID), then batches as `message`
- *   frames with `id: <last seq>`, and a `clock` frame every second. A client
- *   more than 5 000 events behind, or behind pruned events, gets a fresh
- *   snapshot.
+ *   frames with `id: <worldId>:<last seq>`, and a `clock` frame every second
+ *   and right after a batch that changed the speed. A client of another world,
+ *   ahead of this one, more than 5 000 events behind, or behind pruned events
+ *   gets a fresh snapshot.
  * - When the world is off (RUNLOOP_WORLD=off) every route answers 404 `world_disabled`.
  */
 import {
@@ -19,7 +23,9 @@ import {
   WORLD_STREAM_RESNAPSHOT,
   WorldCommandRequestSchema,
   WorldEventsQuerySchema,
+  parseWorldStreamId,
   worldApiPaths,
+  worldStreamId,
   type ErrorResponse,
   type ExplainResponse,
   type WorldEvent,
@@ -89,15 +95,20 @@ export function mountWorldRoutes(app: Hono, opts: WorldRouteOptions): void {
   app.get(worldApiPaths.stream, (c) => streamWorld(c, host, opts.clockMs ?? 1000));
 }
 
-function parseAfter(value: string | undefined): number | undefined | null {
+/** Where a client resumes: absent (fresh), or a seq and the world it belongs to (when it said). */
+type Resume = { seq: number; worldId: string | null } | undefined;
+
+function parseResume(c: Context): Resume | null {
+  const value = c.req.header('last-event-id') ?? c.req.query('after');
   if (value === undefined || value === '') return undefined;
-  return /^\d{1,15}$/.test(value) ? Number(value) : null;
+  const id = parseWorldStreamId(value);
+  if (!id) return null;
+  return { seq: id.seq, worldId: id.worldId ?? c.req.query('world') ?? null };
 }
 
 function streamWorld(c: Context, host: WorldHost, clockMs: number): Response {
-  const header = c.req.header('last-event-id');
-  const after = parseAfter(header ?? c.req.query('after'));
-  if (after === null) return c.json(err('Last-Event-ID / after must be a non-negative integer'), 400);
+  const resume = parseResume(c);
+  if (resume === null) return c.json(err('Last-Event-ID / after must be a seq or <worldId>:<seq>'), 400);
   return streamSSE(c, async (stream) => {
     const queue: (readonly WorldEvent[])[] = [];
     let wake: (() => void) | null = null;
@@ -116,12 +127,12 @@ function streamWorld(c: Context, host: WorldHost, clockMs: number): Response {
     let lastSent = 0;
     const sendSnapshot = async () => {
       const snap = host.snapshot();
-      await stream.writeSSE({ event: WORLD_SSE_SNAPSHOT_EVENT, id: String(snap.seq), data: JSON.stringify(snap) });
+      await stream.writeSSE({ event: WORLD_SSE_SNAPSHOT_EVENT, id: worldStreamId(host.worldId, snap.seq), data: JSON.stringify(snap) });
       lastSent = snap.seq;
     };
     const sendEvents = async (events: readonly WorldEvent[]) => {
       if (!events.length) return;
-      await stream.writeSSE({ id: String(events.at(-1)!.seq), data: JSON.stringify({ events }) });
+      await stream.writeSSE({ id: worldStreamId(host.worldId, events.at(-1)!.seq), data: JSON.stringify({ events }) });
       lastSent = events.at(-1)!.seq;
     };
     /** Committed events after lastSent from the store; a pruned gap means a fresh snapshot. */
@@ -137,9 +148,15 @@ function streamWorld(c: Context, host: WorldHost, clockMs: number): Response {
 
     try {
       await stream.write('retry: 2000\n\n');
-      if (after === undefined || host.seq - after > WORLD_STREAM_RESNAPSHOT) await sendSnapshot();
+      // Backfill only a client of this world that is behind it, and not too far.
+      const resumable =
+        resume !== undefined &&
+        (resume.worldId === null || resume.worldId === host.worldId) &&
+        resume.seq <= host.seq &&
+        host.seq - resume.seq <= WORLD_STREAM_RESNAPSHOT;
+      if (!resumable) await sendSnapshot();
       else {
-        lastSent = after;
+        lastSent = resume.seq;
         await backfill();
       }
       await sendClock();
@@ -150,6 +167,11 @@ function streamWorld(c: Context, host: WorldHost, clockMs: number): Response {
           if (!batch.length) continue;
           if (batch[0]!.seq > lastSent + 1) await backfill();
           await sendEvents(batch.filter((e) => e.seq > lastSent));
+          // A speed change re-anchors the clock: say so now, not at the next 1 Hz frame.
+          if (batch.some((e) => e.type === 'world.clock_changed')) {
+            await sendClock();
+            nextClock = Date.now() + clockMs;
+          }
         }
         if (stream.aborted) break;
         const wait = nextClock - Date.now();

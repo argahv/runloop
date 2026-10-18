@@ -18,7 +18,11 @@ import {
   encodeRoute,
   formatClock,
   formatEntityRef,
+  RUNTIME_COMMAND_ID_PREFIXES,
+  SHORT_LIVED_WORLD_EVENT_TYPES,
   isAmbientWorldEvent,
+  isRuntimeCommandId,
+  isShortLivedWorldEvent,
   isSourceAllowed,
   needAt,
   parseEntityRef,
@@ -38,7 +42,9 @@ import {
   WorldCommandRequestSchema,
   WorldEventsFrameSchema,
   WorldEventsQuerySchema,
+  parseWorldStreamId,
   worldApiPaths,
+  worldStreamId,
 } from './world-protocol';
 
 const AGENT = 'agt_11111111-2222-4333-8444-555555555555';
@@ -297,6 +303,22 @@ describe('command envelopes', () => {
     expect(WorldCommandRequestSchema.safeParse({ ...body, prov: 'simulation' }).success).toBe(false);
     expect(WorldCommandRequestSchema.safeParse({ ...body, id: 'bad id with spaces' }).success).toBe(false);
   });
+
+  it('takes only the user’s own controls over HTTP: agent commands come from the runtime', () => {
+    for (const type of WORLD_COMMAND_TYPES) {
+      const ok = WorldCommandRequestSchema.safeParse({ id: `c-${type}`, command: commands[type] }).success;
+      expect([type, ok]).toEqual([type, type === 'clock.set' || type === 'building.set_open']);
+    }
+  });
+
+  it('refuses a client id that is one of the runtime’s own (it would pre-empt that command)', () => {
+    expect([...RUNTIME_COMMAND_ID_PREFIXES]).toEqual(['sess:', 'act:', 'conn:', 'house:', 'dsp:']);
+    for (const id of ['sess:r:end', 'act:r:12', 'conn:a:live:none:1', 'house:agt_x', 'dsp:d:finished']) {
+      expect(isRuntimeCommandId(id)).toBe(true);
+      expect(WorldCommandRequestSchema.safeParse({ id, command: commands['clock.set'] }).success).toBe(false);
+    }
+    for (const id of ['ui:k3:1:abc', 'speed:4', 'user-sess:1']) expect(WorldCommandRequestSchema.safeParse({ id, command: commands['clock.set'] }).success).toBe(true);
+  });
 });
 
 describe('world events', () => {
@@ -362,6 +384,20 @@ describe('world events', () => {
     expect(isAmbientWorldEvent('resident.departed')).toBe(true);
     expect(isAmbientWorldEvent('interaction.happened')).toBe(false);
     expect(isAmbientWorldEvent('agent.activity_observed')).toBe(false);
+  });
+
+  it('retention drops simulation events only: the ambient ones and interactions (folded into affinity)', () => {
+    expect([...SHORT_LIVED_WORLD_EVENT_TYPES].sort()).toEqual(['interaction.happened', 'resident.arrived', 'resident.decided', 'resident.departed']);
+    for (const type of WORLD_EVENT_TYPES) {
+      expect([type, isShortLivedWorldEvent(type)]).toEqual([type, WORLD_EVENT_PROV[type].every((p) => p === 'simulation')]);
+    }
+  });
+
+  it('names stream ids by world and seq, and reads bare seqs too', () => {
+    expect(worldStreamId('runloop-commons-0a1b2c3d', 412)).toBe('runloop-commons-0a1b2c3d:412');
+    expect(parseWorldStreamId('runloop-commons-0a1b2c3d:412')).toEqual({ worldId: 'runloop-commons-0a1b2c3d', seq: 412 });
+    expect(parseWorldStreamId('412')).toEqual({ worldId: null, seq: 412 });
+    for (const bad of ['', 'x:', ':4', 'a b:4', '4.5', 'w:-1']) expect(parseWorldStreamId(bad)).toBeNull();
   });
 
   it('validates event batches as SSE frames', () => {

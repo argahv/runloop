@@ -11,7 +11,8 @@ import { parseWorldEvent, type CommandEnvelope, type WorldEvent } from '@runloop
 import { WorldReplay, hashState } from '@runloop-world/sim';
 import { openDb, type Db } from '../src/store/db';
 import { readTownFiles } from '../src/world/town-files';
-import { MAX_TICKS_PER_WAKE, WorldHost, type WorldHostOptions } from '../src/world/world-host';
+import { PRUNE_EVENTS_SQL } from '../src/world/world-store';
+import { DAY_TICKS, MAX_TICKS_PER_WAKE, WorldHost, type WorldHostOptions } from '../src/world/world-host';
 import { REPO_ROOT, tempDir } from './helpers';
 
 const TOWN = readTownFiles(path.join(REPO_ROOT, 'worlds'));
@@ -50,7 +51,10 @@ describe('WorldHost: a new world', () => {
   it('creates Runloop Commons at Day 1 08:00, commits its events and publishes them only after the commit', () => {
     const { host, db } = setup();
     const info = host.info();
-    expect(info).toMatchObject({ worldId: 'runloop-commons', townId: 'runloop-commons', seed: 42, tick: 480, speed: 1, prevSpeed: 1, population: 80, simVersion: 1, lagging: false });
+    expect(info).toMatchObject({ townId: 'runloop-commons', seed: 42, tick: 480, speed: 1, prevSpeed: 1, population: 80, simVersion: 1, lagging: false });
+    // Every world created is told apart (a stream client of an earlier world must not resume into this one).
+    expect(info.worldId).toMatch(/^runloop-commons-[0-9a-f]{8}$/);
+    expect(setup().host.worldId).not.toBe(info.worldId);
     const events = allEvents(db);
     expect(events[0]!.type).toBe('world.created');
     expect(events.filter((e) => e.type === 'resident.decided')).toHaveLength(80);
@@ -176,6 +180,7 @@ describe('WorldHost: persistence', () => {
     c.t += 3_600_000; // an hour offline
     const b = setup({ file, clock: c, seed: 999, town: { town: { not: 'a town' }, interiors: {} } });
     expect(b.host.seed).toBe(42); // the stored world wins over options and files
+    expect(b.host.worldId).toBe(a.host.worldId);
     expect(b.host.town.contentHash).toBe(a.host.town.contentHash);
     expect(b.host.tick).toBe(tick);
     const after = b.host.snapshot();
@@ -254,4 +259,43 @@ describe('WorldHost: persistence', () => {
     const fold = new WorldReplay(events.slice(0, -1), [], b.host.town).stateAt(flushed);
     expect(hashState({ ...b.host.snapshot(), seq: flushed, tick: fold.tick })).toBe(hashState(fold));
   }, 30_000);
+});
+
+describe('WorldHost: retention and storage (plan §4.1, §12 database growth)', () => {
+  it('keeps the log bounded over sim days: short-lived events, interactions too, go after 3 sim days; the world still boots', async () => {
+    const file = path.join(tempDir('world-retention'), 'runloop.db');
+    const c = { t: T0 };
+    const { host, db } = setup({ file, clock: c });
+    host.start();
+    await host.submit(clock('fast', 16));
+    const dayMs = (DAY_TICKS * 1000) / 16; // one sim day of wall time at 16×
+    const count = (where = '1') => (db.prepare(`SELECT COUNT(*) AS n FROM world_events WHERE ${where}`).get() as { n: number }).n;
+    const pages = () => (db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
+    const days: { rows: number; pages: number; interactions: number; kept: number }[] = [];
+    for (let d = 0; d < 8; d++) {
+      advance(host, c, dayMs, 2_500); // 40 ticks per wake: on time, nothing dropped
+      host.flush();
+      days.push({ rows: count(), pages: pages(), interactions: count("type = 'interaction.happened'"), kept: count('ambient = 0') });
+      // Nothing short-lived older than 3 sim days survives the last midnight's prune (plus the day since).
+      expect(count(`ambient = 1 AND tick < ${host.tick - 4 * DAY_TICKS}`)).toBe(0);
+    }
+    // Interactions happen, and are pruned like the ambient events (their effect lives on in affinity).
+    expect(days[2]!.interactions).toBeGreaterThan(0);
+    expect(count(`type = 'interaction.happened' AND ambient = 0`)).toBe(0);
+    expect(count(`type = 'interaction.happened' AND tick < ${host.tick - 4 * DAY_TICKS}`)).toBe(0);
+    // Steady state from day 5 on: the row count and the file stop growing.
+    expect(days[7]!.rows).toBeLessThanOrEqual(days[4]!.rows * 1.15);
+    expect(days[7]!.pages).toBeLessThanOrEqual(days[4]!.pages * 1.15);
+    // What is kept for good is only the few user and system events.
+    expect(days[7]!.kept).toBeLessThan(20);
+    // The prune reaches the rows it deletes through the index, not a scan of all history.
+    const plan = (db.prepare(`EXPLAIN QUERY PLAN ${PRUNE_EVENTS_SQL}`).all('w', 0, 0) as { detail: string }[]).map((r) => r.detail).join(' ');
+    expect(plan).toMatch(/USING INDEX world_events_prunable \(world_id=\? AND ambient=\? AND tick<\?\)/);
+    // Retention never breaks a boot: the next host folds the latest checkpoint plus the kept tail.
+    const hash = host.stateHash();
+    await host.stop();
+    const b = setup({ file, clock: c });
+    const resumed = b.host.snapshot();
+    expect(hashState({ ...resumed, seq: resumed.seq - 1 })).toBe(hash);
+  }, 60_000);
 });

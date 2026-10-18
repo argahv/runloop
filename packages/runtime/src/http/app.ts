@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   apiPaths,
+  type RunDispatchInfo,
   type BaselineResponse,
   type ErrorResponse,
   type EventsPageResponse,
@@ -31,6 +32,10 @@ export interface AppOptions {
   pingMs?: number;
   /** Claude Code ingest (tracer mode); null or absent = the route is not served. */
   tracer?: { manager: TraceSessionManager; token: string; rate?: IngestRouteOptions['rate'] } | null;
+  /** The dispatch behind a run, for GET /api/runs/:id (absent = dispatch is off). */
+  dispatchOfRun?: (runId: string) => RunDispatchInfo | null;
+  /** Told about every write the guards below refuse (runtime.ts audits the ones aimed at dispatch). */
+  onRefusedWrite?: (r: { method: string; path: string; code: 'origin_not_allowed' | 'not_json'; origin: string | null }) => void;
 }
 
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -72,7 +77,8 @@ function errorBody(error: string): ErrorResponse {
  * The local HTTP API (see packages/events/src/protocol.ts). It has no auth, so
  * guards: the peer must be a loopback address, the Host header must be
  * localhost/127.0.0.1 (blocks DNS rebinding), POSTs must be JSON (forces a
- * CORS preflight) and come from an allowed Origin when a browser sends one.
+ * CORS preflight) and come from an allowed Origin (or the runtime's own) when
+ * a browser sends one. Approving a dispatch is stricter (http/dispatch.ts).
  */
 export function createApp(opts: AppOptions): Hono {
   const { recorder, manager, allowedOrigins } = opts;
@@ -113,9 +119,16 @@ export function createApp(opts: AppOptions): Hono {
   app.use('/api/*', async (c, next) => {
     if (c.req.method === 'POST' || c.req.method === 'DELETE') {
       const origin = c.req.header('origin');
-      if (origin !== undefined && !allowedOrigins.includes(origin)) return c.json(errorBody('Origin not allowed'), 403);
+      const refused = (code: 'origin_not_allowed' | 'not_json') => opts.onRefusedWrite?.({ method: c.req.method, path: c.req.path, code, origin: origin ?? null });
+      // The runtime's own pages (the dispatch approval page) are same-origin, which is always allowed.
+      const own = c.req.header('host') ? `http://${c.req.header('host')}` : null;
+      if (origin !== undefined && origin !== own && !allowedOrigins.includes(origin)) {
+        refused('origin_not_allowed');
+        return c.json(errorBody('Origin not allowed'), 403);
+      }
       const type = c.req.header('content-type') ?? '';
       if (!/^application\/json\s*(;|$)/i.test(type)) {
+        refused('not_json');
         return c.json(errorBody('Content-Type must be application/json'), 415);
       }
     }
@@ -177,7 +190,7 @@ export function createApp(opts: AppOptions): Hono {
   app.get('/api/runs/:id', (c) => {
     const run = recorder.getRun(c.req.param('id'));
     if (!run) return c.json(errorBody('Run not found'), 404);
-    const body: RunDetailResponse = { run, world: loadWorld(run.worldId) };
+    const body: RunDetailResponse = { run, world: loadWorld(run.worldId), dispatch: opts.dispatchOfRun?.(run.runId) ?? null };
     return c.json(body);
   });
 

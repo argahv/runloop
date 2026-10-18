@@ -20,11 +20,12 @@ const insertEvent = (db: DatabaseSync, seq: number, prov: string, cmdId: string 
     .prepare(`INSERT INTO world_events (world_id, seq, tick, type, prov, actor, cmd_id, ambient, body) VALUES ('w1', ?, 480, 't', ?, NULL, ?, 0, '{}')`)
     .run(seq, prov, cmdId);
 
-describe('world and agent migrations (3 and 4)', () => {
-  it('reserves the plan’s indexes: 3 = world tables, 4 = agent tables', () => {
-    expect(MIGRATIONS).toHaveLength(5);
+describe('world and agent migrations (3, 4 and 5)', () => {
+  it('reserves the plan’s indexes: 3 = world tables, 4 = agent tables; 5 = the retention index', () => {
+    expect(MIGRATIONS).toHaveLength(6);
     expect(MIGRATIONS[3]).toMatch(/CREATE TABLE worlds/);
     expect(MIGRATIONS[4]).toMatch(/CREATE TABLE agents/);
+    expect(MIGRATIONS[5]).toMatch(/CREATE INDEX world_events_prunable/);
   });
 
   it('creates every table on a fresh database', () => {
@@ -44,7 +45,7 @@ describe('world and agent migrations (3 and 4)', () => {
         'dispatches',
       ]),
     );
-    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(5);
+    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
     db.close();
   });
 
@@ -61,6 +62,27 @@ describe('world and agent migrations (3 and 4)', () => {
     expect(tables(db)).toContain('world_events');
     expect(db.prepare("SELECT title FROM runs WHERE run_id = 'r-old'").get()).toEqual({ title: 'Old run' });
     migrate(db); // idempotent
+    db.close();
+  });
+
+  it('5 marks interactions of an existing world for retention, like the ambient events', () => {
+    const file = path.join(tempDir('migrations'), 'runloop.db');
+    const old = new DatabaseSync(file);
+    for (const m of MIGRATIONS.slice(0, 5)) old.exec(m);
+    old.exec('PRAGMA user_version = 5');
+    insertWorld(old);
+    const add = (seq: number, type: string, ambient: number) =>
+      old.prepare(`INSERT INTO world_events (world_id, seq, tick, type, prov, ambient, body) VALUES ('w1', ?, 480, ?, 'simulation', ?, '{}')`).run(seq, type, ambient);
+    add(1, 'resident.decided', 1);
+    add(2, 'interaction.happened', 0);
+    add(3, 'agent.housed', 0);
+    old.close();
+    const db = openDb(file);
+    expect(db.prepare('SELECT type, ambient FROM world_events ORDER BY seq').all()).toEqual([
+      { type: 'resident.decided', ambient: 1 },
+      { type: 'interaction.happened', ambient: 1 },
+      { type: 'agent.housed', ambient: 0 },
+    ]);
     db.close();
   });
 

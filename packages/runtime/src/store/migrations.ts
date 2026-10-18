@@ -186,4 +186,11 @@ export const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX dispatches_by_agent ON dispatches (agent_id);
   `,
+  // 5: world retention. `ambient` now marks every event pruned after 3 sim days
+  // (isShortLivedWorldEvent): interactions too, whose effect (affinity) lives in
+  // every checkpoint. The index lets a prune reach only the rows it deletes.
+  `
+  UPDATE world_events SET ambient = 1 WHERE type = 'interaction.happened';
+  CREATE INDEX world_events_prunable ON world_events (world_id, ambient, tick);
+  `,
 ];

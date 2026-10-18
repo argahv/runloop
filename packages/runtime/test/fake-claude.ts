@@ -7,9 +7,12 @@
  *   Code would (the --plugin-dir one, else the checkout's plugin as if installed);
  * - behaves as the task text says: `[fake:exit]` (default), `[fake:hang]`,
  *   `[fake:ignore-term]` (it and its child ignore SIGTERM), `[fake:budget]`,
- *   `[fake:fail]`, `[fake:flood]` (more than the 1 MiB output cap).
+ *   `[fake:fail]`, `[fake:flood]` (more than the 1 MiB output cap),
+ *   `[fake:chatty]` (a stream-json line every 100 ms for 5 s, then success:
+ *   a task that is writing when the runtime restarts).
  * Hanging modes start a child in their process group and log both pids to
- * <logDir>/<session-id>.pids.
+ * <logDir>/<session-id>.pids. Every run logs how it exited to
+ * <logDir>/<session-id>.exit (an EPIPE shows as a non-zero code).
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -78,6 +81,7 @@ const task = get('-p') || '';
 const mode = (/\\[fake:([a-z-]+)\\]/.exec(task) || [])[1] || 'exit';
 const pluginDir = get('--plugin-dir') ? path.resolve(get('--plugin-dir')) : INSTALLED_PLUGIN;
 fs.writeFileSync(path.join(LOG_DIR, sessionId + '.json'), JSON.stringify({ argv: args, cwd: process.cwd(), envKeys: Object.keys(process.env).sort(), pid: process.pid }));
+process.on('exit', (code) => fs.writeFileSync(path.join(LOG_DIR, sessionId + '.exit'), JSON.stringify({ code })));
 const out = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
 
 function hook(input) {
@@ -118,6 +122,15 @@ function hangWithChild(ignoreTerm) {
     out({ type: 'assistant', message: { content: [{ type: 'text', text: 'Working in ' + process.cwd() }] } });
     return hangWithChild(mode === 'ignore-term');
   }
+  if (mode === 'chatty') {
+    fs.writeFileSync(path.join(LOG_DIR, sessionId + '.pids'), JSON.stringify({ parent: process.pid, child: process.pid }));
+    for (let i = 0; i < 50; i++) {
+      out({ type: 'assistant', message: { content: [{ type: 'text', text: 'step ' + i }] } });
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    out({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.0123, num_turns: 50, result: 'Talked for a while' });
+    return process.stdout.write('', () => process.exit(0));
+  }
   if (mode === 'budget') {
     out({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, total_cost_usd: 0.05, num_turns: 3 });
     process.exit(1);
@@ -145,6 +158,8 @@ export interface FakeClaude {
   /** What the fake logged for a session (null = it never ran for it). */
   log(sessionId: string): { argv: string[]; cwd: string; envKeys: string[]; pid: number } | null;
   pids(sessionId: string): { parent: number; child: number } | null;
+  /** How the run exited (null = it has not, or never ran). */
+  exit(sessionId: string): { code: number } | null;
   /** How many sessions it ran. */
   runs(): number;
 }
@@ -172,6 +187,7 @@ export function makeFakeClaude(root: string, opts: { omitFlags?: readonly string
     logDir,
     log: (id) => read(path.join(logDir, `${id}.json`)),
     pids: (id) => read(path.join(logDir, `${id}.pids`)),
+    exit: (id) => read(path.join(logDir, `${id}.exit`)),
     runs: () => readdirSync(logDir).filter((f) => f.endsWith('.json')).length,
   };
 }

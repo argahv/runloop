@@ -98,6 +98,18 @@ export const ContentHashSchema = z.string().regex(/^[0-9a-f]{16}$/);
 export const CommandIdSchema = z.string().regex(/^[A-Za-z0-9._:-]{1,160}$/);
 
 /**
+ * Prefixes of the command ids the runtime submits itself (projector: `sess:`,
+ * `act:`, `conn:`; agents: `house:`; dispatch: `dsp:`). The world applies an
+ * id once, so a client (POST /api/world/commands) may not use them: it could
+ * otherwise take one of Runloop's own ids first and have the real command
+ * dropped as a duplicate.
+ */
+export const RUNTIME_COMMAND_ID_PREFIXES = ['sess:', 'act:', 'conn:', 'house:', 'dsp:'] as const;
+export function isRuntimeCommandId(id: string): boolean {
+  return RUNTIME_COMMAND_ID_PREFIXES.some((p) => id.startsWith(p));
+}
+
+/**
  * A slot is one furniture use or one outdoor spot cell:
  * `<furnitureId>#<use>@<floor>` inside a building, `<spotId>#<cell>` outdoors.
  */
@@ -648,6 +660,17 @@ export const COMMAND_EFFECTS = {
 export const AMBIENT_WORLD_EVENT_TYPES: readonly WorldEventType[] = ['resident.decided', 'resident.departed', 'resident.arrived'];
 export function isAmbientWorldEvent(type: string): boolean {
   return (AMBIENT_WORLD_EVENT_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * What retention drops after 3 sim days (plan §4.1): the ambient events plus
+ * interactions, whose one effect (affinity) lives on in every checkpoint.
+ * User, system and agent events are kept. (Studio's log still lists
+ * interactions by default: this is about storage, not display.)
+ */
+export const SHORT_LIVED_WORLD_EVENT_TYPES: readonly WorldEventType[] = [...AMBIENT_WORLD_EVENT_TYPES, 'interaction.happened'];
+export function isShortLivedWorldEvent(type: string): boolean {
+  return (SHORT_LIVED_WORLD_EVENT_TYPES as readonly string[]).includes(type);
 }
 
 const COMMAND_EVENT_TYPES: ReadonlySet<string> = new Set([...Object.values(COMMAND_EFFECTS), 'command.rejected']);

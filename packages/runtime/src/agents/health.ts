@@ -20,24 +20,27 @@ export interface HealthSignals {
   lastEnvelopeAt: number | null;
   /** Bound runs still open. */
   openRuns: number;
-  /** A dispatch Runloop launched is running (S4). */
+  /** A dispatch Runloop launched is running or orphaned (S4): a session is open even before its first hook. */
   dispatchRunning: boolean;
 }
 
 /**
  * The first rule that matches wins:
  * unknown (ingest off) → not_connected (no root) → awaiting_first_event (no
- * event yet) → live (a dispatch runs, or an open run had an event in the last
- * 5 min) → idle (a run is open) → offline. A restart lands on offline, because
- * recoverInterrupted has already closed every open run.
+ * event yet) → live (a session is open, as a run or a running dispatch, and a
+ * hook arrived in the last 5 min) → idle (a session is open but quiet) →
+ * offline. Only arriving events make an agent live: a dispatch whose session
+ * sends no hooks (untraced) reads idle, never live. A restart lands on
+ * offline, because recoverInterrupted has already closed every open run.
  */
 export function deriveHealth(s: HealthSignals, now: number): ConnectionHealth {
   if (!s.ingestOn) return 'unknown';
   if (!s.hasRoot) return 'not_connected';
   if (s.firstEventAt === null) return 'awaiting_first_event';
   const recent = s.lastEnvelopeAt !== null && now - s.lastEnvelopeAt < LIVE_WINDOW_MS;
-  if (s.dispatchRunning || (s.openRuns > 0 && recent)) return 'live';
-  if (s.openRuns > 0) return 'idle';
+  const open = s.openRuns > 0 || s.dispatchRunning;
+  if (open && recent) return 'live';
+  if (open) return 'idle';
   return 'offline';
 }
 

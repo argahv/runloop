@@ -130,6 +130,9 @@ export function createRuntime(opts: RuntimeOptions = {}): Runtime {
     manager,
     worldsDir: opts.worldsDir ?? path.join(repoRoot, 'worlds'),
     allowedOrigins,
+    // A write refused by the guards (foreign Origin, not JSON) is audited when it aimed at dispatch.
+    onRefusedWrite: (r) => dispatch?.auditRequestRefusal(r),
+    dispatchOfRun: (runId) => dispatch?.forRun(runId) ?? null,
     ...(opts.pingMs !== undefined ? { pingMs: opts.pingMs } : {}),
     tracer: tracer && token ? { manager: tracer, token, ...(trace.rate ? { rate: trace.rate } : {}) } : null,
   });
@@ -154,6 +157,7 @@ export function createRuntime(opts: RuntimeOptions = {}): Runtime {
     dispatch = createDispatchManager({
       env,
       repoRoot,
+      dataDir,
       db,
       agents,
       world,
@@ -164,7 +168,7 @@ export function createRuntime(opts: RuntimeOptions = {}): Runtime {
     });
   }
   mountAgentRoutes(app, agents);
-  mountDispatchRoutes(app, { dispatch, allowedOrigins });
+  mountDispatchRoutes(app, { dispatch });
   world?.start();
   const agentsReady = (async () => {
     await agents?.start();

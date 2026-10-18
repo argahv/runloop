@@ -12,6 +12,10 @@ import type { ExecState, IncidentKind, RunExecStatus, ToolCallExec, ToolCallStat
  *   the same way; otherwise the diff carries a {@link DiffNote} saying why.
  * - Executed runs (Runloop ran the tools) and traced runs (a source reported
  *   them) can be compared, but the diff flags it (`mode_differs`).
+ * - No verdict is drawn from what is not final or not like for like: a run
+ *   still recording, a run that did not run to completion (stopped or
+ *   interrupted), runs that ended differently, test runs of a different
+ *   scope ({@link DiffCaveat}). Time spent paused is not duration.
  */
 
 // ── digest ─────────────────────────────────────────────────────────────
@@ -48,6 +52,8 @@ export interface DigestCall {
   target: string | null;
   status: ToolCallStatus;
   metrics: TestMetrics | null;
+  /** Failing test names the call reported (may be fewer than metrics.failed, or none). */
+  failingTests: string[];
 }
 
 export interface CountEntry {
@@ -123,8 +129,10 @@ export interface RunDigest {
   ended: boolean;
   startedAt: string | null;
   endedAt: string | null;
-  /** Start to end; null until the run has ended (or when a time is missing). */
+  /** Start to end, less the recorded pauses; null until the run has ended (or when a time is missing). */
   durationMs: number | null;
+  /** Time spent paused (run.paused → run.resumed), left out of durationMs. */
+  pausedMs: number;
   /** Executed runs: the scripted adapter's pacing multiplier (null = not recorded, or a traced run). */
   speed: number | null;
   events: number;
@@ -174,6 +182,14 @@ export interface RunDigest {
   subagents: number | null;
   /** User turns (traced runs); null for executed runs. */
   turns: number | null;
+  /** Cost in USD as the source reported it for this run (Claude Code's final result of a dispatched task); null = not reported. */
+  costUsd: number | null;
+}
+
+/** What a run's events do not carry but a source reported about the run (e.g. a dispatch's final result). */
+export interface RunReports {
+  /** Claude Code's reported total_cost_usd for the session (a dispatched run); null or absent = not reported. */
+  costUsd?: number | null;
 }
 
 const TERMINAL: ReadonlySet<RunExecStatus> = new Set(['succeeded', 'failed', 'stopped', 'interrupted']);
@@ -209,8 +225,8 @@ function countBy(calls: readonly DigestCall[], keyOf: (c: DigestCall) => string)
 
 const ms = (iso: string | null) => (iso ? Date.parse(iso) : NaN);
 
-/** What compare needs from one run, from its folded execution state. */
-export function summarizeRun(exec: ExecState): RunDigest {
+/** What compare needs from one run, from its folded execution state (and what a source reported about it). */
+export function summarizeRun(exec: ExecState, reports: RunReports = {}): RunDigest {
   const run = exec.run;
   const ended = TERMINAL.has(run.status);
   const start = ms(run.startedAt);
@@ -234,6 +250,7 @@ export function summarizeRun(exec: ExecState): RunDigest {
       target: c.target,
       status: c.status,
       metrics: c.metrics,
+      failingTests: c.failingTests,
     });
   }
 
@@ -317,7 +334,8 @@ export function summarizeRun(exec: ExecState): RunDigest {
     ended,
     startedAt: run.startedAt,
     endedAt: run.endedAt,
-    durationMs: ended && Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : null,
+    durationMs: ended && Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start - run.pausedMs) : null,
+    pausedMs: run.pausedMs,
     speed: run.mode === 'executed' ? run.speed : null,
     events: exec.lastSequence,
     calls,
@@ -347,6 +365,7 @@ export function summarizeRun(exec: ExecState): RunDigest {
     },
     subagents: traced ? tasks.filter((t) => t.kind === 'delegated').length : null,
     turns: traced ? tasks.filter((t) => t.kind === 'turn').length : null,
+    costUsd: typeof reports.costUsd === 'number' && Number.isFinite(reports.costUsd) && reports.costUsd >= 0 ? reports.costUsd : null,
   };
 }
 
@@ -374,6 +393,21 @@ export type DiffNote =
   /** Duration: the scripted demo's pace was not recorded for a run (older logs), so it may differ. */
   | 'pace_unknown';
 
+/**
+ * Why two reported, final values still support no verdict (a judgement
+ * caveat; kept apart from DiffNote so consumers that word every DiffNote keep
+ * working). A field with a caveat is not comparable.
+ */
+export type DiffCaveat =
+  /** A run did not run to completion (stopped by the user, or interrupted by a restart): its time and counts cover less work. */
+  | 'incomplete'
+  | 'incomplete_a'
+  | 'incomplete_b'
+  /** One run failed and the other did not: time and counts are no verdict on either. */
+  | 'outcome_differs'
+  /** Tests: the latest test runs covered different numbers of tests, so their pass/fail counts and names do not line up. */
+  | 'scope_differs';
+
 export interface FieldDiff<T> {
   a: T | null;
   b: T | null;
@@ -382,6 +416,8 @@ export interface FieldDiff<T> {
   /** Both sides measured the value the same way, so the difference means something. */
   comparable: boolean;
   note: DiffNote | null;
+  /** Set when both sides reported a final value that still supports no verdict (then not comparable). */
+  caveat?: DiffCaveat;
 }
 
 export interface KeyedCountDiff {
@@ -416,8 +452,11 @@ export interface AgentDiff {
 
 /**
  * The first point where the two call sequences part: a different call
- * (category, tool or target), the same call with a different result, or one
- * run making a call the other never made.
+ * (category, tool or target), the same call with a different result (status,
+ * test counts, or the failing test names when both named them all), or one
+ * run making a call the other never made. A call still running in a run still
+ * recording has no result yet, and a live run may still make more calls:
+ * neither is a divergence (RunDiff.divergenceNote says the comparison is not final).
  */
 export interface Divergence {
   index: number;
@@ -459,6 +498,14 @@ export interface RunDiff {
     /** Names are known in full on both sides, so fixed/newly failing are complete. */
     namesComparable: boolean;
     namesNote: DiffNote | null;
+    /** The latest test runs covered a different number of tests: fixed/newly failing are not claimed (`scope_differs`). */
+    namesCaveat: DiffCaveat | null;
+    /**
+     * A side is still recording: its latest test run may not be its last, so
+     * the name lists are as of now; "failed along the way, one side only" is
+     * not claimed for the other side until it ends.
+     */
+    pending: DiffNote | null;
   };
   tokens: FieldDiff<number>;
   agents: AgentDiff[];
@@ -480,17 +527,47 @@ export interface RunDiff {
     comparable: boolean;
     note: DiffNote | null;
   };
-  /** null when both runs made the same calls with the same results. */
+  /** null when both runs made the same calls with the same results (so far: see divergenceNote). */
   firstDivergence: Divergence | null;
+  /** A side is still recording, so the first divergence (or its absence) is not final yet. */
+  divergenceNote: DiffNote | null;
+  /** Cost as reported per run (Claude Code's result for dispatched runs); not reported is null, never 0. */
+  costUsd: FieldDiff<number>;
 }
 
-/** A numeric field: comparable when both are reported (and final, when `final` says so). */
+const runningNote = ([ra, rb]: readonly [boolean, boolean]): DiffNote | null => (ra && rb ? 'running' : ra ? 'running_a' : rb ? 'running_b' : null);
+
+/**
+ * A numeric field: comparable when both are reported and final. A value a
+ * run still recording has not reported yet is pending (`running_*`), not
+ * missing: it may still come.
+ */
 function numberDiff(a: number | null, b: number | null, opts: { running?: [boolean, boolean]; modes?: boolean } = {}): FieldDiff<number> {
-  const missing = missingNote(a, b);
-  if (missing) return { a, b, delta: null, comparable: false, note: missing };
   const [ra, rb] = opts.running ?? [false, false];
-  const running: DiffNote | null = ra && rb ? 'running' : ra ? 'running_a' : rb ? 'running_b' : null;
+  const running = runningNote([ra, rb]);
+  const missing = missingNote(a, b);
+  if (missing) {
+    const pending = (a === null && ra) || (b === null && rb);
+    return { a, b, delta: null, comparable: false, note: pending ? running : missing };
+  }
   return { a, b, delta: b! - a!, comparable: running === null, note: running ?? (opts.modes ? 'mode_differs' : null) };
+}
+
+/** Withhold the verdict of a final, comparable field (the reason goes in `caveat`). */
+function withCaveat(f: FieldDiff<number>, caveat: DiffCaveat | null): FieldDiff<number> {
+  return caveat && f.comparable ? { ...f, delta: null, comparable: false, caveat } : f;
+}
+
+/** Did not run to completion: an executed run stopped by the user, or any run interrupted (a traced session's normal end is `stopped`). */
+const incomplete = (d: RunDigest) => d.outcome === 'interrupted' || (d.mode === 'executed' && d.outcome === 'stopped');
+
+/** Why time and counts of two ended runs support no verdict: one did not finish, or one failed and the other did not. */
+function runCaveat(a: RunDigest, b: RunDigest): DiffCaveat | null {
+  if (!a.ended || !b.ended) return null;
+  const ia = incomplete(a);
+  const ib = incomplete(b);
+  if (ia || ib) return ia && ib ? 'incomplete' : ia ? 'incomplete_a' : 'incomplete_b';
+  return (a.outcome === 'failed') !== (b.outcome === 'failed') ? 'outcome_differs' : null;
 }
 
 function missingNote(a: unknown, b: unknown): DiffNote | null {
@@ -516,23 +593,37 @@ const sameCall = (x: DigestCall, y: DigestCall) =>
   x.category === y.category && x.tool === y.tool && (x.target === null || y.target === null || x.target === y.target);
 const sameMetrics = (x: TestMetrics | null, y: TestMetrics | null) =>
   x === y || (x !== null && y !== null && x.tests === y.tests && x.passed === y.passed && x.failed === y.failed);
+/** Names count only when both calls named every failure; then a different set is a different result. */
+const namedAll = (c: DigestCall) => c.metrics !== null && c.failingTests.length >= c.metrics.failed;
+const sameFailing = (x: DigestCall, y: DigestCall) =>
+  !namedAll(x) || !namedAll(y) || (x.failingTests.length === y.failingTests.length && x.failingTests.every((n) => y.failingTests.includes(n)));
 
-function divergence(a: readonly DigestCall[], b: readonly DigestCall[]): Divergence | null {
+function divergence(a: readonly DigestCall[], b: readonly DigestCall[], running: [boolean, boolean]): { first: Divergence | null; note: DiffNote | null } {
   const n = Math.min(a.length, b.length);
   for (let i = 0; i < n; i++) {
     const x = a[i]!;
     const y = b[i]!;
-    if (!sameCall(x, y)) return { index: i, kind: 'call', a: x, b: y };
-    if (x.status !== y.status || !sameMetrics(x.metrics, y.metrics)) return { index: i, kind: 'result', a: x, b: y };
+    if (!sameCall(x, y)) return { first: { index: i, kind: 'call', a: x, b: y }, note: null };
+    // A call of a live run with no result yet: nothing can be said about it, or past it.
+    const pending: [boolean, boolean] = [running[0] && x.status === 'running', running[1] && y.status === 'running'];
+    if (pending[0] || pending[1]) return { first: null, note: runningNote(pending) };
+    if (x.status !== y.status || !sameMetrics(x.metrics, y.metrics) || !sameFailing(x, y)) return { first: { index: i, kind: 'result', a: x, b: y }, note: null };
   }
-  if (a.length === b.length) return null;
-  return { index: n, kind: 'extra', a: a[n] ?? null, b: b[n] ?? null };
+  // Same so far. One side making more calls is a divergence only once the shorter side has ended.
+  if (a.length === b.length) return { first: null, note: runningNote(running) };
+  const shorterIsA = a.length < b.length;
+  if (shorterIsA ? running[0] : running[1]) return { first: null, note: shorterIsA ? 'running_a' : 'running_b' };
+  return { first: { index: n, kind: 'extra', a: a[n] ?? null, b: b[n] ?? null }, note: null };
 }
 
-function testDiff(a: RunDigest, b: RunDigest, running: [boolean, boolean]): RunDiff['tests'] {
+function testDiff(a: RunDigest, b: RunDigest, running: [boolean, boolean], runCaveat: DiffCaveat | null): RunDiff['tests'] {
   const ta = a.tests;
   const tb = b.tests;
-  const field = (pick: (t: TestRunDigest) => number) => numberDiff(ta ? pick(ta.latest) : null, tb ? pick(tb.latest) : null, { running });
+  // A run that did not finish may not have reached its last test run; a failed run's tests still say what they say.
+  const caveat = runCaveat === 'outcome_differs' ? null : runCaveat;
+  // Pass/fail counts and names line up only when both latest test runs covered as many tests.
+  const scope: DiffCaveat | null = ta && tb && ta.latest.tests !== tb.latest.tests ? 'scope_differs' : null;
+  const field = (pick: (t: TestRunDigest) => number, c: DiffCaveat | null) => withCaveat(numberDiff(ta ? pick(ta.latest) : null, tb ? pick(tb.latest) : null, { running }), c);
   const aSeq = ta?.latest.seq ?? null;
   const bSeq = tb?.latest.seq ?? null;
   const change = (name: string): TestChange => ({ name, aSeq, bSeq });
@@ -542,27 +633,32 @@ function testDiff(a: RunDigest, b: RunDigest, running: [boolean, boolean]): RunD
   const completeB = tb !== null && namesB !== null && tb.failingNowComplete;
   const alongA = ta?.failedAlongTheWay ?? [];
   const alongB = tb?.failedAlongTheWay ?? [];
-  // A side without test runs failed nothing, so its (empty) list is complete.
-  const alongCompleteA = ta?.failedAlongTheWayComplete ?? true;
-  const alongCompleteB = tb?.failedAlongTheWayComplete ?? true;
+  // A side without test runs failed nothing, so its (empty) list is complete; a side still recording may fail more.
+  const alongCompleteA = (ta?.failedAlongTheWayComplete ?? true) && !running[0];
+  const alongCompleteB = (tb?.failedAlongTheWayComplete ?? true) && !running[1];
   const firstFailing = (t: RunDigest['tests'], name: string) => t?.runs.find((r) => r.failingTests.includes(name))?.seq ?? null;
+  // A side whose test runs left a failure unnamed (a live side is `pending`, not "not reported").
+  const unnamedA = !(ta?.failedAlongTheWayComplete ?? true) && !running[0];
+  const unnamedB = !(tb?.failedAlongTheWayComplete ?? true) && !running[1];
   return {
-    passed: field((t) => t.passed),
-    failed: field((t) => t.failed),
-    total: field((t) => t.tests),
+    passed: field((t) => t.passed, scope ?? caveat),
+    failed: field((t) => t.failed, scope ?? caveat),
+    total: field((t) => t.tests, caveat),
     // Counts of recorded test runs: 0 is real on a side with no counts at all.
-    runs: numberDiff(ta?.runs.length ?? 0, tb?.runs.length ?? 0, { running }),
-    fixed: namesA && completeB ? namesA.filter((n) => !namesB!.includes(n)).map(change) : [],
-    newlyFailing: namesB && completeA ? namesB.filter((n) => !namesA!.includes(n)).map(change) : [],
+    runs: withCaveat(numberDiff(ta?.runs.length ?? 0, tb?.runs.length ?? 0, { running }), caveat),
+    fixed: namesA && completeB && !scope ? namesA.filter((n) => !namesB!.includes(n)).map(change) : [],
+    newlyFailing: namesB && completeA && !scope ? namesB.filter((n) => !namesA!.includes(n)).map(change) : [],
     stillFailing: namesA && namesB ? namesA.filter((n) => namesB.includes(n)).map(change) : [],
     failedAlongTheWay: {
       onlyA: alongCompleteB ? alongA.filter((n) => !alongB.includes(n)).map((name) => ({ name, aSeq: firstFailing(ta, name), bSeq: null })) : [],
       onlyB: alongCompleteA ? alongB.filter((n) => !alongA.includes(n)).map((name) => ({ name, aSeq: null, bSeq: firstFailing(tb, name) })) : [],
       complete: alongCompleteA && alongCompleteB,
-      note: !alongCompleteA && !alongCompleteB ? 'not_reported' : !alongCompleteA ? 'not_reported_a' : !alongCompleteB ? 'not_reported_b' : null,
+      note: unnamedA && unnamedB ? 'not_reported' : unnamedA ? 'not_reported_a' : unnamedB ? 'not_reported_b' : null,
     },
-    namesComparable: completeA && completeB,
+    namesComparable: completeA && completeB && !scope,
     namesNote: !ta && !tb ? 'not_reported' : !completeA ? 'not_reported_a' : !completeB ? 'not_reported_b' : null,
+    namesCaveat: scope,
+    pending: runningNote(running),
   };
 }
 
@@ -602,6 +698,10 @@ export function diffRuns(a: RunDigest, b: RunDigest): RunDiff {
   const pathsB = new Map(b.files.touched.map((f) => [f.path, f]));
   const pathsA = new Map(a.files.touched.map((f) => [f.path, f]));
   const filesNote = missingFiles(a, b);
+  // Time and counts of a run that did not finish, or of a failed run against one that did not fail, are no verdict.
+  const caveat = runCaveat(a, b);
+  const judged = (x: number | null, y: number | null) => withCaveat(numberDiff(x, y, counts), caveat);
+  const div = divergence(a.calls, b.calls, running);
 
   return {
     a,
@@ -616,13 +716,13 @@ export function diffRuns(a: RunDigest, b: RunDigest): RunDiff {
       note: outcomeMissing,
       changed: a.ended && b.ended && a.outcome !== b.outcome,
     },
-    durationMs: durationDiff(a, b, running),
-    events: numberDiff(a.events, b.events, counts),
-    toolCalls: numberDiff(a.toolCalls.total, b.toolCalls.total, counts),
-    failedCalls: numberDiff(a.toolCalls.failed, b.toolCalls.failed, counts),
-    failures: numberDiff(a.failures.total, b.failures.total, counts),
-    openFailures: numberDiff(a.failures.open, b.failures.open, counts),
-    tests: testDiff(a, b, running),
+    durationMs: withCaveat(durationDiff(a, b, running), caveat),
+    events: judged(a.events, b.events),
+    toolCalls: judged(a.toolCalls.total, b.toolCalls.total),
+    failedCalls: judged(a.toolCalls.failed, b.toolCalls.failed),
+    failures: judged(a.failures.total, b.failures.total),
+    openFailures: judged(a.failures.open, b.failures.open),
+    tests: testDiff(a, b, running, caveat),
     tokens,
     agents: agentDiffs(a, b),
     permissions: {
@@ -642,18 +742,25 @@ export function diffRuns(a: RunDigest, b: RunDigest): RunDiff {
       comparable: filesNote === null,
       note: filesNote,
     },
-    firstDivergence: divergence(a.calls, b.calls),
+    firstDivergence: div.first,
+    divergenceNote: div.note,
+    costUsd: withCaveat(numberDiff(a.costUsd, b.costUsd, { running }), caveat),
   };
 }
 
 /**
- * Duration, with the scripted demo's pacing: two executed runs at different
- * speeds are not comparable (their waits are scaled on purpose); when a speed
- * was not recorded the difference stands with a caveat.
+ * Duration (recorded pauses left out), with the scripted demo's pacing: two
+ * executed runs at different speeds are not comparable (their waits are
+ * scaled on purpose); when a speed was not recorded the difference stands
+ * with a caveat. An executed run against a traced one is not comparable
+ * either: the demo's time is paced by design (or not real time at speed 0),
+ * a traced session's is real.
  */
 function durationDiff(a: RunDigest, b: RunDigest, running: [boolean, boolean]): FieldDiff<number> {
   const d = numberDiff(a.durationMs, b.durationMs, { running });
-  if (!d.comparable || a.mode !== 'executed' || b.mode !== 'executed') return d;
+  if (!d.comparable) return d;
+  if (a.mode !== b.mode) return { ...d, delta: null, comparable: false, note: 'mode_differs' };
+  if (a.mode !== 'executed') return d;
   if (a.speed !== null && b.speed !== null) return a.speed === b.speed ? d : { ...d, delta: null, comparable: false, note: 'pace_differs' };
   return { ...d, note: 'pace_unknown' };
 }

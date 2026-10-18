@@ -2,9 +2,11 @@
  * The world's tables (MIGRATIONS[3], plan §4.2): one row per world, its event
  * log and its checkpoints. Only the world host writes them. Event bodies are
  * the WorldEvent JSON; checkpoints are gzipped state JSON with its hash.
+ * The `ambient` column marks the events retention drops after 3 sim days
+ * (isShortLivedWorldEvent; MIGRATIONS[5] indexes it for the prune).
  */
 import { gunzipSync, gzipSync } from 'node:zlib';
-import { isAmbientWorldEvent, type WorldEvent, type WorldProvenance, type WorldSpeed } from '@runloop-world/events';
+import { isShortLivedWorldEvent, type WorldEvent, type WorldProvenance, type WorldSpeed } from '@runloop-world/events';
 import type { SimState } from '@runloop-world/sim';
 import { tx, type Db } from '../store/db';
 
@@ -74,6 +76,14 @@ const toRow = (r: RawWorldRow): WorldRow => ({
 
 const parseBody = (r: { body: string }) => JSON.parse(r.body) as WorldEvent;
 
+/**
+ * The retention delete. INDEXED BY: left to itself the planner would walk the
+ * primary key over every seq up to the checkpoint, so each prune would cost
+ * more as the kept history grows (MIGRATIONS[5] adds the index).
+ */
+export const PRUNE_EVENTS_SQL =
+  'DELETE FROM world_events INDEXED BY world_events_prunable WHERE world_id = ? AND ambient = 1 AND tick < ? AND seq <= ?';
+
 export class WorldStore {
   constructor(readonly db: Db) {}
 
@@ -104,7 +114,7 @@ export class WorldStore {
     const update = this.db.prepare('UPDATE worlds SET tick = ?, last_seq = ?, speed = ?, prev_speed = ?, host_stopped_at = ? WHERE world_id = ?');
     tx(this.db, () => {
       for (const e of events) {
-        insert.run(worldId, e.seq, e.tick, e.type, e.prov, e.actor ?? null, e.cmdId ?? null, isAmbientWorldEvent(e.type) ? 1 : 0, JSON.stringify(e));
+        insert.run(worldId, e.seq, e.tick, e.type, e.prov, e.actor ?? null, e.cmdId ?? null, isShortLivedWorldEvent(e.type) ? 1 : 0, JSON.stringify(e));
       }
       update.run(clock.tick, clock.lastSeq, clock.speed, clock.prevSpeed, clock.aliveAt, worldId);
     });
@@ -153,7 +163,7 @@ export class WorldStore {
     return row ? parseBody(row) : null;
   }
 
-  /** The oldest seq still stored (ambient events are pruned after 3 sim days). */
+  /** The oldest seq still stored (short-lived events are pruned after 3 sim days). */
   firstSeq(worldId: string): number {
     const row = this.db.prepare('SELECT MIN(seq) AS s FROM world_events WHERE world_id = ?').get(worldId) as { s: number | null };
     return row.s ?? 0;
@@ -185,8 +195,10 @@ export class WorldStore {
 
   /**
    * Retention (plan §4.1): keep the latest `latest` checkpoints plus the last
-   * one of each of the most recent `days` sim days; drop ambient events older
-   * than `ambientTicks` that the latest checkpoint already covers.
+   * one of each of the most recent `days` sim days; drop short-lived events
+   * (ambient = 1) older than `ambientTicks` that the latest checkpoint already
+   * covers. The (world_id, ambient, tick) index keeps the delete's cost to the
+   * rows it removes, however long the kept history grows (PRUNE_EVENTS_SQL).
    */
   prune(worldId: string, opts: { tick: number; latest: number; days: number; ambientTicks: number }): void {
     const cps = this.checkpointSeqs(worldId);
@@ -203,9 +215,7 @@ export class WorldStore {
     tx(this.db, () => {
       const del = this.db.prepare('DELETE FROM world_checkpoints WHERE world_id = ? AND seq = ?');
       for (const c of drop) del.run(worldId, c.seq);
-      this.db
-        .prepare('DELETE FROM world_events WHERE world_id = ? AND ambient = 1 AND tick < ? AND seq <= ?')
-        .run(worldId, opts.tick - opts.ambientTicks, latestSeq);
+      this.db.prepare(PRUNE_EVENTS_SQL).run(worldId, opts.tick - opts.ambientTicks, latestSeq);
     });
   }
 }

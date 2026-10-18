@@ -277,15 +277,23 @@ export class AgentRegistry {
   }
 
   /** The agent a running dispatch launched this session for (S4 fills the table). */
+  /** The agent a running (or, after a restart, orphaned) dispatch was launched for. */
   dispatchAgentFor(sessionId: string): string | null {
-    const row = this.db.prepare(`SELECT agent_id FROM dispatches WHERE session_id = ? AND status = 'running'`).get(sessionId) as
+    const row = this.db.prepare(`SELECT agent_id FROM dispatches WHERE session_id = ? AND status IN ('running', 'orphaned')`).get(sessionId) as
       | { agent_id: string }
       | undefined;
     return row?.agent_id ?? null;
   }
 
+  /** Dispatches still running, orphaned ones included (their process lives on; cancel works). */
   runningDispatches(agentId: string): number {
-    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM dispatches WHERE agent_id = ? AND status = 'running'`).get(agentId) as { n: number };
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM dispatches WHERE agent_id = ? AND status IN ('running', 'orphaned')`).get(agentId) as { n: number };
+    return row.n;
+  }
+
+  /** Sessions bound to the agent that Runloop did not dispatch: hooks its workspace sent on its own. */
+  ownSessionCount(agentId: string): number {
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM session_bindings WHERE agent_id = ? AND method != 'dispatch'`).get(agentId) as { n: number };
     return row.n;
   }
 

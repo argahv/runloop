@@ -37,6 +37,10 @@ export interface RunExec {
   startedAt: string | null;
   endedAt: string | null;
   summary: string | null;
+  /** Wall time spent paused (run.paused → run.resumed, by event timestamps), pauses that ended so far. */
+  pausedMs: number;
+  /** When the current pause began (null = not paused). */
+  pausedAt: string | null;
 }
 
 export interface AgentExec {

@@ -386,3 +386,66 @@ Earlier captures in the same session: the e2e steps (Add to World, the agent wai
 - Watching one resident through lunch at 4× in the browser (the recorded log was followed instead, see above).
 - Frame time on a real GPU; event-loop lag at 16× while ingesting 50 envelopes/s; memory after 7 wall-days; boot time (plan: ≤ 300 ms).
 - Onboarding coachmarks, axe and keyboard-only passes (not built or not run).
+
+## 8. Review fixes in the packages (2026-10-18, second pass)
+
+The world/agents/compare review's findings that live in `packages/**` were re-checked, fixed at the root and guarded by tests. Studio-side halves were handed to the Studio team (scratchpad `ui-findings-for-immersive.json`, 10 entries); nothing in `apps/studio` was changed by this pass.
+
+### Fixed
+
+| Finding | Fix | Guarded by |
+|---|---|---|
+| **High: any page on an allowed origin could approve a dispatch** (preview handed out the nonce over CORS) | A person approves on the runtime's own page, `GET/POST /approve/:previewId` (no CORS, CSP `default-src 'none'`, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, COOP same-origin, `Referrer-Policy: same-origin`, a 1 s minimum review, Approve and Decline). A preview requested from another origin (Studio's too) carries `approvalNonce: ''` and an `approveUrl`; `POST /api/dispatches` needs the runtime's own Origin (`approve_in_runtime` otherwise). `GET /api/dispatches/previews/:id` says where an approval stands. | `dispatch.int.test.ts` (an allowed foreign origin gets no nonce and cannot approve even holding one; the page is escaped and unframeable; a click before review spends nothing; approve, decline); real Chromium check below |
+| Refused approval attempts were not audited | The app guard reports refused writes (`onRefusedWrite`); dispatch routes, the approval page and preview refusals write `dispatch.request_refused` / `dispatch.preview_refused` with ids, code and origin | `dispatch.int.test.ts` (exact audit rows) |
+| A restart killed a dispatch that was writing (EPIPE), recorded as `lost` | stdout/stderr go to files in `<data>/dispatch-output/` (0600, removed when the task ends) and are tailed (4 MiB per tick at most); an adopted orphan is tailed again from the start, and one that ended while Runloop was down ends with its own result line (else `lost`) | `dispatch.int.test.ts` (`[fake:chatty]` keeps writing across a restart, exits 0, ends `completed` with its reported cost, all 50 lines streamed, files gone) |
+| An adopted orphan lost its time limit and was invisible to capabilities | Its original deadline (created_at + timeout) is armed at adoption; running counts (`runningDispatches`, `dispatchAgentFor`) include `orphaned` | `dispatch.int.test.ts` (orphan times out at ≥ 3 s, cancel available, a second preview refused meanwhile) |
+| Health read `live` for a running dispatch with no events | `live` needs a hook in the last 5 min; an open run or a running dispatch without one is `idle` | `agents-units.test.ts` (rule table, "live always means a recent hook") |
+| `--plugin-dir` dropped after Runloop's own first dispatch when the CLI cannot say | Only sessions Runloop did not dispatch count as the workspace sending hooks (`registry.ownSessionCount`) | `dispatch.int.test.ts` (still passed after dispatches; dropped once a path-bound session of its own sends a hook through the real ingest) |
+| HTTP clients could send `agent.house` / `agent.dispatch` (phantom agents, forged outcomes) | `POST /api/world/commands` takes only `clock.set` and `building.set_open` (`UserWorldCommandSchema`) | `world-http.test.ts`, `world.test.ts` |
+| HTTP clients could take the runtime's own command ids (`sess:`, `act:`, `conn:`, `house:`, `dsp:`) first | Such ids are refused with 400 (`RUNTIME_COMMAND_ID_PREFIXES`) | `world-http.test.ts`, `world.test.ts` |
+| `world_events` grew forever (interactions never pruned); each prune scanned all history | Interactions are short-lived like the ambient events (`isShortLivedWorldEvent`; their effect is in every checkpoint's affinity); `MIGRATIONS[5]` marks existing rows and adds `(world_id, ambient, tick)`, which the prune uses (`INDEXED BY`) | `world-host.test.ts` (8 sim days: nothing short-lived older than the window, rows and pages flat from day 5, query plan, the world still boots), `world-migrations.test.ts` |
+| SSE resume trusted a Last-Event-ID from another world | Every new world gets its own id (`runloop-commons-<8 hex>`; existing worlds keep theirs); SSE ids are `<worldId>:<seq>`; another world, a seq ahead of this world, or `?world=` that differs gets a snapshot (bare numeric ids still accepted) | `world-http.test.ts`, `world.test.ts`, `world-host.test.ts` |
+| Studio kept the old speed for up to 1 s after a speed change (server half) | The stream sends a `clock` frame right after a batch with `world.clock_changed` | `world-http.test.ts` |
+| **High: compare rated a stopped or interrupted run "faster" / "fewer failures"** | `FieldDiff.caveat` (`incomplete*`, `outcome_differs`): duration, calls, failures, events (and test counts of an incomplete run) are not comparable; kept apart from `DiffNote` so Studio's wording table still compiles | `compare.test.ts` |
+| Compare stated divergence and test names as final while recording | A live run's pending call or missing calls are no divergence (`divergenceNote`); "failed only in A" is not claimed while B records (`tests.pending`); a live run's missing value reads `running_*` | `compare.test.ts` |
+| Fixed/newly failing across test runs of different scope | `scope_differs`: no fixed/newly failing, no pass/fail verdict; totals still compared | `compare.test.ts` |
+| Duration counted pauses; executed vs traced duration judged | The reducer records pause time (`run.pausedMs`); duration leaves it out; mode difference → `mode_differs`, not comparable | `compare.test.ts` |
+| Divergence ignored which tests failed | `DigestCall.failingTests`; different complete sets are a `result` divergence | `compare.test.ts` |
+| Dispatched runs' reported cost never reached compare | `GET /api/runs/:id` returns `dispatch {dispatchId, reportedCostUsd, sessionRuns}`; `summarizeRun(exec, {costUsd})` and `RunDiff.costUsd` | `dispatch.int.test.ts`, `compare.test.ts` |
+
+Not changed here (Studio-only, handed over): the client clock re-base on `world.clock_changed` and the use of `wallMs`; passing `world=` on Studio's own reopen; the approval flow in Assign task (open `approveUrl`, poll the preview status); the Real chip only for registered agents; the "task running, no events yet" state; caveat wording, `divergenceNote`, `tests.pending` and the cost tile on Experiments; the Experiments URL sync. `docs/status/current-state.md` ("No source reports cost") and the plan/DL-012 text need their owners' update.
+
+### Real checks
+
+- **Browser, approval** (`scratchpad/fixwave/csrf-check.mts`; runtime in process on an ephemeral port with a fake `claude`; Chromium with `--host-resolver-rules` so a plain non-Studio page has the origin `http://localhost:3000`): the page's preview came back with `approvalNonce: ""`; its approve got `403 approve_in_runtime`; reading the approval page failed (no CORS); its no-cors form post was refused and audited; nothing ran. A person on the approval page waited 1.2 s and pressed Approve: "Task started", status `approved`, the dispatch finished `completed` with the reported $0.0123. The first run of this check caught a real bug the unit tests had missed: with `Referrer-Policy: no-referrer`, Chromium sends `Origin: null` with the page's own form, so no one could approve; the page now uses `same-origin`, and a test pins it. Screenshots: `scratchpad/shots/world-dispatch-approval-{dark,light,390}.png`, `world-dispatch-approved.png`.
+- **Prune cost, steady state** (`scratchpad/fixwave/prune-steady.mts`: per sim day 400 interactions and 30 kept agent events, a checkpoint and a prune; same script on the pre-fix snapshot): before, prune took 10–20 ms at 1 wall-day of 1× time, 36–66 ms at 7, 143–197 ms at 30, with 774k rows and a 203 MB file; after, 2–10 ms at every point, 55k rows (the kept agent events), 22 MB.
+
+### Checks (this pass)
+
+```sh
+pnpm -r typecheck                                   # 10 projects, all Done
+pnpm test                                           # 102 files, 1174 tests passed (Studio included, at the time of the run)
+pnpm vitest run --project runtime                   # 25 files, 308 passed (one earlier run, in parallel with other projects, had a plugin e2e timeout; it passed alone and in the two full runs after)
+pnpm vitest run --project core --project events     # 86 + 153 passed
+pnpm vitest run --project sim --project town        # 15 files, 149 passed; determinism, day and purity: 3 files, 40 passed
+claude plugin validate --strict integrations/claude-code-plugin   # Validation passed
+RUNLOOP_DATA_DIR=<scratch> pnpm demo -- --speed 0 --port 0        # 10 passed / 2 failed, then 12/12; run succeeded
+pnpm --filter @runloop-world/sim bench              # see below
+```
+
+Sim bench (sim code unchanged by this pass; the machine had a load average of ~6 on 4 cores from another agent's SwiftShader run): 120 residents p99 0.99 ms / 4.8 ms in its two runs (max 3.0 / 36.7 ms), a day 338 / 469 ms; 288 residents p99 1.20 / 1.54 ms, max 4.4 / 9.9 ms, a day 532 / 639 ms; 4.8k events and 1.6 MB per day at 120 (still over the plan's event budget, as in §7). The second 120 run's p99 is over the 2 ms budget under this load; the first is within it, as in §7.
+
+### Deviations from the plan
+
+- **Approval (plan §4.4 "requires an allowed Origin"):** now the runtime's own origin, through its approval page; an allowed origin such as Studio's no longer receives the nonce. Studio's in-dialog Approve answers `approve_in_runtime` until it opens `approveUrl` (handed over).
+- **SSE ids (plan §2, §4.5 "id = last seq"):** `<worldId>:<seq>`; and a new world's id is no longer the town id.
+- **Retention (plan §4.1 "ambient events for 3 sim days"):** interactions are pruned with them (`MIGRATIONS[5]`).
+- **Health rule 4 (plan §4.3 "live: a dispatch is running, or …"):** live needs a recent hook; a running dispatch without one is idle.
+- **`--plugin-dir` (plan §4.4 "only if the workspace has never sent a hook", DL-012):** only hooks from sessions Runloop did not dispatch count.
+- **HTTP commands (plan §4.5):** only `clock.set` and `building.set_open`; `ALLOWED_SOURCES` is unchanged (the runtime still houses agents as `user` for Add to World).
+
+### Open
+
+- `POST /api/agents` (register a folder) is still guarded only by an allowed Origin, so a page on localhost:3000 can register a folder (it cannot dispatch into it without a person approving). The fix is to stop default-allowing the generic `:3000` origins and serve Studio on a dedicated port, which needs Studio, scripts and docs to move together.
+- Phantom agents created over HTTP before this fix stay in existing databases (no removal API).
+- An orphan's exit code stays unknown (`exitCode: null`); its outcome comes from its own result line.

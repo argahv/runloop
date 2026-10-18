@@ -14,8 +14,10 @@ import * as z from 'zod';
 import type { RunStatus } from './protocol';
 import {
   CommandIdSchema,
-  WorldCommandSchema,
+  RUNTIME_COMMAND_ID_PREFIXES,
   WorldEventSchema,
+  isRuntimeCommandId,
+  worldCommandSchemas,
   WorldProvenanceSchema,
   WorldSpeedSchema,
   TickSchema,
@@ -87,8 +89,24 @@ export interface ExplainResponse {
   explanation: Explanation;
 }
 
-/** POST /api/world/commands body (strict: P2). */
-export const WorldCommandRequestSchema = z.strictObject({ id: CommandIdSchema, command: WorldCommandSchema });
+/**
+ * The commands a client may send: the user's own controls of the world. Agent
+ * commands come only from the runtime (Add to World, the projector, dispatch),
+ * which has checked them against the agent registry first: over HTTP they
+ * could house an agent that does not exist or forge a dispatch's outcome.
+ */
+export const UserWorldCommandSchema = z.discriminatedUnion('type', [worldCommandSchemas['clock.set'], worldCommandSchemas['building.set_open']]);
+export type UserWorldCommand = z.infer<typeof UserWorldCommandSchema>;
+
+/**
+ * POST /api/world/commands body (strict: P2). The id may not use a runtime
+ * prefix (RUNTIME_COMMAND_ID_PREFIXES), so a client never takes one of
+ * Runloop's own idempotency keys.
+ */
+export const WorldCommandRequestSchema = z.strictObject({
+  id: CommandIdSchema.refine((id) => !isRuntimeCommandId(id), { message: `ids starting with ${RUNTIME_COMMAND_ID_PREFIXES.join(', ')} are the runtime's own` }),
+  command: UserWorldCommandSchema,
+});
 export type WorldCommandRequest = z.infer<typeof WorldCommandRequestSchema>;
 
 /**
@@ -99,15 +117,32 @@ export type WorldCommandResponse = { ok: true; seq: number; tick: number } | { o
 
 /**
  * SSE `GET /api/world/stream` (pattern of http/sse.ts):
- * 1. a `snapshot` event with a WorldSnapshot (also sent again when the client
- *    is more than WORLD_STREAM_RESNAPSHOT events behind);
- * 2. default `message` events with {@link WorldEventsFrame}, `id: <last seq>`;
- * 3. a `clock` event at 1 Hz with {@link WorldClockFrame}.
- * Resume with `Last-Event-ID` (a world seq).
+ * 1. a `snapshot` event with a WorldSnapshot;
+ * 2. default `message` events with {@link WorldEventsFrame}, `id: <worldId>:<last seq>`;
+ * 3. a `clock` event at 1 Hz, and right after a batch that changed the speed,
+ *    with {@link WorldClockFrame}.
+ *
+ * Resume with `Last-Event-ID` (the browser sends the last id back by itself)
+ * or `?after=<seq>&world=<worldId>`. The ids carry the world's identity, so a
+ * client of another world (the runtime restarted on a fresh data dir) gets a
+ * fresh snapshot instead of a backfill folded onto the wrong state. So does a
+ * client ahead of the world, more than WORLD_STREAM_RESNAPSHOT events behind,
+ * or behind pruned events. A bare numeric id (older clients) is accepted.
  */
 export const WORLD_SSE_SNAPSHOT_EVENT = 'snapshot';
 export const WORLD_SSE_CLOCK_EVENT = 'clock';
 export const WORLD_STREAM_RESNAPSHOT = 5000;
+
+/** The SSE id of a batch: the world and the batch's last seq. */
+export function worldStreamId(worldId: string, seq: number): string {
+  return `${worldId}:${seq}`;
+}
+
+/** Parse a stream id or `after` value: `<worldId>:<seq>` or a bare seq; null when malformed. */
+export function parseWorldStreamId(value: string): { worldId: string | null; seq: number } | null {
+  const m = /^(?:([A-Za-z0-9_-]{1,100}):)?(\d{1,15})$/.exec(value);
+  return m ? { worldId: m[1] ?? null, seq: Number(m[2]) } : null;
+}
 
 export const WorldEventsFrameSchema = z.object({ events: z.array(WorldEventSchema).min(1) });
 export type WorldEventsFrame = z.infer<typeof WorldEventsFrameSchema>;
@@ -325,6 +360,8 @@ export type DispatchErrorCode =
   | 'timeout_over_cap'
   | 'dispatch_running'
   | 'origin_required'
+  /** The approval came from another origin (e.g. Studio's): approve on the runtime's own page, `approveUrl`. */
+  | 'approve_in_runtime'
   | 'bad_nonce'
   | 'nonce_used'
   | 'nonce_expired'
@@ -355,9 +392,21 @@ export interface DispatchPreview {
   timeoutMin: number;
   permissionMode: 'dontAsk';
   allowedTools: string[];
-  /** True when `--plugin-dir` is passed (the workspace has never sent a hook). */
+  /** True when `--plugin-dir` is passed (the tracer is not installed, or the CLI cannot say and no session of this workspace sent a hook on its own). */
   usesPluginDir: boolean;
+  /**
+   * The single-use nonce for POST /api/dispatches. Only same-origin callers
+   * get it (a page served by the runtime, or a local process without an
+   * Origin); a page on any other origin, Studio's included, gets '' and
+   * approves on `approveUrl`, so no web page can approve a task by itself.
+   */
   approvalNonce: string;
+  /**
+   * The runtime's own approval page for this preview (same host as the API).
+   * It shows exactly what will run; a person approves it there. Open it in a
+   * window, then follow GET /api/dispatches/previews/:previewId.
+   */
+  approveUrl: string;
   expiresAt: string;
 }
 
@@ -365,7 +414,20 @@ export interface DispatchPreviewResponse {
   preview: DispatchPreview;
 }
 
-/** POST /api/dispatches (allowed Origin, JSON, valid nonce; otherwise 403 or 409). */
+/**
+ * GET /api/dispatches/previews/:previewId: where a preview's approval stands.
+ * `approved` carries the dispatch it started; `refused` the code of the
+ * refusal (e.g. workspace_moved); `declined` = the person declined on the
+ * approval page; `unknown` also after a restart.
+ */
+export interface DispatchPreviewStatusResponse {
+  previewId: string;
+  state: 'awaiting_approval' | 'approved' | 'refused' | 'declined' | 'expired' | 'unknown';
+  dispatchId: string | null;
+  code: DispatchErrorCode | null;
+}
+
+/** POST /api/dispatches (the runtime's own Origin, JSON, valid nonce; otherwise 403 or 409). */
 export const DispatchCreateRequestSchema = z.strictObject({
   previewId: z.string().min(1).max(100),
   approvalNonce: z.string().min(16).max(200),
@@ -454,6 +516,9 @@ export const worldApiPaths = {
   dispatchPreview: (agentId: string) => `/api/agents/${enc(agentId)}/dispatches/preview`,
   dispatches: '/api/dispatches',
   dispatchPolicy: '/api/dispatches/policy',
+  dispatchPreviewStatus: (previewId: string) => `/api/dispatches/previews/${enc(previewId)}`,
+  /** The runtime's approval page (HTML, not under /api). */
+  approvePage: (previewId: string) => `/approve/${enc(previewId)}`,
   dispatch: (dispatchId: string) => `/api/dispatches/${enc(dispatchId)}`,
   dispatchStream: (dispatchId: string) => `/api/dispatches/${enc(dispatchId)}/stream`,
   dispatchCancel: (dispatchId: string) => `/api/dispatches/${enc(dispatchId)}/cancel`,

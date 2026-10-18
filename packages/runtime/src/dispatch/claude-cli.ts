@@ -118,7 +118,10 @@ export function tracerPluginFrom(out: string, code: number | null): TracerPlugin
 /**
  * --plugin-dir for a dispatched session: never when the tracer is installed
  * (it would report twice), always when the CLI says it is absent, and when
- * the CLI cannot say, only for a workspace that never sent a hook.
+ * the CLI cannot say, only while no session of the workspace sent a hook on
+ * its own (`workspaceSentHook` counts sessions Runloop did not dispatch: a
+ * dispatch traced through Runloop's own --plugin-dir proves nothing about an
+ * installed tracer).
  */
 export function needsPluginDir(tracer: TracerPlugin, workspaceSentHook: boolean): boolean {
   if (tracer === 'installed') return false;
@@ -273,5 +276,17 @@ export function outcomeOf(r: { result: ClaudeResult | null; exitCode: number | n
   if (r.stop === 'cancel') return 'cancelled';
   if (r.stop === 'timeout') return 'timed_out';
   if (r.result?.subtype && /budget/i.test(r.result.subtype)) return 'budget_exceeded';
+  return 'failed';
+}
+
+/**
+ * How a task ended that Runloop was not following when it exited (it was
+ * adopted after a restart, or ended while Runloop was down): its exit code is
+ * unknown, so only its own result line says; without one it is `lost`.
+ */
+export function orphanOutcome(result: ClaudeResult | null): DispatchOutcome {
+  if (!result) return 'lost';
+  if (!result.isError && result.subtype === 'success') return 'completed';
+  if (result.subtype && /budget/i.test(result.subtype)) return 'budget_exceeded';
   return 'failed';
 }

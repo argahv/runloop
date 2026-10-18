@@ -4,20 +4,27 @@
  * 1. preview: the request is checked against the org policy and the exact
  *    argv is built (`claude -p <task> --session-id <uuid> --permission-mode
  *    dontAsk --allowedTools … --model … --max-budget-usd … --output-format
- *    stream-json --verbose [--plugin-dir …]`). It returns a single-use nonce,
+ *    stream-json --verbose [--plugin-dir …]`). It makes a single-use nonce,
  *    kept in memory for 5 minutes and bound to sha256(executable, argv, cwd,
- *    env keys).
- * 2. create (allowed Origin, JSON and the nonce, checked by http/dispatch.ts
+ *    env keys). The nonce reaches only same-origin callers: a person approves
+ *    on the runtime's own page (http/dispatch.ts), which no other web page can
+ *    read, so no page can approve a task by itself.
+ * 2. create (the runtime's own Origin, the nonce, checked by http/dispatch.ts
  *    and here): the workspace realpath, policy, CLI and digest are checked
  *    again, then the argv runs with shell:false in its own process group with
  *    an allowlisted environment. Nothing spawns any other way (P11).
  * 3. The session is an ordinary traced session: its hooks reach the tracer
  *    and bind to the agent by the pre-assigned session id
- *    (registry.dispatchAgentFor). stream-json output is kept in memory (1 MiB
- *    cap) for the stream; the final `result` is stored as reported.
+ *    (registry.dispatchAgentFor). stdout and stderr go to files in the data
+ *    dir (never pipes to this process, so a runtime restart cannot kill a
+ *    task that is writing); they are tailed into memory (1 MiB cap) for the
+ *    stream, the final `result` is stored as reported, and the files are
+ *    removed once the task ends.
  * 4. Cancel and the timeout send SIGTERM to the group, then SIGKILL after
  *    10 s. After a restart a dispatch whose process is still alive is
- *    `orphaned` (cancel still works), otherwise it ends `lost`.
+ *    `orphaned`: it is tailed again, keeps its timeout and can be cancelled.
+ *    One whose process is gone ends with the result its output file holds,
+ *    or `lost` when there is none.
  *
  * World commands (agent.dispatch): approved is the user's (source user);
  * running and finished are Runloop's observations (source system). They never
@@ -25,12 +32,13 @@
  */
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import {
   DISPATCH_DEFAULTS,
   redactText,
+  worldApiPaths,
   type CommandEnvelope,
   type DispatchCreateRequest,
   type DispatchErrorCode,
@@ -42,15 +50,17 @@ import {
   type DispatchPreset,
   type DispatchPreview,
   type DispatchPreviewRequest,
+  type DispatchPreviewStatusResponse,
   type DispatchStatus,
   type DispatchSummary,
+  type RunDispatchInfo,
 } from '@runloop-world/events';
 import type { AgentService, DispatchSignals } from '../agents/service';
 import type { AgentRecord } from '../agents/registry';
 import { isWithin, pathHintOf, realpathOrNull } from '../agents/local-roots';
 import { tx, type Db } from '../store/db';
 import type { WorldCommandSink } from '../world/projector';
-import { buildArgv, childEnv, needsPluginDir, outcomeOf, parseResultLine, probeClaude, type ClaudeProbe, type ClaudeResult } from './claude-cli';
+import { buildArgv, childEnv, needsPluginDir, orphanOutcome, outcomeOf, parseResultLine, probeClaude, type ClaudeProbe, type ClaudeResult } from './claude-cli';
 import { ensurePolicy, readPolicy, resolveRequest } from './policy';
 
 export interface DispatchManagerOptions {
@@ -61,6 +71,8 @@ export interface DispatchManagerOptions {
   pluginDir: string | null;
   /** The ingest token file the plugin reads (null = tracing is off: no --plugin-dir, no RUNLOOP_* variables). */
   ingestTokenFile: string | null;
+  /** Where a running task's stdout and stderr files live (in the data dir; removed when the task ends). */
+  outputDir: string;
   /** RUNLOOP_URL for the plugin; default: the URL the request reached this runtime on. */
   runtimeUrl?: string | null;
   /** The environment the allowlist picks from (default process.env). */
@@ -78,6 +90,10 @@ export interface DispatchManagerOptions {
   outputCapBytes?: number;
   /** Length of one timeout minute (tests shorten it; default 60 000 ms). */
   timeoutMinuteMs?: number;
+  /** How often the output files are read (default 100 ms). */
+  tailMs?: number;
+  /** The approval page must have been open this long before Approve counts (default 1000 ms; against click-jacking). */
+  minReviewMs?: number;
   /**
    * Runloop stopped a dispatch (cancel or timeout), so its session will send
    * no SessionEnd. The tracer can close the open run here (inferred); until
@@ -94,11 +110,14 @@ const fail = (status: DispatchFailure['status'], code: DispatchErrorCode, error:
 /** The task's slot in the stored argv template (the task itself is stored redacted, separately). */
 const TASK_SLOT = '{task}';
 const KEEP_FINISHED = 10;
+/** A tail tick reads at most this many 64 KiB chunks per file (4 MiB), so a flood never blocks the event loop for long. */
+const TAIL_CHUNKS_PER_TICK = 64;
 const RESULT_TEXT_MAX = 8000;
 
 interface Pending {
   previewId: string;
   agentId: string;
+  agentName: string;
   workspaceId: string;
   cwd: string;
   hint: string;
@@ -106,8 +125,15 @@ interface Pending {
   argv: string[];
   digest: string;
   nonceDigest: Buffer;
+  /** The nonce itself, in memory only: the runtime's approval page carries it in its form. */
+  nonce: string;
   expiresAt: number;
+  /** When the approval page was last shown (null = never). */
+  pageShownAt: number | null;
   sessionId: string;
+  cliVersion: string | null;
+  envKeys: string[];
+  usesPluginDir: boolean;
   preset: DispatchPreset;
   model: string;
   maxBudgetUsd: number;
@@ -117,6 +143,22 @@ interface Pending {
 }
 
 type Stream = 'stdout' | 'stderr';
+
+/** A previewed request that can no longer be approved: why, and what came of it. */
+interface Spent {
+  why: 'used' | 'expired' | 'declined';
+  at: number;
+  /** The dispatch the approval started. */
+  dispatchId?: string;
+  /** Why the approval was refused. */
+  code?: DispatchErrorCode;
+}
+
+/** One output file being read: its descriptor and how far it has been read. */
+interface Tail {
+  fd: number;
+  pos: number;
+}
 
 /** A dispatch this process launched (or adopted as orphaned): its process and in-memory output. */
 interface Live {
@@ -128,6 +170,9 @@ interface Live {
   child: ChildProcess | null;
   pid: number | null;
   orphan: boolean;
+  /** The stdout/stderr files (they outlive this process) and their readers. */
+  files: Record<Stream, string>;
+  tails: Partial<Record<Stream, Tail>>;
   frames: DispatchOutputFrame[];
   bytes: number;
   truncated: boolean;
@@ -138,7 +183,7 @@ interface Live {
   stop: 'cancel' | 'timeout' | null;
   exit: { code: number | null; signal: NodeJS.Signals | null } | null;
   spawnError: string | null;
-  timers: { timeout?: NodeJS.Timeout; kill?: NodeJS.Timeout; settle?: NodeJS.Timeout; poll?: NodeJS.Timeout };
+  timers: { timeout?: NodeJS.Timeout; kill?: NodeJS.Timeout; settle?: NodeJS.Timeout; poll?: NodeJS.Timeout; tail?: NodeJS.Timeout };
   wakers: Set<() => void>;
   done: boolean;
   /** World submissions of this dispatch, in order. */
@@ -226,7 +271,7 @@ export class DispatchManager implements DispatchSignals {
   private readonly onError: (err: unknown) => void;
   private readonly pending = new Map<string, Pending>();
   /** Previews that can no longer be approved, and why (to tell "used" from "expired"). */
-  private readonly spent = new Map<string, { why: 'used' | 'expired'; at: number }>();
+  private readonly spent = new Map<string, Spent>();
   private readonly lives = new Map<string, Live>();
   private probeState: ClaudeProbe | { state: 'unprobed'; executable: null; version: null; reason: string } = {
     state: 'unprobed',
@@ -270,10 +315,10 @@ export class DispatchManager implements DispatchSignals {
     this.agents.setDispatchSignals(null);
     for (const live of this.lives.values()) {
       for (const t of Object.values(live.timers)) clearTimeout(t);
+      // The task writes to its files, not to us: it runs on, and the next boot tails them again.
+      this.closeTails(live);
       if (!live.done && live.child) {
         live.child.removeAllListeners();
-        live.child.stdout?.removeAllListeners().destroy();
-        live.child.stderr?.removeAllListeners().destroy();
         live.child.unref();
       }
       this.wake(live);
@@ -315,23 +360,30 @@ export class DispatchManager implements DispatchSignals {
 
   // ── preview and approval ───────────────────────────────────────────
 
-  /** Exactly what would run, and the nonce that approves it. Nothing is spawned. */
+  /**
+   * Exactly what would run, and the nonce that approves it. Nothing is
+   * spawned. Every refusal is audited (ids and the code only).
+   */
   async preview(agentId: string, req: DispatchPreviewRequest, ctx: { runtimeUrl: string | null }): Promise<{ ok: true; preview: DispatchPreview } | DispatchFailure> {
     this.prune();
+    const refuse = (f: DispatchFailure) => {
+      this.audit('dispatch.preview_refused', { agentId: agentId.slice(0, 100), code: f.code });
+      return f;
+    };
     const agent = this.agents.registry.get(agentId);
-    if (!agent) return fail(404, 'unknown_agent', 'No such agent');
-    if (!agent.housed) return fail(409, 'not_housed', 'The agent is not in the town yet');
-    if (!agent.workspace) return fail(409, 'no_workspace', 'The agent has no workspace folder');
+    if (!agent) return refuse(fail(404, 'unknown_agent', 'No such agent'));
+    if (!agent.housed) return refuse(fail(409, 'not_housed', 'The agent is not in the town yet'));
+    if (!agent.workspace) return refuse(fail(409, 'no_workspace', 'The agent has no workspace folder'));
     const cwd = this.workspaceRoot(agent);
-    if (!cwd) return fail(409, 'workspace_moved', REFUSED_TEXT.workspace_moved!);
+    if (!cwd) return refuse(fail(409, 'workspace_moved', REFUSED_TEXT.workspace_moved!));
     const policy = this.policy();
     const r = resolveRequest(policy, req);
-    if (!r.ok) return r;
+    if (!r.ok) return refuse(r);
     if (this.probeState.state !== 'ok' && this.now() - this.probedAt > 30_000) await this.probe();
     const cli = this.probeState;
-    if (cli.state !== 'ok') return fail(409, 'cli_unavailable', `Claude Code cannot be run: ${cli.reason}`);
+    if (cli.state !== 'ok') return refuse(fail(409, 'cli_unavailable', `Claude Code cannot be run: ${cli.reason}`));
     const busy = this.capacity(agentId, policy);
-    if (busy) return busy;
+    if (busy) return refuse(busy);
 
     const sessionId = randomUUID();
     const pluginDir = this.pluginDirFor(agent, cwd);
@@ -343,6 +395,7 @@ export class DispatchManager implements DispatchSignals {
     this.pending.set(previewId, {
       previewId,
       agentId,
+      agentName: agent.displayName,
       workspaceId: agent.workspace.workspaceId,
       cwd,
       hint: agent.workspace.pathHint || pathHintOf(cwd),
@@ -350,8 +403,13 @@ export class DispatchManager implements DispatchSignals {
       argv,
       digest: approvalDigest(cli.executable, argv, cwd, envKeys),
       nonceDigest: sha256(nonce),
+      nonce,
       expiresAt,
+      pageShownAt: null,
       sessionId,
+      cliVersion: cli.version,
+      envKeys,
+      usesPluginDir: pluginDir !== null,
       preset: r.preset,
       model: r.model,
       maxBudgetUsd: r.maxBudgetUsd,
@@ -388,6 +446,7 @@ export class DispatchManager implements DispatchSignals {
         allowedTools: r.allowedTools,
         usesPluginDir: pluginDir !== null,
         approvalNonce: nonce,
+        approveUrl: `${ctx.runtimeUrl ?? ''}${worldApiPaths.approvePage(previewId)}`,
         expiresAt: new Date(expiresAt).toISOString(),
       },
     };
@@ -396,12 +455,14 @@ export class DispatchManager implements DispatchSignals {
   /**
    * Approve a preview and run it. The nonce is spent by the first attempt,
    * whatever its outcome; every refusal is audited and nothing is spawned.
-   * (The route has already required an allowed Origin and a JSON body.)
+   * (The route has already required the runtime's own Origin.)
    */
   async create(req: DispatchCreateRequest, ctx: { runtimeUrl: string | null }): Promise<{ ok: true; dispatch: DispatchSummary } | DispatchFailure> {
     this.prune();
     const refuse = (status: DispatchFailure['status'], code: DispatchErrorCode, error = REFUSED_TEXT[code] ?? code) => {
       this.audit('dispatch.refused', { previewId: req.previewId, code });
+      const spent = this.spent.get(req.previewId);
+      if (spent?.why === 'used' && !spent.dispatchId) spent.code ??= code;
       return fail(status, code, error);
     };
     const p = this.pending.get(req.previewId);
@@ -433,9 +494,90 @@ export class DispatchManager implements DispatchSignals {
     const busy = this.capacity(p.agentId, policy);
     if (busy) {
       this.audit('dispatch.refused', { previewId: req.previewId, code: busy.code });
+      this.spent.get(req.previewId)!.code = busy.code;
       return busy;
     }
-    return { ok: true, dispatch: this.launch(p, env) };
+    const dispatch = this.launch(p, env);
+    this.spent.get(req.previewId)!.dispatchId = dispatch.dispatchId;
+    return { ok: true, dispatch };
+  }
+
+  // ── the approval page (http/dispatch.ts renders it) ────────────────
+
+  /** What the runtime's approval page shows for a preview still awaiting approval (null otherwise). Notes the view. */
+  approvalView(previewId: string): (Pick<DispatchPreview, 'previewId' | 'agentId' | 'argv' | 'executable' | 'cliVersion' | 'sessionId' | 'preset' | 'envKeys' | 'model' | 'maxBudgetUsd' | 'timeoutMin' | 'allowedTools' | 'usesPluginDir' | 'expiresAt'> & {
+    agentName: string;
+    workspaceLabel: string;
+    pathHint: string;
+    task: string;
+    nonce: string;
+  }) | null {
+    this.prune();
+    const p = this.pending.get(previewId);
+    if (!p) return null;
+    p.pageShownAt ??= this.now();
+    const agent = this.agents.registry.get(p.agentId);
+    return {
+      previewId,
+      agentId: p.agentId,
+      agentName: agent?.displayName ?? p.agentName,
+      workspaceLabel: agent?.workspace?.label ?? '',
+      pathHint: p.hint,
+      task: this.scrub(p.task, p.cwd, p.hint),
+      argv: p.argv.map((a, i) => (i === 2 ? this.scrub(a, p.cwd, p.hint) : a)),
+      executable: p.executable,
+      cliVersion: p.cliVersion,
+      sessionId: p.sessionId,
+      preset: p.preset,
+      envKeys: p.envKeys,
+      model: p.model,
+      maxBudgetUsd: p.maxBudgetUsd,
+      timeoutMin: p.timeoutMin,
+      allowedTools: p.allowedTools,
+      usesPluginDir: p.usesPluginDir,
+      expiresAt: new Date(p.expiresAt).toISOString(),
+      nonce: p.nonce,
+    };
+  }
+
+  /** The approval page was open long enough for a person to read it (it was shown, at least minReviewMs ago). */
+  reviewed(previewId: string): boolean {
+    const shown = this.pending.get(previewId)?.pageShownAt;
+    return shown !== null && shown !== undefined && this.now() - shown >= (this.opts.minReviewMs ?? 1000);
+  }
+
+  /** The person declined on the approval page: the preview can no longer be approved. */
+  decline(previewId: string, nonce: string): boolean {
+    const p = this.pending.get(previewId);
+    const given = sha256(nonce);
+    if (!p || given.length !== p.nonceDigest.length || !timingSafeEqual(given, p.nonceDigest)) return false;
+    this.pending.delete(previewId);
+    this.spent.set(previewId, { why: 'declined', at: this.now() });
+    this.audit('dispatch.declined', { previewId, agentId: p.agentId });
+    return true;
+  }
+
+  /** GET /api/dispatches/previews/:id: where the approval of a preview stands. */
+  previewStatus(previewId: string): DispatchPreviewStatusResponse {
+    this.prune();
+    const out = (state: DispatchPreviewStatusResponse['state'], dispatchId: string | null = null, code: DispatchErrorCode | null = null) => ({ previewId, state, dispatchId, code });
+    if (this.pending.has(previewId)) return out('awaiting_approval');
+    const s = this.spent.get(previewId);
+    if (!s) return out('unknown');
+    if (s.why === 'expired') return out('expired');
+    if (s.why === 'declined') return out('declined');
+    if (s.dispatchId) return out('approved', s.dispatchId);
+    return out('refused', null, s.code ?? null);
+  }
+
+  /**
+   * A write the HTTP guards refused before any dispatch code ran (a foreign
+   * or missing Origin, a body that is not JSON): audited when it was aimed at
+   * a dispatch route, since those are the attempts that matter.
+   */
+  auditRequestRefusal(r: { method: string; path: string; code: string; origin: string | null }): void {
+    if (!/^\/api\/(dispatches|agents\/[^/]+\/dispatches)(\/|$)|^\/approve\//.test(r.path)) return;
+    this.audit('dispatch.request_refused', { method: r.method, path: r.path.slice(0, 200), code: r.code, origin: r.origin?.slice(0, 200) ?? null });
   }
 
   // ── read side and cancel ───────────────────────────────────────────
@@ -452,6 +594,16 @@ export class DispatchManager implements DispatchSignals {
         : this.db.prepare('SELECT * FROM dispatches ORDER BY created_at DESC, rowid DESC LIMIT 50').all()
     ) as unknown as Row[];
     return rows.map((r) => this.summarize(r));
+  }
+
+  /** The dispatch behind a traced run, and the cost Claude Code reported for its session (GET /api/runs/:id). */
+  forRun(runId: string): RunDispatchInfo | null {
+    const run = this.db.prepare(`SELECT external_session_id AS s FROM runs WHERE run_id = ? AND source_kind = 'claude-code'`).get(runId) as { s: string | null } | undefined;
+    if (!run?.s) return null;
+    const row = this.db.prepare('SELECT dispatch_id, cost_usd FROM dispatches WHERE session_id = ?').get(run.s) as { dispatch_id: string; cost_usd: number | null } | undefined;
+    if (!row) return null;
+    const n = this.db.prepare(`SELECT COUNT(*) AS n FROM runs WHERE source_kind = 'claude-code' AND external_session_id = ?`).get(run.s) as { n: number };
+    return { dispatchId: row.dispatch_id, reportedCostUsd: row.cost_usd, sessionRuns: n.n };
   }
 
   /** Output kept in memory (empty after a restart) and whether more can come. */
@@ -500,12 +652,16 @@ export class DispatchManager implements DispatchSignals {
     this.queueWorld(live, 'approved', 'user');
 
     let child: ChildProcess;
+    // stdout and stderr go to files: the task never writes into a pipe this process could close.
+    const fds: number[] = [];
     try {
+      mkdirSync(this.opts.outputDir, { recursive: true, mode: 0o700 });
+      for (const stream of ['stdout', 'stderr'] as const) fds.push(openSync(live.files[stream], 'w', 0o600));
       child = spawn(p.executable, p.argv.slice(1), {
         cwd: p.cwd,
         env,
         shell: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['ignore', fds[0]!, fds[1]!],
         detached: process.platform !== 'win32',
         windowsHide: true,
       });
@@ -513,6 +669,8 @@ export class DispatchManager implements DispatchSignals {
       live.spawnError = (err as NodeJS.ErrnoException).code ?? 'spawn_error';
       this.finish(live);
       return this.get(dispatchId)!;
+    } finally {
+      for (const fd of fds) closeSync(fd);
     }
     live.child = child;
     child.once('error', (err: NodeJS.ErrnoException) => {
@@ -525,13 +683,12 @@ export class DispatchManager implements DispatchSignals {
       this.db.prepare('UPDATE dispatches SET pid = ? WHERE dispatch_id = ?').run(child.pid, dispatchId);
       this.audit('dispatch.spawned', { dispatchId, pid: child.pid });
       this.queueWorld(live, 'running', 'system');
-      live.timers.timeout = setTimeout(() => this.terminate(live, 'timeout'), p.timeoutMin * (this.opts.timeoutMinuteMs ?? 60_000));
-      live.timers.timeout.unref();
+      this.armTimeout(live, Date.parse(at) + p.timeoutMin * this.minuteMs());
     }
-    for (const stream of ['stdout', 'stderr'] as const) child[stream]?.on('data', (chunk: Buffer) => this.onChunk(live, stream, chunk));
+    this.startTail(live);
     child.once('exit', (code, signal) => {
       live.exit = { code, signal };
-      // Normally 'close' follows at once; a leftover process holding the pipes must not keep the dispatch open.
+      // 'close' follows at once (no pipes); this is the fallback.
       live.timers.settle = setTimeout(() => this.finish(live), 1000);
       live.timers.settle.unref();
     });
@@ -547,6 +704,8 @@ export class DispatchManager implements DispatchSignals {
     const live: Live = {
       ...t,
       child: null,
+      files: { stdout: path.join(this.opts.outputDir, `${t.dispatchId}.out`), stderr: path.join(this.opts.outputDir, `${t.dispatchId}.err`) },
+      tails: {},
       frames: [],
       bytes: 0,
       truncated: false,
@@ -568,6 +727,61 @@ export class DispatchManager implements DispatchSignals {
 
   private onChunk(live: Live, stream: Stream, chunk: Buffer): void {
     this.feed(live, stream, live.decoders[stream].write(chunk));
+  }
+
+  /** Read the output files every tailMs (from the start: an adopted orphan's earlier output comes back too). */
+  private startTail(live: Live): void {
+    const tick = () => {
+      if (live.done || this.stopped) return;
+      this.drain(live, TAIL_CHUNKS_PER_TICK);
+      live.timers.tail = setTimeout(tick, this.opts.tailMs ?? 100);
+      live.timers.tail.unref();
+    };
+    tick();
+  }
+
+  /** Feed what the output files gained since the last read (at most `chunks` 64 KiB reads per file; the rest next time). */
+  private drain(live: Live, chunks = Infinity): void {
+    const buf = Buffer.allocUnsafe(64 * 1024);
+    for (const stream of ['stdout', 'stderr'] as const) {
+      let t = live.tails[stream];
+      if (!t) {
+        try {
+          t = live.tails[stream] = { fd: openSync(live.files[stream], 'r'), pos: 0 };
+        } catch {
+          continue; // not there (yet)
+        }
+      }
+      for (let i = 0; i < chunks; i++) {
+        const n = readSync(t.fd, buf, 0, buf.length, t.pos);
+        if (n <= 0) break;
+        t.pos += n;
+        this.onChunk(live, stream, buf.subarray(0, n));
+      }
+    }
+  }
+
+  private closeTails(live: Live): void {
+    clearTimeout(live.timers.tail);
+    for (const t of Object.values(live.tails)) {
+      try {
+        closeSync(t.fd);
+      } catch {
+        // already closed
+      }
+    }
+    live.tails = {};
+  }
+
+  private minuteMs(): number {
+    return this.opts.timeoutMinuteMs ?? 60_000;
+  }
+
+  /** The task's time limit, as an absolute wall time (an adopted orphan keeps its original deadline). */
+  private armTimeout(live: Live, deadline: number): void {
+    clearTimeout(live.timers.timeout);
+    live.timers.timeout = setTimeout(() => this.terminate(live, 'timeout'), Math.max(0, deadline - this.now()));
+    live.timers.timeout.unref();
   }
 
   /** Split into lines; a line longer than the cap is dropped whole. */
@@ -631,12 +845,22 @@ export class DispatchManager implements DispatchSignals {
     for (const t of [timeout, settle, poll, kill]) clearTimeout(t);
     // A stopped task's leftovers in its group go with it.
     if (live.stop && live.pid !== null) signalGroup(live.pid, 'SIGKILL');
+    // The last of the output, then the files go (the output stays in memory for the stream).
+    this.drain(live);
+    this.closeTails(live);
+    for (const f of Object.values(live.files)) rmSync(f, { force: true });
     for (const stream of ['stdout', 'stderr'] as const) {
       const rest = live.decoders[stream].end();
       if (rest || live.partial[stream]) this.feed(live, stream, `${rest}\n`);
     }
+    // An orphan's exit code is unknown: its own result line says how it ended, else it is lost.
     const outcome =
-      forced ?? (live.spawnError ? 'failed' : live.orphan && live.stop === null ? 'lost' : outcomeOf({ result: live.result, exitCode: live.exit?.code ?? null, stop: live.stop }));
+      forced ??
+      (live.spawnError
+        ? 'failed'
+        : live.orphan && live.stop === null
+          ? orphanOutcome(live.result)
+          : outcomeOf({ result: live.result, exitCode: live.exit?.code ?? null, stop: live.stop }));
     const cost = live.result?.costUsd ?? null;
     tx(this.db, () => {
       this.db
@@ -668,29 +892,33 @@ export class DispatchManager implements DispatchSignals {
 
   /**
    * Boot: a dispatch still marked running belongs to a previous process.
-   * Alive (and still this session's claude) = orphaned, followed until it
-   * ends; otherwise lost.
+   * Alive (and still this session's claude) = orphaned: its output files are
+   * tailed again, its original deadline is armed, and it is followed until it
+   * ends. Gone = it ended while Runloop was down: its output file's result
+   * line says how (exit code unknown), else it is lost.
    */
   private reconcile(): void {
     const rows = this.db.prepare(`SELECT * FROM dispatches WHERE status IN ('running', 'orphaned')`).all() as unknown as Row[];
     for (const row of rows) {
       if (this.lives.has(row.dispatch_id)) continue;
+      const agent = this.agents.registry.get(row.agent_id);
+      const cwd = agent ? this.workspaceRoot(agent) : null;
+      const live = this.track({
+        dispatchId: row.dispatch_id,
+        agentId: row.agent_id,
+        sessionId: row.session_id,
+        cwd: cwd ?? '',
+        hint: agent?.workspace?.pathHint ?? '',
+        pid: row.pid,
+        orphan: true,
+      });
       if (row.pid !== null && processMatches(row.pid, row.session_id)) {
         if (row.status !== 'orphaned') {
           this.db.prepare(`UPDATE dispatches SET status = 'orphaned' WHERE dispatch_id = ?`).run(row.dispatch_id);
           this.audit('dispatch.orphaned', { dispatchId: row.dispatch_id, pid: row.pid });
         }
-        const agent = this.agents.registry.get(row.agent_id);
-        const cwd = agent ? this.workspaceRoot(agent) : null;
-        const live = this.track({
-          dispatchId: row.dispatch_id,
-          agentId: row.agent_id,
-          sessionId: row.session_id,
-          cwd: cwd ?? '',
-          hint: agent?.workspace?.pathHint ?? '',
-          pid: row.pid,
-          orphan: true,
-        });
+        this.armTimeout(live, Date.parse(row.created_at) + parseTemplate(row.argv_template_json).timeoutMin * this.minuteMs());
+        this.startTail(live);
         const poll = () => {
           if (live.done) return;
           if (!processMatches(row.pid!, row.session_id)) return this.finish(live);
@@ -699,12 +927,8 @@ export class DispatchManager implements DispatchSignals {
         };
         poll();
       } else {
-        const at = new Date(this.now()).toISOString();
-        tx(this.db, () => {
-          this.db.prepare(`UPDATE dispatches SET status = 'finished', outcome = 'lost', ended_at = ? WHERE dispatch_id = ?`).run(at, row.dispatch_id);
-          this.audit('dispatch.lost', { dispatchId: row.dispatch_id });
-        });
-        this.worldChain = this.worldChain.then(() => this.submitWorld(row.agent_id, row.dispatch_id, 'finished', 'system', 'lost'));
+        this.finish(live);
+        if (live.result === null) this.audit('dispatch.lost', { dispatchId: row.dispatch_id });
       }
     }
   }
@@ -742,13 +966,16 @@ export class DispatchManager implements DispatchSignals {
 
   /**
    * --plugin-dir unless Claude Code has the tracer installed (it would report
-   * twice); see needsPluginDir. Inside the workspace (Runloop's own checkout)
-   * it is passed relative to it, so the argv never carries the workspace path (P8).
+   * twice); see needsPluginDir. When the CLI cannot say, only sessions Runloop
+   * did not dispatch count as the workspace sending hooks: Runloop's own
+   * --plugin-dir dispatches prove nothing about an installed tracer. Inside
+   * the workspace (Runloop's own checkout) it is passed relative to it, so the
+   * argv never carries the workspace path (P8).
    */
   private pluginDirFor(agent: AgentRecord, cwd: string): string | null {
     const dir = this.opts.pluginDir;
     if (!dir || !this.opts.ingestTokenFile) return null;
-    const sentHook = agent.firstEventAt !== null || agent.lastEnvelopeAt !== null || this.agents.registry.sessionCount(agent.agentId) > 0;
+    const sentHook = this.agents.registry.ownSessionCount(agent.agentId) > 0;
     const tracer = this.probeState.state === 'ok' ? this.probeState.tracerPlugin : 'unknown';
     if (!needsPluginDir(tracer, sentHook)) return null;
     return isWithin(dir, cwd) ? `.${path.sep}${path.relative(cwd, dir)}` : dir;
@@ -853,6 +1080,8 @@ export class DispatchManager implements DispatchSignals {
 export function createDispatchManager(o: {
   env: NodeJS.ProcessEnv;
   repoRoot: string;
+  /** Runloop's data dir: running tasks' output files live in its dispatch-output folder. */
+  dataDir: string;
   db: Db;
   agents: AgentService;
   world: WorldCommandSink;
@@ -869,6 +1098,7 @@ export function createDispatchManager(o: {
     world: o.world,
     pluginDir: existsSync(path.join(pluginDir, 'hooks', 'hooks.json')) ? pluginDir : null,
     ingestTokenFile: o.ingestTokenFile,
+    outputDir: path.join(o.dataDir, 'dispatch-output'),
     env: o.env,
     passEnv: (o.env.RUNLOOP_DISPATCH_ENV ?? '')
       .split(',')
