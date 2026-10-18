@@ -145,6 +145,74 @@ Live view and replay fold the same events through the same reducers, so they alw
 - [Design system](docs/design/design-system.md)
 - [Current state](docs/status/current-state.md)
 
+## Where Runloop Is Going
+
+**Runloop is a living world, not just a window into agent execution.**
+
+The long-term goal is to build a persistent, autonomous society where simulated residents live and work, buildings serve real purposes, organizations pursue goals, and meaningful events emerge from interactions across the world. Real AI agents can enter this society as connected participants, contribute to tasks in their actual environments, and bring their outcomes back into the world.
+
+The world should remain meaningful even when no external agents are connected. Traces, replay, and observability are important capabilities, but they are not the ultimate product. They are tools for understanding and improving what happens inside a larger, evolving system.
+
+### The World We Want to Build
+
+- **A living society:** Residents have identities, needs, routines, goals, memories, and relationships that influence their decisions and the world around them.
+- **Functional places:** Buildings are more than visual structures. Workplaces, laboratories, offices, and shared spaces have capabilities, resources, occupancy, and activities that shape what can happen there.
+- **Organizations with purpose:** Teams and organizations work toward objectives, manage dependencies, encounter constraints, and respond to changing circumstances.
+- **Real agents as participants:** External AI agents connect through explicit integrations, occupy workspaces in the world, perform authorized tasks in their real environments, and contribute observable outcomes.
+- **A world that evolves:** The simulation maintains its own history and continues independently of external agent sessions, creating situations that users can explore, understand, and influence.
+- **Experimentation through alternate worlds:** Users can checkpoint and fork a world, change conditions or rules, and compare outcomes to understand how different decisions affect the system.
+
+### From Agent Monitoring to a Living System
+
+The current prototype establishes the foundations: a persistent simulated town, resident routines, a Claude Code integration, provenance-aware event history, controlled task dispatch, and execution replay and comparison.
+
+The next challenge is to connect these capabilities into one coherent system.
+
+| Area | Current foundation | Direction |
+|---|---|---|
+| Society | Residents with needs, schedules, traits, and friendships | Meaningful goals, memory, consequential relationships, and social dynamics |
+| Buildings | Spatial structures and some interiors | Functional rooms, capabilities, organizations, and shared resources |
+| Agent ecosystem | Claude Code integration | A stable adapter contract and support for additional agent runtimes |
+| Collaboration | Sessions and controlled task dispatch | Delegation, dependencies, handoffs, and coordination policies |
+| World autonomy | Deterministic resident simulation | Explainable society-level goals and evolving situations |
+| Experimentation | Replay and run comparison | World checkpoints, forks, altered conditions, and outcome comparison |
+| Scale and reliability | Initial town and population benchmarks | Larger-world validation, performance budgets, and robust recovery |
+| Product experience | Local prototype | Better onboarding, accessibility, and sustained user validation |
+
+These are product directions, not claims that every capability is already implemented. See [TASKS.md](TASKS.md) and the [current-state report](docs/status/current-state.md) for the implementation status of individual milestones.
+
+### The Core Experience
+
+The experience we are working toward is a world that users can:
+
+1. **Explore** — enter a populated society and discover what residents, organizations, and connected agents are doing.
+2. **Understand** — investigate events, decisions, dependencies, and the evidence behind what happened.
+3. **Influence** — change conditions, create functional places, establish objectives, and shape how the world develops.
+4. **Connect** — invite a real agent to perform an explicitly authorized task in its actual environment.
+5. **Experiment** — fork a world, test alternative conditions, and compare the resulting behavior.
+6. **Return to** — revisit a persistent world with meaningful history, new developments, unresolved problems, and opportunities for action.
+
+### Principles That Guide Development
+
+- **World first, traces second.** The society must have purpose and activity independent of agent-monitoring sessions.
+- **Meaningful behavior over visual activity.** Residents should act for understandable reasons, not simply move to make the world appear alive.
+- **Simulation and reality stay distinct.** Simulated events, externally reported activity, executed actions, and inferred information must have clear provenance.
+- **Real actions require explicit boundaries.** External execution must respect permissions, approval policies, resource limits, and auditable outcomes.
+- **Explainability and reproducibility matter.** Users should be able to understand why a simulated event occurred and reproduce or compare outcomes where appropriate.
+- **Function before spectacle.** Visual design and motion should reveal activity, relationships, and cause and effect—not substitute for functional depth.
+- **The world belongs to the user.** Persistence, recovery, data boundaries, and accessible ways to navigate and inspect the world are core product concerns.
+
+### What Comes Next
+
+The near-term priority is to make the world functionally meaningful before expanding its visual scope or integration count:
+
+1. Complete functional buildings, organizations, and shared capabilities.
+2. Introduce explainable project goals, dependencies, and society-level activities.
+3. Demonstrate an end-to-end workflow in which an authorized real agent performs a task and its reported outcome is reconciled with the world.
+4. Implement world checkpointing and experimentation without replaying real-world actions.
+5. Validate that users can understand the world, accomplish useful work, and find reasons to return.
+
+**The measure of progress is not how many residents populate the town or how many agents Runloop can trace. It is how much meaningful activity the world supports, how well users can understand and influence it, and how coherently simulated society and real AI systems work together.**
 ## Security notes
 
 - The runtime listens on loopback only. Ingest from the plugin needs a per-user token (`~/.config/runloop/ingest-token`, created by the runtime) and rejects browser requests.
