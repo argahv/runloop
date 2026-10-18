@@ -1,6 +1,6 @@
 # World simulation: architecture and first slice
 
-> **Status:** plan of record, 2026-10-18. This covers W1, W2 and a thin W4 of `docs/product/world-vision.md`, and replaces the four drafts.
+> **Status:** plan of record, 2026-10-18. This covers W1, W2 and a thin W4 of `docs/product/world-vision.md`, and replaces the four drafts. **Built** the same day (S0–S4); acceptance evidence, deviations and open items are in `docs/status/verification-report.md` §7 and `TASKS.md` (Milestone W).
 >
 > **Decision log:** DL-009 (the living-world pivot), DL-010 (this architecture), DL-011 (town lighting) and DL-012 (agents and dispatch).
 

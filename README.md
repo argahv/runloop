@@ -1,14 +1,16 @@
 # Runloop
 
-A local flight recorder for coding agents. Runloop records every event of an agent run in an append-only log on your machine, shows the run live as a small 3D world with a timeline and an inspector, replays any moment without executing anything again, and compares two runs to show what a change to your setup did.
+**A world, not a dashboard.** Runloop is a small town that lives on your machine. Simulated residents keep its streets busy; your real AI agents move in as buildings in the Agent District. When Claude Code works in a project you added, its building lights up, its robots go to work by kind of tool, a failing test shows as an incident, and every session can be replayed, traced and compared.
 
-![A real Claude Code session in Runloop Studio: the main agent and two Explore subagents as robots at work, the timeline and the run's provenance](docs/assets/claude-code-session.png)
+![Runloop Commons in the afternoon: the districts, the Agent District with one agent building, the clock and the speed controls](docs/assets/town.png)
 
-**Status: prototype.** It records two sources today:
-- **Claude Code sessions**, traced through a plugin. Runloop records what Claude Code reports and never runs or approves anything itself.
-- **A scripted demo mission**, executed by Runloop's own runtime with real tools.
+**Status: prototype.** What it does today:
+- **The town** (Runloop Commons): 80 simulated residents with needs, schedules and friendships, 28 buildings, a day and night that follow the simulated clock. It is deterministic and persistent: it pauses while Runloop is off and says so when it resumes.
+- **Real agents:** Claude Code sessions, traced through a plugin. Runloop records what Claude Code reports and never runs or approves anything by itself.
+- **Assign a task** to an agent (optional): Runloop shows the exact `claude -p` command, and runs it only after you approve it.
+- **Runs, replay and compare:** every session's events, a run diorama, Traces, and Experiments to compare two runs. A scripted demo mission shows them without Claude Code.
 
-Any two runs can be compared: pin one as a baseline, run your agent again, and **Experiments** shows what differed, with links to the events behind it. See [TASKS.md](TASKS.md) for what is next.
+See [TASKS.md](TASKS.md) for what is next.
 
 ## Quickstart
 
@@ -19,11 +21,48 @@ pnpm install
 pnpm dev     # runtime API on http://127.0.0.1:4380, Studio on http://localhost:3000
 ```
 
-Open http://localhost:3000 and click **Run demo mission**. Three scripted agents survey a small repo, implement a task store and run its test suite. The first test run really fails (10 passed, 2 failed). The Builder then patches the bug, and the rerun passes 12/12. Click a timeline row or a robot to inspect its events. Drag the replay bar to see any earlier moment.
+Open http://localhost:3000: that is the town. Residents walk to work, eat, meet on benches and go home; the clock reads "Day 1 · 08:00" on a new world. Pause it, or run it at 1×, 4× or 16× (real agents always run at real speed). Click a resident to see what they are doing and **Why**: every reason links to the recorded decision event it came from. Press **Enter** on a building to look inside, **M** for the map, **L** for the directory, ⌘K / Ctrl-K to find anyone.
 
-Then try compare: click **Pin as baseline** in the run header, run the demo mission again, and open **Experiments**. The demo is deterministic, so two demo runs make the same calls with the same results and differ only in timing; compare is meant for your own agent's runs (next section).
+The town and its log are stored in `.runloop/` at the repo root (set `RUNLOOP_DATA_DIR` to use another directory) and survive restarts. `RUNLOOP_WORLD=off` runs Runloop without the town.
 
-Runs are stored in `.runloop/` at the repo root (set `RUNLOOP_DATA_DIR` to use another directory). They survive runtime restarts and replay from the log.
+## Add Claude Code to the world
+
+1. Click **Add to World**. Name the agent (for example "Claude"), pick an empty lot in the Agent District, and type the absolute path of a project folder. The building appears dimmed: *Waiting for first event*.
+2. Start Claude Code in that folder with the Runloop plugin (with the runtime running):
+   ```sh
+   claude --plugin-dir /path/to/runloop/integrations/claude-code-plugin
+   ```
+   or install the plugin once from the marketplace (see [Trace Claude Code](#trace-claude-code)).
+3. On the first prompt the building goes **live** (in about a second). Its panel shows what the session is doing by kind of tool, its subagents, and a failing command as an incident. **Enter building** shows the session's robots at their stations; **Open in Live World**, **Trace** and **Compare** open the session's pages.
+4. When the session ends the agent reads *offline*; the town keeps living. Sessions from other folders wait under **Agents › Arrivals**, where you can claim them for an agent.
+
+| A real session, live | Inside the agent's building |
+|---|---|
+| ![The Claude building live, with tool counts and a subagent](docs/assets/agent-live.png) | ![Inside the agent's headquarters while a real task runs: Claude reading at the Observatory](docs/assets/agent-interior.png) |
+| **Add to World** | **A resident's Why** |
+| ![Add to World, step 3: the workspace folder](docs/assets/add-to-world.png) | ![A resident's panel: what they are doing, and why, each reason linked to its event](docs/assets/resident-why.png) |
+| **Assign task: a real dispatched run, done** | **Night in the Commons** |
+| ![The Assign task dialog after a real read-only run: Claude Code's reported result, cost and output](docs/assets/assign-task.png) | ![The town at night: lit windows where residents are home, street lamps](docs/assets/town-night.png) |
+
+### What is real and what is simulated
+
+- **Residents are simulated.** They carry a ◇ *Simulated* label. Their decisions come from a rule-based engine (needs, schedules, traits), and their **Why** shows only the factors recorded in the decision event, each linked to it. No language model invents a reason.
+- **Agents are real.** An agent building shows only what Claude Code's hooks reported (*Real · Claude Code · observed*) or what Runloop inferred from it, labelled *inferred*. An agent that has sent no event is never shown as live; unknown values read *not reported*.
+- Every event in the town's log has a provenance: `simulation`, `user` (you), `external-agent`, `system` (Runloop) or `inferred`. The World Log (**Intelligence**) filters by it.
+- The project folder's absolute path stays on your machine: the world, its events and the API only ever show the folder's name and a short hint.
+
+### Assign a task (dispatch)
+
+An agent's panel has **Assign task**. Write the task, pick a preset and a budget, and **Preview command**: Runloop shows the exact `claude -p` command, model, tools, budget, timeout and the names of the environment variables it passes. Nothing runs until you click **Approve and run**.
+
+- **Presets:** *Read-only* (`Read Grep Glob`) or *Edit + test* (adds `Edit`, `Write` and `Bash(pnpm test:*)`), with `--permission-mode dontAsk`: any other tool is refused, never asked.
+- **Limits:** haiku by default; the budget (default $0.25, at most $1) is enforced by Claude Code with `--max-budget-usd`; the timeout (default 10 min) by Runloop; at most one running task per agent and two in total. **Cancel** stops the whole process group.
+- **Billed to your Anthropic account. Edits land in your working tree. "Done" is what Claude Code reports**; Runloop does not check the work.
+- Approval needs a single-use nonce bound to the exact command and a request from an allowed origin (the Studio), so a web page on another origin cannot start a task. Local processes are trusted, as for the rest of the API (see Security notes). Every step is written to an audit log. `RUNLOOP_DISPATCH=off` turns dispatch off.
+
+### The demo mission
+
+Without Claude Code, open **Sessions** (or `/overview`) and click **Run demo mission**. Three scripted agents survey a small repo, implement a task store and run its test suite. The first test run really fails (10 passed, 2 failed); the Builder patches the bug and the rerun passes 12/12. Drag the replay bar to see any earlier moment.
 
 ## Trace Claude Code
 
@@ -58,13 +97,9 @@ To check the setup, run `node integrations/claude-code-plugin/scripts/runloop-ho
 
 Experiments shows the outcome, the latest test results (fixed, newly failing, still failing), the files each run read or edited, tool calls by category, tokens and models per agent as reported, permission requests, turns and subagents, and the **first divergence**: the first tool call where the two runs went different ways. The test runs, failures, files, categories, usage reports and the divergence link to their events in Traces. A value one run did not report shows as *not reported* and is never compared; so does a token total that covers different agents in each run.
 
-| Claude Code session | Failing test as an incident |
-|---|---|
-| ![A recorded session: Claude and two Explore subagents at work](docs/assets/claude-code-session.png) | ![The failing test run as an incident, with the inspector](docs/assets/claude-code-failure.png) |
-| **Network view (2D)** | **Experiments: two real sessions compared** |
-| ![Agent graph with delegation edges](docs/assets/claude-code-network.png) | ![Experiments comparing two real Claude Code sessions](docs/assets/experiments-compare.png) |
+![A recorded Claude Code session in Live World: Claude and two Explore subagents at their stations, the timeline and the run's provenance](docs/assets/claude-code-session.png)
 
-These screenshots show real `claude -p` sessions (Haiku, 2026-10-17) traced end to end and opened in the current Studio; see the [verification report](docs/status/verification-report.md).
+This screenshot shows a real `claude -p` session (Haiku, 2026-10-17) traced end to end; the town images above come from real sessions on 2026-10-18. See the [verification report](docs/status/verification-report.md).
 
 **What is collected.** The plugin sends these to the local runtime only:
 - the session id;
@@ -81,25 +116,30 @@ File contents, diffs, full command output and transcripts are never collected. W
 ## Commands
 
 ```sh
-pnpm dev           # runtime + Studio
+pnpm dev           # runtime + Studio (the town at http://localhost:3000)
 pnpm serve         # runtime only (port 4380; --port to change it)
 pnpm demo          # run the demo mission headless and print one trace line per event
 pnpm test          # unit, integration and end-to-end tests (vitest)
 pnpm typecheck
 pnpm build         # static export of the Studio (apps/studio/out)
-pnpm screenshots   # visual regression screenshots of every page (needs a runtime and Studio running)
+pnpm screenshots   # visual regression screenshots: the town, panels, dialogs and every page (needs a runtime and Studio running)
+node scripts/e2e-world.mjs            # the town lives: rendering, residents moving, ⌘K → Why, Follow, the café interior
+node scripts/perf-town.mjs            # town render budgets (draw calls, triangles, JS per frame) under SwiftShader
+pnpm --filter @runloop-world/sim bench   # simulation tick cost and events per sim day
 ```
+
+Environment: `RUNLOOP_DATA_DIR`, `RUNLOOP_WORLD=off`, `RUNLOOP_DISPATCH=off`, `RUNLOOP_DISPATCH_ENV` (extra variable names passed to dispatched `claude`, e.g. `HTTPS_PROXY,NODE_EXTRA_CA_CERTS`), `RUNLOOP_TRACE=off`, `RUNLOOP_INGEST_TOKEN_FILE`, `RUNLOOP_ALLOWED_ORIGINS`; the runtime's usage text (`packages/runtime/src/cli.ts`) describes each.
 
 ## How it works
 
 Three layers stay strictly apart:
 
-1. **Execution truth.** The append-only event log. Tool results come only from tools that really ran (executed runs) or from what the source reported (traced runs).
-2. **World simulation.** A pure function of the log and a world definition: where each robot is and what it is doing.
-3. **Presentation.** The Studio draws layer 2 and never writes back to it.
+1. **Execution truth.** The append-only event log of each run. Tool results come only from tools that really ran (executed runs) or from what the source reported (traced runs).
+2. **World simulation.** Two pure functions: a run's diorama (where each robot is), and the town (residents, buildings, the clock), which has its own append-only log with a provenance on every event.
+3. **Presentation.** The Studio draws both and never writes back to them; your commands (pause, open a building, Add to World) are recorded as `user` events.
 
-Live view and replay fold the same events through the same reducers, so they always agree. More detail:
-- [Architecture overview](docs/architecture/overview.md)
+Live view and replay fold the same events through the same reducers, so they always agree. The town is deterministic: the same seed and commands give the same log, in any process. More detail:
+- [Architecture overview](docs/architecture/overview.md) and [world simulation](docs/architecture/world-simulation.md)
 - [Event model](docs/architecture/event-model.md)
 - [Claude Code tracer design](docs/plans/claude-code-tracer.md)
 - [Design system](docs/design/design-system.md)
@@ -109,22 +149,26 @@ Live view and replay fold the same events through the same reducers, so they alw
 
 - The runtime listens on loopback only. Ingest from the plugin needs a per-user token (`~/.config/runloop/ingest-token`, created by the runtime) and rejects browser requests.
 - **Read endpoints are not authenticated.** Any local process of yours can read recorded runs, including prompts and commands, just as it can read the database file.
+- **Dispatch** starts `claude -p` only after you approve the exact command in the Studio (see [Assign a task](#assign-a-task-dispatch)); its edits are real and its cost is billed to your account.
 - In the demo, `run_command` executes the workspace's tests as your user, without OS-level isolation. That is safe for the fixed demo code. Read the sandbox notes in [packages/runtime/README.md](packages/runtime/README.md) before connecting an adapter that writes its own code.
 
 ## Repository layout
 
 ```
-apps/studio                    Next.js Studio: Overview, Live World (3D + Network), Traces, Experiments, Integrations, Settings
-packages/events                event schema, parsing, redaction, SequenceBuffer, HTTP/SSE and ingest contract
+apps/studio                    Next.js Studio: the town (/), Overview, Live World (3D + Network), Traces, Experiments, Integrations, Settings
+packages/events                event schema, parsing, redaction, SequenceBuffer, HTTP/SSE and ingest contract; world contracts (world.ts)
+packages/town                  the town file format: schema, compile, raster, navigation fields (pure)
+packages/sim                   the town simulation: residents, decisions, applyEvent, explain, replay (pure)
 packages/core                  layer 1: execution reducer, selectors, text formatting, run compare (summarizeRun, diffRuns)
 packages/world-engine          layer 2: world definition, grid paths, motion, character intents
 packages/replay                combined reducer and ReplayIndex (state at any sequence or time)
-packages/runtime               local runtime: SQLite recorder, tool sandbox, run manager, Claude Code ingest, HTTP + SSE API, CLI
+packages/runtime               local runtime: SQLite recorder, tool sandbox, run manager, Claude Code ingest, world host, agents, dispatch, HTTP + SSE API, CLI
 packages/testkit               fixtures and helpers for tests
 integrations/claude-code-plugin  the Claude Code plugin (observe-only hooks, spool, --doctor)
-worlds/research-campus         the default world (rooms, stations, presets)
+worlds/runloop-commons         the town: town.json and 15 interiors
+worlds/research-campus         the run diorama (rooms, stations, presets); also the agent headquarters' interior
 examples/coding-mission        the demo mission and its example repo
-scripts/screenshots.mjs        visual regression screenshots (Playwright)
+scripts/                       screenshots.mjs, e2e-world.mjs (Playwright), perf-town.mjs (render budgets)
 docs/                          strategy, architecture, plans, design system, status
 ```
 

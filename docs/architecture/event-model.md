@@ -1,8 +1,8 @@
 # Event model
 
-> Updated 2026-10-18 (`target` on `tool.call_started`, `speed` on `run.started`). Source of truth: `packages/events/src/{envelope,payloads,event,parse,redact}.ts`. Schema version **1**, 21 event types.
+> Updated 2026-10-18 (the town's world events; `target` on `tool.call_started`, `speed` on `run.started`). Source of truth: `packages/events/src/{envelope,payloads,event,parse,redact}.ts` for runs (schema version **1**, 21 event types) and `packages/events/src/world.ts` for the town (15 world event types, [below](#world-events-the-town)).
 
-A run is an ordered list of events. Every view in Runloop is a fold over that list: execution state (`packages/core`), the world (`packages/world-engine`), and replay at any sequence (`packages/replay`).
+A run is an ordered list of events. Every view in Runloop is a fold over that list: execution state (`packages/core`), the run diorama (`packages/world-engine`), and replay at any sequence (`packages/replay`). The town has its own ordered list, the world log, folded the same way by `applyEvent` (`packages/sim`) in the runtime, in replay and in the Studio.
 
 ## Envelope
 
@@ -141,3 +141,79 @@ Logs recorded before 2026-10-18 have no `target`. Compare treats a missing targe
 | SessionEnd | Open calls close as `tool.call_failed unobserved` and open tasks complete ("ended with session"), both inferred. Then `run.completed {outcome: stopped}`. |
 
 The full table, the edge cases and the probe findings are in `docs/plans/claude-code-tracer.md` (§4 and Appendix C).
+
+## World events (the town)
+
+The town (`docs/architecture/world-simulation.md`, DL-010) keeps a second append-only log per world, in `world_events`. It is separate from run logs: a run's events never change, and the town only *cites* them.
+
+### Envelope
+
+| Field | Meaning |
+|---|---|
+| `seq` | Contiguous per world from 1. The only ordering key. |
+| `tick` | Sim minute (integer; day = `floor(tick / 1440) + 1`). |
+| `type` | One of the 15 types below. |
+| `prov` | `simulation` · `user` · `external-agent` · `system` · `inferred` (P1). |
+| `obs` | `observed` or `executed`, present exactly when `prov` is `external-agent`. Agent activity is always `observed`: Claude Code ran the tools, not Runloop, even for a dispatched task. |
+| `cmdId` | The command this event answers (its effect, or `command.rejected`); unique per world, so a resubmitted command is applied once. |
+| `actor` | The resident, agent or building the event is about (per-entity queries). |
+| `cause` | `{runId, seqFrom, seqTo}`: the run events behind an agent event. Required on `agent.session_changed` and `agent.activity_observed`; never on simulation events. |
+| `p` | Type-specific payload (zod-validated by `parseWorldEvent`, which also enforces the rules in this table). |
+
+### Provenance
+
+| `prov` | Who says so | Studio label |
+|---|---|---|
+| `simulation` | The rule-based town engine. Residents are simulated; their reasons come only from the recorded `resident.decided`. | ◇ Simulated |
+| `user` | You, through the Studio (every HTTP command is `user`; a body with `source` or `prov` is refused, P2). | You |
+| `external-agent` | A real agent's hooks (Claude Code), projected from its traced run. | Real · Claude Code · observed |
+| `system` | Runloop itself: the world's creation and resumption, connection health, dispatch lifecycle. | Runloop |
+| `inferred` | Runloop reconstructed it (the cited run events were themselves inferred, e.g. an idle sweep or restart closing a run). | Inferred |
+
+Commands carry a source; `ALLOWED_SOURCES` decides who may send what, and anything else is rejected with `forbidden_source` (P3):
+
+| Command | Allowed sources | Effect event |
+|---|---|---|
+| `clock.set {speed: 0\|1\|4\|16}` | user | `world.clock_changed {speed, prevSpeed}` |
+| `building.set_open {buildingId, open}` | user | `building.open_changed` |
+| `agent.house {agentId, lotId, displayName, hue}` | user, system | `agent.housed {…, buildingId}` |
+| `agent.connection {agentId, health, attention}` | system | `agent.connection_changed` |
+| `agent.session {agentId, runId, phase, outcome?}` | external-agent (or `inferred`) | `agent.session_changed` |
+| `agent.activity {agentId, runId, counts, execState, helpers, openIncidents}` | external-agent (or `inferred`) | `agent.activity_observed` |
+| `agent.dispatch {agentId, dispatchId, phase, outcome?}` | user, system | `agent.dispatch_changed` |
+
+A rejected command produces `command.rejected {cmdId, code}` with the command's source as `prov`; codes are `forbidden_source`, `unknown_entity`, `lot_unavailable`, `not_housed`, `invalid`.
+
+### Types
+
+| Type | `prov` | Payload |
+|---|---|---|
+| `world.created` | system | `worldId`, `townId`, `contentHash`, `seed`, `simVersion`, `startTick`, `roster` (every resident's identity, in index order) |
+| `world.resumed_after_offline` | system | `offlineWallMs`: the town does not live while Runloop is off, and says so |
+| `world.sim_upgraded` | system | `fromVersion`, `toVersion` |
+| `world.clock_changed` | user | `speed`, `prevSpeed` |
+| `building.open_changed` | user | `buildingId`, `open` |
+| `resident.decided` | simulation | `r`, action `a`, `place`, `slotId`, `reason`, schedule `block`, `needs` and `rates` (milli-points), `until`, and `top`: up to three options `[action, placeId, total, needPart, schedPart, travelPart]`, the choice first |
+| `resident.departed` | simulation | `r`, `route {from, rle}`, `startTick`, `dest` |
+| `resident.arrived` | simulation | `r`, `place`, `slotId`, `needs`, `rates` |
+| `interaction.happened` | simulation | `a`, `b` (a < b), `placeId`, `dAffinity` |
+| `agent.housed` | user, system | `agentId`, `lotId`, `buildingId`, `displayName`, `hue` |
+| `agent.connection_changed` | system | `agentId`, `health` (`not_connected`, `awaiting_first_event`, `live`, `idle`, `offline`, `unknown`), `attention` (`none`, `permission_requested`, `incident`, `dispatch_awaiting_approval`) |
+| `agent.session_changed` | external-agent, inferred | `agentId`, `runId`, `phase: started\|ended`, `outcome` (when ended) |
+| `agent.activity_observed` | external-agent, inferred | `agentId`, `runId`, tool `counts` by category, `execState`, `helpers`, `openIncidents`; the counts equal the tool calls in `cause` (P4) |
+| `agent.dispatch_changed` | user (approved), system (running, finished) | `agentId`, `dispatchId`, `phase`, `outcome` when finished (`completed`, `failed`, `cancelled`, `timed_out`, `budget_exceeded`, `lost`) |
+| `command.rejected` | the command's source | `cmdId`, `code` |
+
+`resident.decided`, `resident.departed` and `resident.arrived` are *ambient* (high volume) and kept for 3 sim days; everything else is kept. The fold of each type into the snapshot is documented next to the schemas in `world.ts`.
+
+### Rules that are tests (plan §6)
+
+- **P1** `prov` is one of the five; phases 2–4 of a tick emit only `simulation`; an effect's `prov` is its command's source, or `inferred`.
+- **P4** every agent event's `cause` points into a run bound to that agent, and an activity's counts equal that range's tool calls.
+- **P5** projecting real sessions changes no resident (the town is identical to a control world).
+- **P8** a workspace's absolute path appears in no world table, snapshot or API response.
+- **P10** every Why factor cites a `seq` that exists, and "Real" appears only on `external-agent` entities.
+
+### Explanations
+
+`GET /api/world/explain?ref=resident:res_0012[&atSeq=]` builds a resident's Why from its recorded `resident.decided` only: each factor has text and a source `{seq, field}` (for example "Hunger 72/100 ← seq 812 needs[0]"), labelled "Simulated resident · rule-based decision". Factors without a source are dropped. Agent buildings have no Why.
