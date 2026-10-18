@@ -15,7 +15,8 @@ export interface SceneFrame {
 }
 
 export type CameraMode = 'iso' | 'top';
-export type Quality = 'high' | 'low';
+/** auto: the town steps down when frames run slow (town/quality.ts); the run diorama treats it as high. */
+export type Quality = 'auto' | 'high' | 'low';
 
 /**
  * Contract between the Studio shell (owns data + UI) and the scene

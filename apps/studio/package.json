@@ -16,6 +16,8 @@
     "@runloop-world/core": "workspace:*",
     "@runloop-world/events": "workspace:*",
     "@runloop-world/replay": "workspace:*",
+    "@runloop-world/sim": "workspace:*",
+    "@runloop-world/town": "workspace:*",
     "@runloop-world/world-engine": "workspace:*",
     "geist": "1.8.1",
     "next": "16.4.2",

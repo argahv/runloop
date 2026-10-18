@@ -9,6 +9,11 @@
 .shell[data-rail] {
   --sidebar-w: 64px;
 }
+/* The town and the other pages use the ModeRail (plan §5); run pages keep the run sidebar. */
+.shell[data-layout='town'],
+.shell[data-layout='page'] {
+  --sidebar-w: 76px;
+}
 .shell[data-mobile] {
   grid-template-columns: minmax(0, 1fr);
   height: auto;
@@ -90,6 +95,30 @@
   text-align: left;
 }
 
+.townMain {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  outline: none;
+}
+
+.backToTown {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-surface);
+  color: var(--rl-text);
+  font-size: var(--rl-text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.backToTown:hover {
+  background: var(--rl-surface-2);
+}
+
 .content {
   flex: 1;
   min-height: 0;
@@ -103,4 +132,8 @@
   height: 100%;
   max-height: none;
   border-radius: 0 var(--rl-radius-card) var(--rl-radius-card) 0;
+}
+/* The town is one big region: focusing it (skip link, a click) needs no ring around the whole screen. */
+.townMain:focus-visible {
+  box-shadow: none;
 }

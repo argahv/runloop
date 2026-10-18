@@ -160,11 +160,11 @@ export default function WorldStage({ allow3d = true }: { allow3d?: boolean }) {
               <button
                 type="button"
                 className={styles.glassButton}
-                aria-pressed={quality === 'high'}
-                onClick={() => setQuality(quality === 'high' ? 'low' : 'high')}
+                aria-pressed={quality !== 'low'}
+                onClick={() => setQuality(quality === 'low' ? 'auto' : 'low')}
                 title="High quality adds glow; low is faster"
               >
-                {quality === 'high' ? 'High quality' : 'Low quality'}
+                {quality === 'low' ? 'Low quality' : 'High quality'}
               </button>
             </div>
           )}

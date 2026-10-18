@@ -188,9 +188,10 @@ export function useUrlSync(store: StudioStore, pathname: string): void {
   }, [store, pathname]);
 }
 
-/** Space, ←/→, L, [ ], F, and Escape to clear the selection. */
-export function useKeyboardShortcuts(store: StudioStore): void {
+/** Space, ←/→, L, [ ], F, and Escape to clear the selection. Off on the town (`/`), which has its own keys. */
+export function useKeyboardShortcuts(store: StudioStore, enabled = true): void {
   useEffect(() => {
+    if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       const s = store.getState();
       if (s.viewArtifactId) return;
@@ -212,7 +213,7 @@ export function useKeyboardShortcuts(store: StudioStore): void {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [store]);
+  }, [store, enabled]);
 }
 
 /**

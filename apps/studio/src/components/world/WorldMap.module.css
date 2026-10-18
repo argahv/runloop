@@ -1,0 +1,165 @@
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--rl-world-bg);
+}
+.wrap[data-variant='overlay'] {
+  border-radius: var(--rl-radius-card);
+}
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.svg:active {
+  cursor: grabbing;
+}
+.backdrop {
+  fill: var(--rl-world-bg);
+}
+.loading {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--rl-text-muted);
+}
+
+.building,
+.agentHq,
+.spot,
+.resident {
+  cursor: pointer;
+}
+.footprint {
+  stroke: rgba(16, 17, 20, 0.35);
+  stroke-width: 0.12;
+}
+.building:hover .footprint,
+.building[data-focus] .footprint {
+  stroke: #101114;
+  stroke-width: 0.3;
+}
+.building[data-focus] .footprint {
+  stroke: var(--rl-accent-fill);
+  stroke-width: 0.45;
+}
+.count circle {
+  fill: #101114;
+  opacity: 0.82;
+}
+.count text {
+  fill: #f4ece0;
+  font-weight: 600;
+  font-family: var(--rl-font-sans);
+}
+.label,
+.district,
+.lotText,
+.hqName,
+.hqHealth {
+  font-family: var(--rl-font-sans);
+  pointer-events: none;
+  paint-order: stroke;
+  stroke-linejoin: round;
+}
+.label {
+  font-weight: 600;
+  fill: #1b1d22;
+  stroke: rgba(244, 236, 224, 0.92);
+  stroke-width: 0.28em;
+}
+.district {
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  fill: rgba(27, 29, 34, 0.72);
+  stroke: rgba(244, 236, 224, 0.85);
+  stroke-width: 0.3em;
+}
+
+.spot rect {
+  fill: rgba(122, 90, 66, 0.45);
+}
+.spot[data-focus] rect {
+  fill: #101114;
+}
+
+.freeLot rect {
+  fill: rgba(244, 236, 224, 0.28);
+  stroke: rgba(27, 29, 34, 0.55);
+  stroke-width: 0.15;
+  stroke-dasharray: 0.6 0.4;
+}
+.lotText {
+  font-weight: 600;
+  fill: rgba(27, 29, 34, 0.7);
+}
+
+.agentHq[data-waiting] {
+  opacity: 0.62;
+}
+.agentHq[data-focus] > rect:first-child {
+  stroke: var(--rl-accent-fill);
+  stroke-width: 0.5;
+}
+.hqName {
+  font-weight: 600;
+  fill: #e8ebf0;
+}
+.hqHealth {
+  font-weight: 500;
+  fill: #9297a2;
+}
+.hqHealth[data-tone='live'] {
+  fill: #b8f36a;
+}
+.hqHealth[data-tone='warn'] {
+  fill: #f5b84b;
+}
+
+.resident {
+  transition: transform 1s linear;
+}
+.residents[data-reduced] .resident {
+  transition: none;
+}
+.resident circle {
+  stroke: rgba(16, 17, 20, 0.55);
+  stroke-width: 0.12;
+}
+.resident[data-focus] circle {
+  stroke: #101114;
+  stroke-width: 0.25;
+}
+
+.zoom {
+  position: absolute;
+  right: var(--rl-space-4);
+  bottom: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--rl-radius-control);
+  background: var(--rl-glass);
+  backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 0 0 1px var(--rl-glass-line);
+}
+.zoom button {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--rl-radius-sm);
+  color: var(--rl-text);
+  font-size: 16px;
+  line-height: 1;
+}
+.zoom button:hover {
+  background: var(--rl-surface-2);
+}

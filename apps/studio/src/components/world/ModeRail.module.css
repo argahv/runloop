@@ -1,0 +1,133 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--rl-space-4);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: var(--rl-space-3) 6px var(--rl-space-3);
+  background: var(--rl-canvas);
+  box-shadow: inset -1px 0 0 var(--rl-line);
+}
+
+.brand {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--rl-surface-2);
+  color: var(--rl-accent-text);
+  flex: none;
+}
+
+.modes ul,
+.pages ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.modes,
+.pages {
+  width: 100%;
+}
+.pages {
+  margin-top: auto;
+}
+
+.mode,
+.page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 2px;
+  border-radius: var(--rl-radius-control);
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+  font-weight: 500;
+  line-height: 1.15;
+  text-align: center;
+  transition:
+    background-color var(--rl-dur-instant) var(--rl-ease-out),
+    color var(--rl-dur-instant) var(--rl-ease-out);
+}
+.page {
+  min-height: 44px;
+}
+.mode:hover,
+.page:hover {
+  background: var(--rl-surface);
+  color: var(--rl-text);
+}
+.mode[aria-current='page'],
+.page[aria-current='page'] {
+  background: var(--rl-surface-2);
+  color: var(--rl-text);
+}
+.mode[aria-current='page'] svg {
+  color: var(--rl-accent-text);
+}
+.mode[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--rl-accent-text);
+}
+.label {
+  white-space: nowrap;
+}
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--rl-space-2);
+}
+.runtime {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 20px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rl-text-faint);
+}
+.runtime[data-status='online'] .dot {
+  background: var(--rl-success);
+}
+.runtime[data-status='offline'] .dot {
+  background: var(--rl-failure);
+}
+
+/* In the phone drawer: a normal list with labels beside the icons. */
+.rail[data-expanded] {
+  align-items: stretch;
+  padding: var(--rl-space-4) var(--rl-space-3);
+  box-shadow: none;
+}
+.rail[data-expanded] .mode,
+.rail[data-expanded] .page {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: var(--rl-space-3);
+  min-height: 40px;
+  padding: 0 var(--rl-space-3);
+  font-size: var(--rl-text-md);
+}
+.rail[data-expanded] .foot {
+  flex-direction: row;
+  justify-content: space-between;
+}

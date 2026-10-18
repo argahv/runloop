@@ -65,14 +65,14 @@ export default function WorldCanvas(props: SceneProps) {
     () => ({ world, getFrame, subscribeEffects, reducedMotion, incidentStations, labels, palette, camera, selectEvent }),
     [world, getFrame, subscribeEffects, reducedMotion, incidentStations, labels, palette, camera, selectEvent],
   );
-  const bloom = quality === 'high' && !reducedMotion && palette.glow;
+  const bloom = quality !== 'low' && !reducedMotion && palette.glow;
 
   return (
     <div ref={wrap} className={styles.wrap} data-scene-theme={palette.theme}>
       <Canvas
         orthographic
         flat
-        dpr={quality === 'high' ? [1, 2] : [1, 1.25]}
+        dpr={quality !== 'low' ? [1, 2] : [1, 1.25]}
         gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
         camera={{ position: [40, 48, 40], zoom: 30, near: 0.1, far: 400 }}
         onPointerMissed={() => {

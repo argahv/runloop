@@ -104,12 +104,13 @@ export default function SettingsPage() {
               ]}
             />
           </Setting>
-          <Setting label="3D render quality" help="High adds glow effects; low is lighter on battery and older GPUs.">
+          <Setting label="3D render quality" help="Automatic lowers the town's detail when frames run slow; high always adds glow and shadows; low is lighter on battery and older GPUs.">
             <SegmentedControl
               label="Render quality"
               value={quality}
               onChange={(v) => s.setQuality(v)}
               options={[
+                { value: 'auto', label: 'Automatic' },
                 { value: 'high', label: 'High' },
                 { value: 'low', label: 'Low' },
               ]}

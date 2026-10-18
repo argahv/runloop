@@ -410,7 +410,7 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
     connectNonce: 0,
     cameraMode: 'iso',
     follow: false,
-    quality: 'high',
+    quality: 'auto',
     reducedMotion: false,
     viewArtifactId: null,
     onboarding: EMPTY_ONBOARDING,

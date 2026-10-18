@@ -44,7 +44,13 @@ export function Dialog({
       const target = initialRef.current?.current ?? panel.current?.querySelector<HTMLElement>(FOCUSABLE) ?? panel.current;
       target?.focus();
     };
-    const raf = requestAnimationFrame(focusFirst);
+    // Focus now (the panel is already in the DOM), so keys typed right after
+    // opening reach the dialog rather than page shortcuts, even when a busy
+    // 3D frame delays the next animation frame; retry once on that frame.
+    focusFirst();
+    const raf = requestAnimationFrame(() => {
+      if (!panel.current?.contains(document.activeElement)) focusFirst();
+    });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();

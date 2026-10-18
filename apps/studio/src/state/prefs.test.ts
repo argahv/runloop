@@ -12,6 +12,10 @@ describe('viewer preferences', () => {
       apiBase: 'http://127.0.0.1:4392',
     });
     expect(parsePrefs('{"theme":"neon","quality":3}')).toEqual(DEFAULT_PREFS);
+    // Automatic quality (the town steps down when frames run slow) is the default.
+    expect(DEFAULT_PREFS.quality).toBe('auto');
+    expect(parsePrefs('{"quality":"high"}').quality).toBe('high');
+    expect(parsePrefs('{"quality":"auto"}').quality).toBe('auto');
   });
 
   it('resolves the theme and reduced motion against the system', () => {

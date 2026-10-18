@@ -145,7 +145,7 @@ export function useStudioCommands(pathname: string): Command[] {
       { id: 'camera-iso', group: 'View', label: 'Camera: isometric 3D', keywords: 'camera iso', hint: cameraMode === 'iso' ? 'current' : undefined, run: () => s().setCameraMode('iso') },
       { id: 'camera-top', group: 'View', label: 'Camera: top-down 2D', keywords: 'camera top map', hint: cameraMode === 'top' ? 'current' : undefined, run: () => s().setCameraMode('top') },
       { id: 'follow', group: 'View', label: follow ? 'Stop following the selected agent' : 'Follow the selected agent', keywords: 'camera', shortcut: ['F'], run: () => s().toggleFollow() },
-      { id: 'quality', group: 'Preferences', label: quality === 'high' ? 'Render quality: low (faster)' : 'Render quality: high', keywords: 'performance glow', run: () => s().setQuality(quality === 'high' ? 'low' : 'high') },
+      { id: 'quality', group: 'Preferences', label: quality === 'low' ? 'Render quality: automatic' : 'Render quality: low (faster)', keywords: 'performance glow high auto', run: () => s().setQuality(quality === 'low' ? 'auto' : 'low') },
     );
     for (const t of ['system', 'dark', 'light'] as const) {
       cmds.push({ id: `theme:${t}`, group: 'Preferences', label: `Theme: ${t}`, keywords: 'appearance dark light mode', hint: themePref === t ? 'current' : undefined, run: () => s().setThemePref(t) });
