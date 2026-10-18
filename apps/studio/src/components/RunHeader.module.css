@@ -119,5 +119,7 @@
   }
   .actions {
     margin-left: 0;
+    /* Pin, Compare, Switch run and the cross-link do not fit one phone-width row. */
+    flex-wrap: wrap;
   }
 }

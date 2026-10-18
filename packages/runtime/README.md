@@ -89,17 +89,19 @@ envelope ─► dedupe (trace_ingest) ─► slimHook ─► mapHook (pure) ─�
 
 ## HTTP API
 
-The contract is `packages/events/src/protocol.ts`. Every request needs a `localhost` or `127.0.0.1` Host header. POSTs need `Content-Type: application/json` and, when an `Origin` is sent, an allowed origin.
+The contract is `packages/events/src/protocol.ts`. Every request needs a `localhost` or `127.0.0.1` Host header. POSTs and DELETEs need `Content-Type: application/json` and, when an `Origin` is sent, an allowed origin.
 
 | Route | Result |
 | --- | --- |
 | `GET /api/health` | `{ ok, version, activeRunId, tracedRunIds, ingest }`. `activeRunId` is the scripted run only. |
 | `GET /api/runs` | `{ runs }`, newest first |
-| `POST /api/runs` `{ missionId, speed? }` | 202 `{ runId }`. 409 if a run is active, 404 for an unknown mission. |
+| `POST /api/runs` `{ missionId, speed? }` | 202 `{ runId }`. 409 if a run is active, 404 for an unknown mission. The speed (default 1) is recorded in `run.started.speed`, so compare does not judge durations of runs at different paces. |
 | `GET /api/runs/:id` | `{ run, world }`, where `world` is `worlds/<worldId>/world.json`, validated |
 | `GET /api/runs/:id/events?after&limit` | `{ events, nextAfter, hasMore }` (limit ≤ 1000) |
 | `GET /api/runs/:id/stream` | SSE. Resume with `Last-Event-ID` or `?after`. Sends `: ping` every 15 s and an `end` event when the run is terminal. |
 | `POST /api/runs/:id/{stop,pause,resume}` | 202 `{ run }`, or 409 if the run is not active (always 409 for traced runs: Claude Code controls them) |
+| `POST /api/runs/:id/baseline` `{}` | 200 `{ run }` with `pinnedAt` set: the run is a baseline (idempotent; any run, any state). 404 for an unknown run. Stored in `runs.pinned_at` (migration 2); the event log is untouched. |
+| `DELETE /api/runs/:id/baseline` `{}` | 200 `{ run }` with `pinnedAt: null` |
 | `POST /api/ingest/claude-code` `{ envelopes }` | 202 `{ accepted, duplicates, ignored }`. Needs `X-Runloop-Token`. 403 with any `Origin`, 413 over 1 MiB, 401 bad token, 400 invalid or unknown protocol version (`supported: [1]`), 429 over 100 events/s per session (burst 1000). |
 | `GET /api/runs/:id/artifacts/:artifactId` | The stored bytes, with their media type. 409 if they no longer match the recorded sha256. |
 

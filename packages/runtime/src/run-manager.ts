@@ -141,6 +141,7 @@ export class RunManager {
         seed: mission.seed,
         adapter: { ...adapter.info },
         workspace,
+        speed,
       },
     });
 

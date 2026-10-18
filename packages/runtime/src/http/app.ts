@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   apiPaths,
+  type BaselineResponse,
   type ErrorResponse,
   type EventsPageResponse,
   type HealthResponse,
@@ -103,14 +104,14 @@ export function createApp(opts: AppOptions): Hono {
     '/api/*',
     cors({
       origin: [...allowedOrigins],
-      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Last-Event-ID'],
       maxAge: 600,
     }),
   );
 
   app.use('/api/*', async (c, next) => {
-    if (c.req.method === 'POST') {
+    if (c.req.method === 'POST' || c.req.method === 'DELETE') {
       const origin = c.req.header('origin');
       if (origin !== undefined && !allowedOrigins.includes(origin)) return c.json(errorBody('Origin not allowed'), 403);
       const type = c.req.header('content-type') ?? '';
@@ -221,6 +222,19 @@ export function createApp(opts: AppOptions): Hono {
   app.post('/api/runs/:id/stop', control('stop'));
   app.post('/api/runs/:id/pause', control('pause'));
   app.post('/api/runs/:id/resume', control('resume'));
+
+  // Baselines: pin (POST) or unpin (DELETE) a run. Same guards as every write (JSON, allowed Origin).
+  const baseline = (pinned: boolean) => (c: Context) => {
+    try {
+      const body: BaselineResponse = { run: recorder.setPinned(c.req.param('id')!, pinned) };
+      return c.json(body);
+    } catch (err) {
+      if (err instanceof UnknownRunError) return c.json(errorBody('Run not found'), 404);
+      throw err;
+    }
+  };
+  app.post('/api/runs/:id/baseline', baseline(true));
+  app.delete('/api/runs/:id/baseline', baseline(false));
 
   app.get('/api/runs/:id/artifacts/:aid', (c) => {
     let artifact;

@@ -101,7 +101,7 @@ Characters, timeline actor dots and graph nodes use an 8-hue identity palette tu
 | **Overview** | Runtime health, live sessions, recent runs, quick start | v1 |
 | **Live World** | Watch and explore execution: 3D world, agent graph, timeline | v1 |
 | **Traces** | Investigate one run: timeline, logs, inspector, search and filter | v1 |
-| **Experiments** | Compare runs and baselines | Milestone C (hidden until it works) |
+| **Experiments** | Compare runs and baselines: pin a baseline, pick a candidate, see what differed with links to the events behind it | v1 (Milestone C, 2026-10-18) |
 | **Evaluations** | Failure → test case; regression suites | Later (hidden until it works) |
 | **Integrations** | Connect Claude Code (plugin status, install command, what is collected), the scripted demo | v1 |
 | **Settings** | Theme, motion, render quality, runtime URL, privacy and retention | v1 |
@@ -109,7 +109,7 @@ Characters, timeline actor dots and graph nodes use an 8-hue identity palette tu
 **Navigation rules:**
 - **Do not show placeholder sections.** An area appears in the sidebar only when it works.
 - The **world, timeline and inspector are synchronised views** of one selection state (stable ids for runs, events, agents and stations). Selecting a tool call in the timeline focuses its agent or station in the world and opens the exact event in the inspector, and the other way round.
-- **Deep links:** `?run=<id>&view=world|graph|trace&event=<seq>&agent=<id>`.
+- **Deep links:** `?run=<id>&view=world|graph|trace&event=<seq>&agent=<id>`. Experiments: `/experiments?a=<baseline run>&b=<candidate run>`.
 
 ## The 3D world
 

@@ -1,6 +1,6 @@
 # Runloop product strategy
 
-> Status: working strategy, 2026-10-17. The claims below are marked **[V]** (verified at the cited source), **[H]** (hypothesis) or **[D]** (decision). The research that backs this is summarised in [`docs/status/decision-log.md`](../status/decision-log.md).
+> Status: working strategy, 2026-10-17 (build-order statuses updated 2026-10-18). The claims below are marked **[V]** (verified at the cited source), **[H]** (hypothesis) or **[D]** (decision). The research that backs this is summarised in [`docs/status/decision-log.md`](../status/decision-log.md).
 
 ## One line
 
@@ -55,11 +55,11 @@ Not yet:
 | Step | Scope | Status |
 |---|---|---|
 | 1 | Foundation: event model, recorder, replay, Studio, scripted demo | Done (verified, see `docs/status/current-state.md`) |
-| 2 | **Claude Code tracer:** plugin, live ingest, subagents, provenance | Next |
-| 3 | **Compare:** baselines and a side-by-side run diff (calls, files, tests, tokens, time) | Then |
-| 2b | **Runloop Signature design system** (`docs/design/design-system.md`): tokens, components, IA, synchronised world/timeline/inspector, 2D graph fallback. Runs in parallel with 2 | Now |
-| 4 | Search, filter, metrics | Then |
-| 5 | **Codex CLI hooks** (second integration, same user, cross-harness); a documented adapter contract | Then |
+| 2 | **Claude Code tracer:** plugin, live ingest, subagents, provenance | Done (verified with real sessions, B6) |
+| 3 | **Compare:** baselines and a side-by-side run diff (calls, files, tests, tokens, time) | Done (verified 2026-10-18, C1–C3); a real A/B session with targets is next |
+| 2b | **Runloop Signature design system** (`docs/design/design-system.md`): tokens, components, IA, synchronised world/timeline/inspector, 2D graph fallback. Runs in parallel with 2 | Done (D1–D10) |
+| 4 | Search, filter, metrics | Done (D7, D8) |
+| 5 | **Codex CLI hooks** (second integration, same user, cross-harness); a documented adapter contract | Next |
 | 6 | Headless A/B runner (`runloop ab`): N runs × setup variants, scored by tests | Later |
 | 7 | OTLP/HTTP ingest bridge; OpenAI Agents SDK adapter | Later, on demand |
 

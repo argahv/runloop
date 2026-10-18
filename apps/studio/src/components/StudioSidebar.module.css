@@ -79,6 +79,20 @@
 .runMeta svg {
   flex: none;
 }
+.baseline {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 4px;
+  border-radius: var(--rl-radius-pill);
+  background: var(--rl-surface-2);
+  color: var(--rl-text);
+}
+.runMetaText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .liveDot {
   width: 6px;
   height: 6px;

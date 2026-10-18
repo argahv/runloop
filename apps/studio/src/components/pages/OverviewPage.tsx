@@ -19,6 +19,7 @@ import { CommandSnippet } from '../../ui/CommandSnippet';
 import { Icon } from '../../ui/Icon';
 import { Kbd, modKey } from '../../ui/Kbd';
 import { EmptyState, Skeleton } from '../../ui/States';
+import { BaselineBadge, PinButton } from '../Baseline';
 import { OfflineState } from '../RunStates';
 import { useStartDemo } from '../useStartDemo';
 import styles from './Pages.module.css';
@@ -165,9 +166,12 @@ function HistoryGroup({ title, icon, runs, all, onOpen }: { title: string; icon:
           <tr key={r.runId}>
             <td className={styles.num}>{n}</td>
             <td className={styles.titleCell}>
-              <button type="button" className={styles.rowLink} onClick={() => onOpen(r.runId)}>
-                {r.title}
-              </button>
+              <span className={styles.rowTitle}>
+                <button type="button" className={styles.rowLink} onClick={() => onOpen(r.runId)}>
+                  {r.title}
+                </button>
+                <BaselineBadge run={r} />
+              </span>
               {sub && <span className={styles.rowSub}>{sub}</span>}
             </td>
             <td>
@@ -180,9 +184,12 @@ function HistoryGroup({ title, icon, runs, all, onOpen }: { title: string; icon:
             <td className={`${styles.num} ${styles.right}`}>{ms !== null ? formatDuration(ms) : <span className={styles.none}>not reported</span>}</td>
             <td className={`${styles.num} ${styles.right}`}>{r.lastSequence}</td>
             <td className={styles.right}>
-              <Button size="sm" variant="ghost" icon="traces" onClick={() => onOpen(r.runId, ROUTES.traces)} aria-label={`Open run ${n} in Traces`}>
-                Traces
-              </Button>
+              <span className={styles.rowActions}>
+                <PinButton run={r} iconOnly />
+                <Button size="sm" variant="ghost" icon="traces" onClick={() => onOpen(r.runId, ROUTES.traces)} aria-label={`Open run ${n} in Traces`}>
+                  Traces
+                </Button>
+              </span>
             </td>
           </tr>
         );

@@ -4,7 +4,7 @@ import { useMemo, type ReactNode } from 'react';
 import { useStudio, useStudioStore } from '../state/context';
 import { EMPTY_FILTER } from '../state/filters';
 import { CATEGORY_ICON, categoryLabel, formatInt, formatTokens, usageParts } from '../state/labels';
-import { computeRunMetrics, type CountRow, type RunMetrics as Metrics } from '../state/metrics';
+import { computeRunMetrics, toolsInCategory, type CountRow, type RunMetrics as Metrics } from '../state/metrics';
 import { formatDuration } from '../state/timeline';
 import { agentLook } from '../state/view';
 import { AgentDot, Chip } from '../ui/Chip';
@@ -129,7 +129,8 @@ export default function RunMetrics({ variant = 'full', onShowTimeline }: { varia
   }
 
   const pickCategory = (k: string) => {
-    s.setFilter({ ...EMPTY_FILTER, categories: [k] });
+    // Executed runs carry no category on their events, so their timeline is filtered by the category's tools.
+    s.setFilter(m.traced ? { ...EMPTY_FILTER, categories: [k] } : { ...EMPTY_FILTER, tools: toolsInCategory(exec, k) });
     onShowTimeline?.();
   };
   const pickTool = (k: string) => {
@@ -268,6 +269,7 @@ export default function RunMetrics({ variant = 'full', onShowTimeline }: { varia
           <>
             <Bars rows={c.byCategory} label="Tool calls by category" iconOf={(k) => CATEGORY_ICON[k as ToolCategory] ?? 'dot'} nameOf={categoryLabel} onPick={pickCategory} />
             {c.categorised < c.total && <p className={styles.foot}>{c.total - c.categorised} calls have no category.</p>}
+            {!m.traced && <p className={styles.foot}>Categories of Runloop’s own tools (a command that reported test counts is a test run).</p>}
           </>
         ) : (
           <p className={styles.muted}>{c.total ? 'This run’s source does not categorise its tool calls; see the calls by tool below.' : 'No tool calls recorded.'}</p>

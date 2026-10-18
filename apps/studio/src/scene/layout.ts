@@ -23,6 +23,12 @@ export const ROOM_Y = 0.16;
 export const BACK_WALL_H = 1.3;
 /** Height of a front (south/east) curb above the room floor. */
 export const CURB_H = 0.26;
+/** The base slab reaches this far past the grid on every side... */
+export const SLAB_MARGIN = 0.8;
+/** ...and is this thick (its top is at y = 0). */
+export const SLAB_DEPTH = 0.45;
+/** A robot's height, feet to antenna tip (1 cell = 1 unit). */
+export const ROBOT_HEIGHT = 2.2;
 
 const DIRS: readonly Cell[] = [
   [0, -1],
@@ -190,6 +196,22 @@ export function glowPaths(world: CompiledWorld): GlowPath[] {
 }
 
 /**
+ * Which walkways a route travels along: those sharing at least `min` cells
+ * with it (every walkway starts at the Atrium, so touching its first cell or
+ * two while crossing the Atrium does not count).
+ */
+export function walkwaysOnRoute(walkways: readonly { cells: readonly Cell[] }[], route: readonly Cell[], min = 3): number[] {
+  const on = new Set(route.map(([x, y]) => key(x, y)));
+  const out: number[] = [];
+  walkways.forEach((w, i) => {
+    let shared = 0;
+    for (const [x, y] of w.cells) if (on.has(key(x, y))) shared += 1;
+    if (shared >= Math.min(min, w.cells.length)) out.push(i);
+  });
+  return out;
+}
+
+/**
  * Scene-space polyline for a path of cells, `lift` above the floor. Height
  * changes (corridor ↔ room) become a vertical riser at the cell boundary.
  */
@@ -270,6 +292,36 @@ export function zoneSignCell(world: CompiledWorld, zone: Zone): [number, number]
   const cx = rx + rw / 2;
   const cy = ry + rh / 2;
   return [cx < hx ? rx - 0.5 : rx + rw - 0.5, cy < hy ? ry - 0.5 : ry + rh - 0.5];
+}
+
+/** Cells whose floor is covered by something standing on it (walls, machines, props, the Atrium core). */
+export function blockedCells(world: CompiledWorld): Set<string> {
+  const out = new Set<string>();
+  world.def.grid.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) if (row[x] === '#') out.add(`${x},${y}`);
+  });
+  for (const s of world.def.stations) out.add(`${s.cell[0]},${s.cell[1]}`);
+  for (const p of world.def.props) out.add(`${p.cell[0]},${p.cell[1]}`);
+  for (const c of world.def.hub.core) out.add(`${c[0]},${c[1]}`);
+  return out;
+}
+
+/** How enclosed a floor cell is (0 = open, 1 = boxed in): contact shading for the floor. */
+export function occlusionAt(blocked: Set<string>, x: number, y: number): number {
+  let k = 0;
+  for (const [dx, dy, wgt] of [
+    [1, 0, 1],
+    [-1, 0, 1],
+    [0, 1, 1],
+    [0, -1, 1],
+    [1, 1, 0.45],
+    [1, -1, 0.45],
+    [-1, 1, 0.45],
+    [-1, -1, 0.45],
+  ] as const) {
+    if (blocked.has(`${x + dx},${y + dy}`)) k += wgt;
+  }
+  return Math.min(1, k / 2.4);
 }
 
 /** Cheap deterministic per-cell noise in [0, 1). */

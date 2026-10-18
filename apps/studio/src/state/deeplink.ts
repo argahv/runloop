@@ -3,6 +3,7 @@ export const ROUTES = {
   overview: '/overview',
   world: '/world',
   traces: '/traces',
+  experiments: '/experiments',
   integrations: '/integrations',
   settings: '/settings',
 } as const;

@@ -14,7 +14,7 @@
 #013 tool.call_started main turn-1 reported public - {"callId":"toolu_syn_agent1","agentId":"main","taskId":"turn-1","tool":"Agent","category":"delegate","inputSummary":"→ Explore: \"Map the tests\""}
 #014 tool.call_started sa-a0syntheticexplore1 delegate-1 reported public - {"callId":"toolu_syn_glob1","agentId":"sa-a0syntheticexplore1","taskId":"delegate-1","tool":"Glob","category":"search","inputSummary":"test/**/*.js"}
 #015 tool.permission_requested main - reported sensitive - {"permissionId":"perm-1","agentId":"main","action":"Bash npm test","scope":"default"}
-#016 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_syn_bash2","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"npm test"}
+#016 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_syn_bash2","agentId":"main","taskId":"turn-1","tool":"Bash","category":"test","inputSummary":"npm test","target":"npm"}
 #017 tool.permission_resolved - - inferred public - {"permissionId":"perm-1","decision":"approved","by":"user"}
 #018 tool.call_completed main turn-1 reported public ^16 {"callId":"toolu_syn_bash2","status":"success","durationMs":1400,"outputSummary":"2 tests: 2 passed, 0 failed","metrics":{"tests":2,"passed":2,"failed":0}}
 #019 tool.call_completed sa-a0syntheticexplore1 delegate-1 reported public ^14 {"callId":"toolu_syn_glob1","status":"success","durationMs":6,"outputSummary":"1 file found"}
@@ -23,7 +23,7 @@
 #022 agent.state_changed sa-a0syntheticexplore1 - reported public - {"agentId":"sa-a0syntheticexplore1","state":"done","reason":"Subagent finished"}
 #023 tool.call_completed main turn-1 reported public ^13 {"callId":"toolu_syn_agent1","status":"success","durationMs":2150,"outputSummary":"Explore finished · 1 tool call · 15,000 tokens reported"}
 #024 agent.usage_reported sa-a0syntheticexplore1 - reported public - {"agentId":"sa-a0syntheticexplore1","model":"claude-haiku-5-5","inputTokens":3,"outputTokens":120,"cacheReadTokens":14000,"cacheCreationTokens":877,"totalTokens":15000,"durationMs":2100,"toolUseCount":1,"callId":"toolu_syn_agent1","source":"claude-code.agent_result"}
-#025 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_syn_sleep1","agentId":"main","taskId":"turn-1","tool":"Bash","category":"execute","inputSummary":"sleep 30"}
+#025 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_syn_sleep1","agentId":"main","taskId":"turn-1","tool":"Bash","category":"execute","inputSummary":"sleep 30","target":"sleep"}
 #026 tool.call_failed main turn-1 reported public ^25 {"callId":"toolu_syn_sleep1","errorType":"aborted","message":"Interrupted: The user doesn't want to proceed with this tool use.","durationMs":2480}
 #027 agent.message_sent main - reported sensitive - {"messageId":"msg-3","fromAgentId":"main","to":"user","text":"Mapped the tests; npm test passes (2/2). I stopped the sleep when you interrupted."}
 #028 task.completed - turn-1 reported sensitive - {"taskId":"turn-1","summary":"Mapped the tests; npm test passes (2/2). I stopped the sleep when you interrupted.","artifactIds":[]}

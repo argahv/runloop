@@ -76,6 +76,7 @@ describe('coding mission (real tools, speed 0)', () => {
       seed: M.seed,
       adapter: { ...M.adapter },
       workspace: `workspaces/${runId}`,
+      speed: 0,
     });
     const agents = ofType(events, 'agent.registered').map((e) => e.payload);
     expect(agents.map((a) => [a.agentId, a.name, a.role, a.embodied, a.characterPreset])).toEqual(

@@ -16,6 +16,12 @@
 //   --traced <runId>   traced run to show        (default: the traced run with a failure and the most events)
 //   --executed <runId> executed run to show      (default: the newest executed run)
 //   --reduced-motion   emulate prefers-reduced-motion
+//   --no-pin           never pin a baseline (see below)
+//
+// Experiments: each shown run is compared with another run of the same task (a pinned one,
+// else the newest earlier one). For the pinned-baseline states, when no run is pinned yet the
+// script pins the first pair's baseline through the API and unpins it when it ends; --no-pin
+// skips that (the Experiments states then use whatever pins exist).
 //
 // Output: <out>/<theme>-<width>/<state>.png plus manifest.json (each shot's URL and page errors).
 // Exits 1 if a page threw an uncaught error. Chromium comes from Playwright (PLAYWRIGHT_BROWSERS_PATH).
@@ -73,9 +79,38 @@ for (const [kind, wanted] of [['traced', args.traced], ['executed', args.execute
   if (pick) subjects.push({ kind, runId: pick.runId, failSeq: await firstFailureSeq(pick.runId) });
 }
 
+// Compare pairs (Experiments): each subject (B) against another run of the same task (A).
+const sameTask = (x, y) => x.missionId === y.missionId && (x.source?.projectLabel ?? null) === (y.source?.projectLabel ?? null);
+const pairs = [];
+for (const s of subjects) {
+  const run = runs.find((r) => r.runId === s.runId);
+  const others = runs.filter((r) => r.runId !== s.runId && r.status !== 'running' && sameTask(r, run));
+  const base = others.find((r) => r.pinnedAt) ?? others.find((r) => Date.parse(r.createdAt) < Date.parse(run.createdAt)) ?? others[0];
+  if (base) pairs.push({ kind: s.kind, a: base.runId, b: s.runId });
+}
+
+/** Pin or unpin a run as a baseline (the same JSON write the Studio makes). */
+async function setPinned(runId, pinned) {
+  const res = await fetch(`${api}/api/runs/${encodeURIComponent(runId)}/baseline`, {
+    method: pinned ? 'POST' : 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!res.ok) throw new Error(`${pinned ? 'POST' : 'DELETE'} baseline ${runId}: ${res.status}`);
+}
+
+// The pinned-baseline states need a pin; add one for this capture only (undone at the end).
+let pinnedHere = null;
+if (!args['no-pin'] && pairs.length > 0 && !runs.some((r) => r.pinnedAt)) {
+  await setPinned(pairs[0].a, true);
+  pinnedHere = pairs[0].a;
+  console.log(`Pinned ${pinnedHere} as a baseline for this capture; it is unpinned at the end.`);
+}
+const pinned = pinnedHere ?? runs.find((r) => r.pinnedAt)?.runId ?? null;
+
 // ── states ────────────────────────────────────────────────────────────
 
-/** @typedef {{ name: string, url: string, world?: boolean, desktopOnly?: boolean, apiBase?: string, expectConsoleErrors?: boolean, prepare?: (page: import('playwright').Page) => Promise<void> }} State */
+/** @typedef {{ name: string, url: string, world?: boolean, desktopOnly?: boolean, apiBase?: string, expectConsoleErrors?: boolean, waitFor?: string, prepare?: (page: import('playwright').Page) => Promise<void> }} State */
 /** @type {State[]} */
 const STATES = [
   { name: 'overview', url: '/overview/' },
@@ -100,66 +135,105 @@ for (const s of subjects) {
   );
 }
 
+// Experiments: the default pair (newest pin vs the newest other run of its task), each pair,
+// the lower half of each comparison, an unknown run in the link, and an offline runtime.
+const COMPARED = 'text=First divergence';
+STATES.push(
+  { name: 'experiments', url: '/experiments/', waitFor: pairs.length ? COMPARED : undefined },
+  { name: 'experiments-offline', url: '/experiments/', apiBase: DEAD_RUNTIME, expectConsoleErrors: true },
+);
+for (const p of pairs) {
+  const url = `/experiments/?a=${p.a}&b=${p.b}`;
+  STATES.push(
+    { name: `experiments-${p.kind}`, url, waitFor: COMPARED },
+    { name: `experiments-${p.kind}-details`, url, waitFor: COMPARED, prepare: (pg) => scrollTo(pg, 'cmp-tests') },
+  );
+}
+if (pairs.length) STATES.push({ name: 'experiments-unknown-run', url: `/experiments/?a=00000000-0000-4000-8000-000000000000&b=${pairs[0].b}` });
+// A pinned baseline's own header (the pressed "Baseline" toggle) and a candidate's "Compare" button.
+if (pinned) STATES.push({ name: 'traces-baseline', url: `/traces/?run=${pinned}` });
+
 async function clickTab(page, id) {
   await page.locator(`#trace-tab-${id}`).click({ timeout: 5000 }).catch(() => {});
   await sleep(700);
 }
 
+/** Scroll the page's own scroll container so the element with this id is at the top. */
+async function scrollTo(page, id) {
+  await page.evaluate((target) => document.getElementById(target)?.scrollIntoView({ block: 'start' }), id);
+  await sleep(500);
+}
+
 // ── capture ───────────────────────────────────────────────────────────
 
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const manifest = { studio, api, subjects, createdAt: new Date().toISOString(), shots: [] };
+const manifest = { studio, api, subjects, pairs, pinned, createdAt: new Date().toISOString(), shots: [] };
 let pageErrors = 0;
-
-for (const theme of themes) {
-  for (const width of widths) {
-    const dir = path.join(out, `${theme}-${width}`);
-    fs.mkdirSync(dir, { recursive: true });
-    for (const state of STATES) {
-      if (only && !only.has(state.name)) continue;
-      if (state.desktopOnly && width <= MOBILE_MAX) continue;
-      const context = await browser.newContext({
-        viewport: { width, height: HEIGHT[width] ?? Math.round(width * 0.625) },
-        deviceScaleFactor: 1,
-        colorScheme: theme === 'light' ? 'light' : 'dark',
-        reducedMotion: args['reduced-motion'] ? 'reduce' : 'no-preference',
-      });
-      // Theme and runtime URL come from the viewer's saved preferences.
-      const prefs = { theme, motion: 'system', quality: 'high', apiBase: state.apiBase ?? (api === 'http://127.0.0.1:4380' ? null : api) };
-      await context.addInitScript((p) => {
-        try {
-          window.localStorage.setItem('runloop.prefs.v1', JSON.stringify(p));
-        } catch {}
-      }, prefs);
-      const page = await context.newPage();
-      const errors = [];
-      page.on('pageerror', (e) => errors.push(e.message));
-      page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
-      const file = path.join(dir, `${state.name}.png`);
-      try {
-        await page.goto(`${studio}${state.url}`, { waitUntil: 'load', timeout: 30000 });
-        if (state.world && width > MOBILE_MAX) {
-          await page.waitForSelector('[data-world-ready="true"]', { timeout: 30000 }).catch(() => errors.push('world did not report ready'));
-          await sleep(2500);
-        } else {
-          await sleep(state.apiBase ? 3500 : 1500);
-        }
-        if (state.prepare) await state.prepare(page);
-        await page.screenshot({ path: file });
-      } catch (err) {
-        errors.push(`capture failed: ${err.message}`);
-      }
-      // Offline and 404 states expect failed requests (console errors); uncaught errors always count.
-      const counted = state.expectConsoleErrors ? errors.filter((e) => !e.startsWith('console:')) : errors;
-      pageErrors += errors.filter((e) => !e.startsWith('console:')).length;
-      manifest.shots.push({ theme, width, state: state.name, url: state.url, file: path.relative(out, file), errors: counted });
-      console.log(`${theme} ${String(width).padStart(4)} ${state.name}${counted.length ? `  ! ${counted.join(' | ')}` : ''}`);
-      await context.close();
-    }
+try {
+  await captureAll();
+} finally {
+  if (pinnedHere) {
+    await setPinned(pinnedHere, false).catch((err) => console.error(`Could not unpin ${pinnedHere}: ${err.message}`));
+    console.log(`Unpinned ${pinnedHere}.`);
   }
 }
 
-await browser.close();
+async function captureAll() {
+  const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  for (const theme of themes) {
+    for (const width of widths) {
+      const dir = path.join(out, `${theme}-${width}`);
+      fs.mkdirSync(dir, { recursive: true });
+      for (const state of STATES) {
+        if (only && !only.has(state.name)) continue;
+        if (state.desktopOnly && width <= MOBILE_MAX) continue;
+        const context = await browser.newContext({
+          viewport: { width, height: HEIGHT[width] ?? Math.round(width * 0.625) },
+          deviceScaleFactor: 1,
+          colorScheme: theme === 'light' ? 'light' : 'dark',
+          reducedMotion: args['reduced-motion'] ? 'reduce' : 'no-preference',
+        });
+        // Theme and runtime URL come from the viewer's saved preferences.
+        const prefs = { theme, motion: 'system', quality: 'high', apiBase: state.apiBase ?? (api === 'http://127.0.0.1:4380' ? null : api) };
+        await context.addInitScript((p) => {
+          try {
+            window.localStorage.setItem('runloop.prefs.v1', JSON.stringify(p));
+          } catch {}
+        }, prefs);
+        const page = await context.newPage();
+        const errors = [];
+        page.on('pageerror', (e) => errors.push(e.message));
+        page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
+        const file = path.join(dir, `${state.name}.png`);
+        try {
+          await page.goto(`${studio}${state.url}`, { waitUntil: 'load', timeout: 30000 });
+          if (state.world && width > MOBILE_MAX) {
+            await page.waitForSelector('[data-world-ready="true"]', { timeout: 30000 }).catch(() => errors.push('world did not report ready'));
+            await sleep(2500);
+          } else {
+            await sleep(state.apiBase ? 3500 : 1500);
+          }
+          if (state.waitFor) {
+            await page.waitForSelector(state.waitFor, { timeout: 30000 }).catch(() => errors.push(`${state.waitFor} did not appear`));
+            await sleep(500);
+          }
+          if (state.prepare) await state.prepare(page);
+          await page.screenshot({ path: file });
+        } catch (err) {
+          errors.push(`capture failed: ${err.message}`);
+        }
+        // Offline and 404 states expect failed requests (console errors); uncaught errors always count.
+        const counted = state.expectConsoleErrors ? errors.filter((e) => !e.startsWith('console:')) : errors;
+        pageErrors += errors.filter((e) => !e.startsWith('console:')).length;
+        manifest.shots.push({ theme, width, state: state.name, url: state.url, file: path.relative(out, file), errors: counted });
+        console.log(`${theme} ${String(width).padStart(4)} ${state.name}${counted.length ? `  ! ${counted.join(' | ')}` : ''}`);
+        await context.close();
+      }
+    }
+  }
+
+  await browser.close();
+}
+
 fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify(manifest, null, 2));
 console.log(`\n${manifest.shots.length} screenshots in ${out}`);
 if (pageErrors > 0) {

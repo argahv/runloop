@@ -1,17 +1,24 @@
 import type { CompiledWorld } from '@runloop-world/world-engine';
 import { Vector3 } from 'three';
+import { BACK_WALL_H, ROOM_Y, SLAB_DEPTH, SLAB_MARGIN, toScene } from './layout';
 
 /**
  * Pure camera maths for the orthographic world camera: view directions,
- * fit-to-viewport framing with insets, and the motion-token easing.
+ * fit-to-viewport framing, and the motion-token easing.
  */
 
+/**
+ * Iso view elevation: 30°, the 2:1 dimetric angle of isometric games. It is
+ * flatter than a true isometric view (35°), so the board is wider than it is
+ * tall and fills the Live World stage, which is about twice as wide as it is tall.
+ */
+export const ISO_ELEVATION = (28 * Math.PI) / 180;
 /** View directions (from target towards the camera). Iso looks from the south-east, so north/west walls are at the back. */
-export const ISO_DIR = new Vector3(1, 1.2, 1).normalize();
+export const ISO_DIR = new Vector3(1, Math.SQRT2 * Math.tan(ISO_ELEVATION), 1).normalize();
 export const TOP_DIR = new Vector3(0, 1, 0.002).normalize();
 export const UP = new Vector3(0, 1, 0);
 
-/** Pixels kept clear around the board: floating controls sit on top and bottom, labels rise above. */
+/** Pixels kept clear around a set of points (from the canvas edges). Negative values let points run past an edge. */
 export interface Insets {
   top: number;
   right: number;
@@ -19,8 +26,19 @@ export interface Insets {
   left: number;
 }
 
-/** Room for the stage's glass controls (top), the roster (bottom) and the camera rail (right). */
-export const DEFAULT_INSETS: Insets = { top: 46, right: 58, bottom: 50, left: 24 };
+/**
+ * The slab may run under the stage's glass controls (they float over the
+ * world by design) but never off the canvas.
+ */
+export const SLAB_INSETS: Insets = { top: 8, right: 12, bottom: 4, left: 12 };
+/**
+ * The rooms stay clear of the controls: the toolbars sit in the top corners
+ * (outside the diamond), the camera rail on the right edge, the roster along
+ * the bottom; the top keeps room for the northern environment's sign.
+ */
+export const ROOM_INSETS: Insets = { top: 8, right: 58, bottom: 46, left: 18 };
+/** Seen from above the board is a rectangle whose top corners would sit under the toolbars: keep their band clear. */
+export const TOP_ROOM_INSETS: Insets = { ...ROOM_INSETS, top: 46 };
 
 /** Camera basis for a view direction: screen right and screen up in world space. */
 export function viewBasis(dir: Vector3): { right: Vector3; up: Vector3 } {
@@ -30,13 +48,31 @@ export function viewBasis(dir: Vector3): { right: Vector3; up: Vector3 } {
   return { right, up };
 }
 
-/** The 3D points that must stay in view: the base slab corners, from under the slab to the top of walls and robots. */
-export function boardPoints(world: CompiledWorld): Vector3[] {
-  const hx = world.width / 2 + 0.8;
-  const hz = world.height / 2 + 0.8;
+/** The base slab's corners, top and bottom. */
+export function slabPoints(world: CompiledWorld): Vector3[] {
+  const hx = world.width / 2 + SLAB_MARGIN;
+  const hz = world.height / 2 + SLAB_MARGIN;
   const pts: Vector3[] = [];
-  for (const x of [-hx, hx]) for (const z of [-hz, hz]) for (const y of [-0.7, 2.3]) pts.push(new Vector3(x, y, z));
+  for (const x of [-hx, hx]) for (const z of [-hz, hz]) for (const y of [-SLAB_DEPTH, 0.05]) pts.push(new Vector3(x, y, z));
   return pts;
+}
+
+/** Every room's outer corners, from its floor to the top of its back walls. */
+export function roomPoints(world: CompiledWorld): Vector3[] {
+  const pts: Vector3[] = [];
+  for (const z of world.def.zones) {
+    if (z.kind === 'hub') continue;
+    const [rx, ry, rw, rh] = z.rect;
+    for (const gx of [rx - 0.5, rx + rw - 0.5])
+      for (const gy of [ry - 0.5, ry + rh - 0.5])
+        for (const y of [ROOM_Y, ROOM_Y + BACK_WALL_H]) pts.push(new Vector3(...toScene(world, gx, gy, y)));
+  }
+  return pts;
+}
+
+/** Everything the overview must show: the slab and the rooms. */
+export function boardPoints(world: CompiledWorld): Vector3[] {
+  return [...slabPoints(world), ...roomPoints(world)];
 }
 
 export interface Framing {
@@ -44,40 +80,84 @@ export interface Framing {
   target: Vector3;
 }
 
-/**
- * Zoom and target that show every point inside the canvas minus `insets`,
- * centred in that free area, for an orthographic camera looking along -dir.
- * Works at any aspect ratio; the binding axis decides the zoom.
- */
-export function frameBounds(points: readonly Vector3[], dir: Vector3, width: number, height: number, insets: Insets = DEFAULT_INSETS): Framing {
-  const { right, up } = viewBasis(dir);
-  let r0 = Infinity;
-  let r1 = -Infinity;
-  let u0 = Infinity;
-  let u1 = -Infinity;
-  for (const p of points) {
-    const r = p.dot(right);
-    const u = p.dot(up);
-    r0 = Math.min(r0, r);
-    r1 = Math.max(r1, r);
-    u0 = Math.min(u0, u);
-    u1 = Math.max(u1, u);
-  }
-  // Never let insets eat the whole canvas (tiny panels still show something).
-  const availW = Math.max(width * 0.4, width - insets.left - insets.right);
-  const availH = Math.max(height * 0.4, height - insets.top - insets.bottom);
-  const zoom = Math.max(1, Math.min(availW / Math.max(1e-6, r1 - r0), availH / Math.max(1e-6, u1 - u0)));
-  // Shift so the bounds' centre lands in the middle of the free area (screen y points down).
-  const offX = (insets.left - insets.right) / 2;
-  const offY = (insets.top - insets.bottom) / 2;
-  const tr = (r0 + r1) / 2 - offX / zoom;
-  const tu = (u0 + u1) / 2 + offY / zoom;
-  return { zoom, target: right.multiplyScalar(tr).add(up.multiplyScalar(tu)) };
+/** Points that must stay at least `insets` away from the canvas edges. */
+export interface FrameGroup {
+  points: readonly Vector3[];
+  insets: Insets;
 }
 
-/** Fit the whole board. */
-export function frameBoard(world: CompiledWorld, dir: Vector3, width: number, height: number, insets: Insets = DEFAULT_INSETS): Framing {
-  return frameBounds(boardPoints(world), dir, width, height, insets);
+/**
+ * One screen axis: the largest zoom at which every group fits its own
+ * margins, and the camera offset (along the axis) that centres the groups in
+ * what is left. Screen position = size/2 + (p - t) * zoom; `lo`/`hi` are the
+ * margins at the low and high end of the axis.
+ */
+function fitAxis(groups: { min: number; max: number; lo: number; hi: number }[], size: number): { zoom: number; at: (zoom: number) => number } {
+  let zoom = Infinity;
+  for (const g of groups) {
+    for (const h of groups) {
+      const span = g.max - h.min;
+      if (span <= 1e-6) continue;
+      // Never let margins eat the whole canvas (tiny panels still show something).
+      zoom = Math.min(zoom, Math.max(size * 0.4, size - g.hi - h.lo) / span);
+    }
+  }
+  const at = (z: number) => {
+    let lo = -Infinity;
+    let hi = Infinity;
+    for (const g of groups) {
+      lo = Math.max(lo, g.max - (size / 2 - g.hi) / z);
+      hi = Math.min(hi, g.min + (size / 2 - g.lo) / z);
+    }
+    return (lo + hi) / 2;
+  };
+  return { zoom, at };
+}
+
+/**
+ * Zoom and target that keep every group inside the canvas minus its own
+ * insets, as large as possible, for an orthographic camera looking along
+ * -dir. Works at any aspect ratio; the binding axis decides the zoom.
+ */
+export function frameGroups(groups: readonly FrameGroup[], dir: Vector3, width: number, height: number): Framing {
+  const { right, up } = viewBasis(dir);
+  const xs = [];
+  const ys = [];
+  for (const g of groups) {
+    if (g.points.length === 0) continue;
+    const r = g.points.map((p) => p.dot(right));
+    const u = g.points.map((p) => p.dot(up));
+    xs.push({ min: Math.min(...r), max: Math.max(...r), lo: g.insets.left, hi: g.insets.right });
+    // Screen y points down: the top inset limits the highest point.
+    ys.push({ min: Math.min(...u), max: Math.max(...u), lo: g.insets.bottom, hi: g.insets.top });
+  }
+  const fx = fitAxis(xs, width);
+  const fy = fitAxis(ys, height);
+  const zoom = Math.max(1, Math.min(fx.zoom, fy.zoom, 1e6));
+  return { zoom, target: right.multiplyScalar(fx.at(zoom)).add(up.multiplyScalar(fy.at(zoom))) };
+}
+
+/** Fit a single set of points inside the canvas minus `insets`. */
+export function frameBounds(points: readonly Vector3[], dir: Vector3, width: number, height: number, insets: Insets): Framing {
+  return frameGroups([{ points, insets }], dir, width, height);
+}
+
+/** Room insets for a view direction (the top-down view needs the toolbar band). */
+export function roomInsets(dir: Vector3): Insets {
+  return dir.y > 0.95 ? TOP_ROOM_INSETS : ROOM_INSETS;
+}
+
+/** The overview: the whole slab on the canvas, the rooms clear of the floating controls. */
+export function frameBoard(world: CompiledWorld, dir: Vector3, width: number, height: number): Framing {
+  return frameGroups(
+    [
+      { points: slabPoints(world), insets: SLAB_INSETS },
+      { points: roomPoints(world), insets: roomInsets(dir) },
+    ],
+    dir,
+    width,
+    height,
+  );
 }
 
 /** Screen position (px from the canvas top-left) of a world point for a camera at `target`/`zoom`. */

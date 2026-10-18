@@ -6,11 +6,11 @@
 #005 task.started main turn-1 reported public - {"taskId":"turn-1","agentId":"main"}
 #006 agent.message_sent user - reported sensitive - {"messageId":"msg-1","fromAgentId":"user","to":"main","text":"Write NOTES.md and push the branch."}
 #007 agent.state_changed main - reported public - {"agentId":"main","state":"working","reason":"Prompt received"}
-#008 tool.call_started main turn-1 reported public - {"callId":"toolu_syn_write1","agentId":"main","taskId":"turn-1","tool":"Write","category":"edit","inputSummary":"NOTES.md"}
+#008 tool.call_started main turn-1 reported public - {"callId":"toolu_syn_write1","agentId":"main","taskId":"turn-1","tool":"Write","category":"edit","inputSummary":"NOTES.md","target":"NOTES.md"}
 #009 tool.permission_requested main - reported public - {"permissionId":"perm-1","agentId":"main","callId":"toolu_syn_write1","action":"Write NOTES.md","scope":"default"}
 #010 tool.permission_resolved - - inferred public - {"permissionId":"perm-1","decision":"approved","by":"user"}
 #011 tool.call_completed main turn-1 reported public ^8 {"callId":"toolu_syn_write1","status":"success","durationMs":5,"outputSummary":"Created the file"}
-#012 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_syn_push1","agentId":"main","taskId":"turn-1","tool":"Bash","category":"deploy","inputSummary":"git push origin HEAD"}
+#012 tool.call_started main turn-1 reported sensitive - {"callId":"toolu_syn_push1","agentId":"main","taskId":"turn-1","tool":"Bash","category":"deploy","inputSummary":"git push origin HEAD","target":"git"}
 #013 tool.permission_requested main - reported sensitive - {"permissionId":"perm-2","agentId":"main","callId":"toolu_syn_push1","action":"Bash git push origin HEAD","scope":"default"}
 #014 run.marker main - reported public - {"kind":"compaction","label":"Compaction started (manual)","agentId":"main"}
 #015 run.marker main - reported public - {"kind":"compaction","label":"Compaction finished","detail":"Summary of 35 characters","agentId":"main"}

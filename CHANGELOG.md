@@ -5,6 +5,15 @@ All notable changes to Runloop. The format follows [Keep a Changelog](https://ke
 ## [Unreleased]
 
 ### Added
+- **Run compare (Experiments).** Pin a run as a baseline, run the agent again, compare.
+  - **Experiments page** (`/experiments?a=&b=`): the baseline defaults to the newest pinned run and the candidate to the newest other run of the same task. Six summary tiles (outcome, tests passing, failures, duration, tool calls, tokens), the first divergence, outcome and tests (fixed, newly failing, still failing), files only in A, only in B or in both, tool activity by category, tokens and models per agent, and permissions and delegation. Test runs, failures, files, categories, usage reports and the divergence link to their events in Traces.
+  - **Honesty rules:** a value a side did not report shows "not reported" and is never compared or shown as 0; executed-vs-traced pairs, runs still recording and token totals that cover different agents are flagged; a target or test name one side did not report is unknown, never a difference.
+  - **Baselines:** `POST` / `DELETE /api/runs/:id/baseline` (JSON and Origin guards), stored in `runs.pinned_at` (migration 2), `RunSummary.pinnedAt`. A pin toggle with Undo on the run header and the Overview history; a baseline mark in the sidebar, the history and the run switcher; a "Compare" button on runs that have a baseline; command palette entries.
+  - **Core:** `summarizeRun` and `diffRuns` in `packages/core/src/compare.ts`, pure and unit-tested.
+- **`run.started.speed`** (optional, additive): the scripted demo's pacing, so compare does not call a run at speed 0 "faster" than one at speed 1.
+- **`tool.call_started.target`** (optional, additive): the file of Read/Edit/Write/NotebookEdit, the directory of Grep/Glob, the first word of a shell command (never its arguments); the workspace path or program for the scripted demo's tools.
+- **3D world richness pass (D10):** tighter framing (at 1440×900 the board spans 97% of the stage width and a robot projects to 44 px; at 1920×1080, 81–82%), chibi robots with a dark glass visor and state-coloured eyes, warm key and cool rim light, tinted rooms with shaded floors, paths that light up only while a robot walks them or a recorded message crosses them, and a light-theme "architectural model" look (DL-009).
+- **Screenshots:** `scripts/screenshots.mjs` also captures Experiments (default pair, each run kind's pair and its lower half, an unknown run, offline) and a pinned baseline's Traces header. It pins a baseline for the capture only when none exists, and unpins it afterwards (`--no-pin` to skip).
 - **Claude Code tracer.** The plugin is in `integrations/claude-code-plugin` and the marketplace manifest in `.claude-plugin/marketplace.json`.
   - Hooks are observe-only: async, with Stop, StopFailure and SessionEnd synchronous. They always exit 0 and print nothing.
   - Events are spooled locally before sending, and flushed by later hooks.
@@ -39,6 +48,9 @@ All notable changes to Runloop. The format follows [Keep a Changelog](https://ke
 - **Docs:** `docs/architecture/overview.md`, `docs/architecture/event-model.md` and `docs/status/verification-report.md`.
 
 ### Changed
+- Write guards (JSON content type, allowed Origin) apply to `DELETE` as well as `POST`.
+- Experiments is in the sidebar; the design system lists it as shipped.
+- The Metrics panel shows an executed run's tool calls by category, from Runloop's own tools (the mapping compare uses), instead of "not categorised".
 - The runtime's default port moved from 4317 to **4380**, because 4317 is the OTLP/gRPC port (DL-005). The Studio and the plugin default to 4380.
 - Boot recovery is mode-aware. Traced runs close open calls as `unobserved` (inferred) rather than `runtime_restarted`.
 - Control routes (`stop`, `pause`, `resume`) answer 409 for traced runs.

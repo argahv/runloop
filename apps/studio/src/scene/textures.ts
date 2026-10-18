@@ -1,6 +1,46 @@
-import { BufferAttribute, BufferGeometry, CanvasTexture, Vector3 } from 'three';
+import { BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Float32BufferAttribute, Vector3 } from 'three';
 
 /** Procedural textures and geometry (no external assets). Created lazily, shared, never disposed. */
+
+/**
+ * A unit box (centred, 1 × 1 × 1) whose vertex colour fades from `foot` at
+ * the bottom to 1 at the top: cheap contact shading where walls and the slab
+ * meet the floor (use with `vertexColors`; instance colours multiply it).
+ */
+export function footShadedBox(foot: number): BufferGeometry {
+  const g = new BoxGeometry(1, 1, 1);
+  const pos = g.getAttribute('position');
+  const col: number[] = [];
+  for (let i = 0; i < pos.count; i++) {
+    const k = pos.getY(i) < 0 ? foot : 1;
+    col.push(k, k, k);
+  }
+  g.setAttribute('color', new Float32BufferAttribute(col, 3));
+  return g;
+}
+
+let boardShadow: CanvasTexture | null = null;
+/** A soft rounded-square shadow the board casts on the stage below it. */
+export function boardShadowTexture(): CanvasTexture {
+  if (boardShadow) return boardShadow;
+  const n = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = n;
+  const g = c.getContext('2d')!;
+  const img = g.createImageData(n, n);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      // Distance outside an inner square, normalised: 0 inside, 1 at the edge of the texture.
+      const dx = Math.max(0, Math.abs((x + 0.5) / n - 0.5) * 2 - 0.62) / 0.38;
+      const dy = Math.max(0, Math.abs((y + 0.5) / n - 0.5) * 2 - 0.62) / 0.38;
+      const d = Math.min(1, Math.hypot(dx, dy));
+      img.data[(y * n + x) * 4 + 3] = Math.round(Math.pow(1 - d, 2.2) * 255);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  boardShadow = new CanvasTexture(c);
+  return boardShadow;
+}
 
 let blob: CanvasTexture | null = null;
 /** Soft radial shadow used under characters and machines instead of shadow maps. */

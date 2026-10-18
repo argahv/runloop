@@ -28,6 +28,7 @@ export const AREA_LABEL: Record<string, string> = {
   [ROUTES.overview]: 'Overview',
   [ROUTES.world]: 'Live World',
   [ROUTES.traces]: 'Traces',
+  [ROUTES.experiments]: 'Experiments',
   [ROUTES.integrations]: 'Integrations',
   [ROUTES.settings]: 'Settings',
 };

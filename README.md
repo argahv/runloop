@@ -1,14 +1,14 @@
 # Runloop
 
-A local flight recorder for coding agents. Runloop records every event of an agent run in an append-only log on your machine, shows the run live as a small 3D world with a timeline and an inspector, and replays any moment without executing anything again.
+A local flight recorder for coding agents. Runloop records every event of an agent run in an append-only log on your machine, shows the run live as a small 3D world with a timeline and an inspector, replays any moment without executing anything again, and compares two runs to show what a change to your setup did.
 
-![A live Claude Code session in Runloop Studio: the main agent and two Explore subagents as robots, the timeline and the run's provenance](docs/assets/claude-code-live.png)
+![A real Claude Code session in Runloop Studio: the main agent and two Explore subagents as robots at work, the timeline and the run's provenance](docs/assets/claude-code-session.png)
 
 **Status: prototype.** It records two sources today:
 - **Claude Code sessions**, traced through a plugin. Runloop records what Claude Code reports and never runs or approves anything itself.
 - **A scripted demo mission**, executed by Runloop's own runtime with real tools.
 
-Run comparison (baselines and diffs) is the next milestone; see [TASKS.md](TASKS.md).
+Any two runs can be compared: pin one as a baseline, run your agent again, and **Experiments** shows what differed, with links to the events behind it. See [TASKS.md](TASKS.md) for what is next.
 
 ## Quickstart
 
@@ -20,6 +20,8 @@ pnpm dev     # runtime API on http://127.0.0.1:4380, Studio on http://localhost:
 ```
 
 Open http://localhost:3000 and click **Run demo mission**. Three scripted agents survey a small repo, implement a task store and run its test suite. The first test run really fails (10 passed, 2 failed). The Builder then patches the bug, and the rerun passes 12/12. Click a timeline row or a robot to inspect its events. Drag the replay bar to see any earlier moment.
+
+Then try compare: click **Pin as baseline** in the run header, run the demo mission again, and open **Experiments**. The demo is deterministic, so two demo runs make the same calls with the same results and differ only in timing; compare is meant for your own agent's runs (next section).
 
 Runs are stored in `.runloop/` at the repo root (set `RUNLOOP_DATA_DIR` to use another directory). They survive runtime restarts and replay from the log.
 
@@ -48,11 +50,21 @@ Use Claude Code as usual. The session appears in Studio live, with:
 
 To check the setup, run `node integrations/claude-code-plugin/scripts/runloop-hook.mjs --doctor`. It prints the runtime URL, the token file, whether the runtime answers, the spool and the last error.
 
-| Claude Code session | Failing test as an incident | Network view (2D) |
-|---|---|---|
-| ![Live session](docs/assets/claude-code-live.png) | ![Incident and inspector](docs/assets/claude-code-failure.png) | ![Agent graph](docs/assets/claude-code-network.png) |
+### Compare two sessions
 
-These screenshots come from a real `claude -p` session (Haiku) traced end to end; see the [verification report](docs/status/verification-report.md).
+1. Run a task with Claude Code and click **Pin as baseline** on that run (the run header, or the run history on Overview).
+2. Change one thing (CLAUDE.md, a skill, a subagent, a hook, the model) and run the same task again.
+3. Open **Experiments** (or **Compare** in the new run's header). The baseline defaults to your newest pin and the candidate to the newest other run of the same project.
+
+Experiments shows the outcome, the latest test results (fixed, newly failing, still failing), the files each run read or edited, tool calls by category, tokens and models per agent as reported, permission requests, turns and subagents, and the **first divergence**: the first tool call where the two runs went different ways. The test runs, failures, files, categories, usage reports and the divergence link to their events in Traces. A value one run did not report shows as *not reported* and is never compared; so does a token total that covers different agents in each run.
+
+| Claude Code session | Failing test as an incident |
+|---|---|
+| ![A recorded session: Claude and two Explore subagents at work](docs/assets/claude-code-session.png) | ![The failing test run as an incident, with the inspector](docs/assets/claude-code-failure.png) |
+| **Network view (2D)** | **Experiments: two real sessions compared** |
+| ![Agent graph with delegation edges](docs/assets/claude-code-network.png) | ![Experiments comparing two real Claude Code sessions](docs/assets/experiments-compare.png) |
+
+These screenshots show real `claude -p` sessions (Haiku, 2026-10-17) traced end to end and opened in the current Studio; see the [verification report](docs/status/verification-report.md).
 
 **What is collected.** The plugin sends these to the local runtime only:
 - the session id;
@@ -102,9 +114,9 @@ Live view and replay fold the same events through the same reducers, so they alw
 ## Repository layout
 
 ```
-apps/studio                    Next.js Studio: Overview, Live World (3D + Network), Traces, Integrations, Settings
+apps/studio                    Next.js Studio: Overview, Live World (3D + Network), Traces, Experiments, Integrations, Settings
 packages/events                event schema, parsing, redaction, SequenceBuffer, HTTP/SSE and ingest contract
-packages/core                  layer 1: execution reducer, selectors, text formatting
+packages/core                  layer 1: execution reducer, selectors, text formatting, run compare (summarizeRun, diffRuns)
 packages/world-engine          layer 2: world definition, grid paths, motion, character intents
 packages/replay                combined reducer and ReplayIndex (state at any sequence or time)
 packages/runtime               local runtime: SQLite recorder, tool sandbox, run manager, Claude Code ingest, HTTP + SSE API, CLI

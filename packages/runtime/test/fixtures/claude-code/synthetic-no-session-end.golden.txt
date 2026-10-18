@@ -15,7 +15,7 @@
 #014 task.started main turn-2 reported public - {"taskId":"turn-2","agentId":"main"}
 #015 agent.message_sent user - reported sensitive - {"messageId":"msg-2","fromAgentId":"user","to":"main","text":"Try again and run the slow test suite."}
 #016 agent.state_changed main - reported public - {"agentId":"main","state":"working","reason":"Prompt received"}
-#017 tool.call_started main turn-2 reported sensitive - {"callId":"toolu_syn_slow1","agentId":"main","taskId":"turn-2","tool":"Bash","category":"test","inputSummary":"API_TOKEN=[REDACTED] npm test -- --runInBand"}
+#017 tool.call_started main turn-2 reported sensitive - {"callId":"toolu_syn_slow1","agentId":"main","taskId":"turn-2","tool":"Bash","category":"test","inputSummary":"API_TOKEN=[REDACTED] npm test -- --runInBand","target":"npm"}
 #018 tool.call_failed main turn-2 inferred public ^17 {"callId":"toolu_syn_slow1","errorType":"unobserved","message":"No events from Claude Code for 120 min; result not reported (inferred)","durationMs":0}
 #019 task.completed - turn-2 inferred public - {"taskId":"turn-2","summary":"Closed without a reported end (inferred)","artifactIds":[]}
 #020 agent.state_changed main - inferred public - {"agentId":"main","state":"idle","reason":"Session closed"}

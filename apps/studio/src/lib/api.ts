@@ -1,5 +1,6 @@
 import {
   apiPaths,
+  type BaselineResponse,
   type EventsPageResponse,
   type HealthResponse,
   type ListRunsResponse,
@@ -72,6 +73,16 @@ export function stopRun(runId: string): Promise<{ run: RunSummary }> {
     headers: { 'Content-Type': 'application/json' },
     body: '{}',
   });
+}
+
+/** Pin (true) or unpin (false) a run as a baseline; returns the updated run summary. */
+export async function setBaseline(runId: string, pinned: boolean): Promise<RunSummary> {
+  const res = await request<BaselineResponse>(apiPaths.baseline(runId), {
+    method: pinned ? 'POST' : 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  return res.run;
 }
 
 export function startRun(missionId: string): Promise<StartRunResponse> {

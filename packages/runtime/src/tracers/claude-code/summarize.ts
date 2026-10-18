@@ -200,6 +200,60 @@ export function inputSummary(tool: string, input: Record<string, unknown>, cwd: 
   return oneLine(sanitizeText(text, cwd), INPUT_SUMMARY_MAX);
 }
 
+// ── targets ────────────────────────────────────────────────────────────
+
+export const TARGET_MAX = 300;
+
+/** Leading `NAME=value` assignments (their values may be secrets) and wrappers that do not name the command. */
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const WRAPPERS = new Set(['sudo', 'env', 'time', 'nice', 'nohup', 'command', 'exec']);
+
+/**
+ * A shell command's head: its first word after env assignments and wrappers,
+ * as a base name (`./node_modules/.bin/vitest run` → `vitest`). Never the
+ * arguments, so no secret can reach it. Undefined when there is none.
+ */
+export function commandHead(command: string): string | undefined {
+  for (const word of command.trim().split(/\s+/)) {
+    if (word === '' || ENV_ASSIGNMENT.test(word) || WRAPPERS.has(word)) continue;
+    const head = word.replace(/^["'(]+|["';|&)]+$/g, '').split('/').filter(Boolean).at(-1);
+    return head && /^[\w.@+-]+$/.test(head) ? head.slice(0, 100) : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * What a call acts on (tool.call_started `target`), when the input names it:
+ * the file for Read/Edit/Write/NotebookEdit, the directory for Grep/Glob, the
+ * command head for shell tools. Paths are made project-relative like the
+ * input summary. Undefined = not reported (no guessing from free text).
+ */
+export function toolTarget(tool: string, input: Record<string, unknown>, cwd: string | null): string | undefined {
+  const path = (key: string) => {
+    const p = str(input, key);
+    return p ? oneLine(sanitizeText(relPath(p, cwd), cwd), TARGET_MAX) || undefined : undefined;
+  };
+  switch (tool) {
+    case 'Read':
+    case 'Edit':
+    case 'Write':
+      return path('file_path');
+    case 'NotebookEdit':
+      return path('notebook_path');
+    case 'Grep':
+    case 'Glob':
+      return path('path');
+    case 'Bash':
+    case 'PowerShell':
+    case 'Monitor': {
+      const command = str(input, 'command');
+      return command ? commandHead(command) : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
 // ── test results ───────────────────────────────────────────────────────
 
 // eslint-disable-next-line no-control-regex

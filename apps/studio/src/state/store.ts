@@ -132,6 +132,8 @@ export interface StudioState {
   // ── actions ──────────────────────────────────────────────────────
   setRuntime(r: Partial<StudioState['runtime']>): void;
   setRuns(runs: RunSummary[]): void;
+  /** Replace one run's summary (e.g. after pinning it) in the list and, if it is open, in `run`. */
+  updateRun(run: RunSummary): void;
   /** Forget the current run and start loading `runId` (null = nothing open). */
   openRun(runId: string | null): void;
   loadRun(detail: RunDetailResponse): void;
@@ -421,6 +423,12 @@ export function createStudioStore(opts: StudioStoreOptions = {}): StudioStore {
       const ended = s.ended || (mine !== undefined && TERMINAL.has(mine.status) && s.lastSequence >= mine.lastSequence);
       set({ runs, ...(mine ? { run: mine, ended } : {}) });
     },
+
+    updateRun: (run) =>
+      set((s) => ({
+        runs: s.runs.some((r) => r.runId === run.runId) ? s.runs.map((r) => (r.runId === run.runId ? run : r)) : s.runs,
+        ...(s.runId === run.runId ? { run } : {}),
+      })),
 
     openRun: (runId) => {
       resetInternals();

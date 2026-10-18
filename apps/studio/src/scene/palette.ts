@@ -89,29 +89,40 @@ export interface SceneLights {
   hemiSky: string;
   hemiGround: string;
   hemi: number;
+  /** Warm key light from the south-west, high: lights tops and south faces (the left side on screen). */
   key: number;
   keyColor: string;
-  fill: number;
-  fillColor: string;
+  /** Cool rim from the north-east, low: east faces (the right side on screen) and top edges. */
+  rim: number;
+  rimColor: string;
+  /** Image-based reflections for glossy shells and glass. */
   env: number;
 }
 
 export interface ScenePalette {
   theme: SceneTheme;
   tokens: SceneTokens;
-  /** Board base slab. */
+  /** Board base slab (top shows as the grout between tiles and the margin). */
   slabTop: string;
   slabSide: string;
   /** Hairline around the slab (tonal, not emissive). */
   slabEdge: string;
+  /** Soft shadow the board casts on the stage (opacity; 0 = none). */
+  boardShadow: number;
   /** Corridor and room floors (rooms are tinted per zone, see zoneFloor). */
   corridor: string;
   room: string;
+  /** How far floor tiles vary in tone (0–1). */
+  tileVariation: number;
+  /** Contact darkening of floor tiles next to walls and machines (0–1). */
+  occlusion: number;
   wall: string;
   wallCap: string;
   curb: string;
-  /** Path inlays in the corridor floor. */
-  inlay: string;
+  /** Shade at the foot of walls and the slab (vertex gradient; 1 = none). */
+  wallFoot: number;
+  /** Walkways between the Atrium and each environment, at rest. */
+  path: string;
   metal: string;
   metalDark: string;
   metalLight: string;
@@ -119,7 +130,10 @@ export interface ScenePalette {
   screenOff: string;
   robotShell: string;
   robotJoint: string;
+  /** The robots' visor: dark glass in both themes, so the eyes always read as light. */
   visor: string;
+  /** Eye colours on the dark visor (the dark-theme semantic values, which are made for dark surfaces). */
+  eyes: { idle: string; active: string; success: string; warning: string; failure: string; off: string };
   /** Active execution only: working agent ring, running station. */
   active: string;
   success: string;
@@ -155,71 +169,28 @@ export function desaturate(c: string, f: number): string {
   return `#${col.getHexString()}`;
 }
 
-/** Build the scene palette from tokens. Pure: the theme follows the canvas token's lightness. */
+const VISOR_EYES = (t: SceneTokens) => ({
+  idle: DARK_TOKENS.ice,
+  active: DARK_TOKENS.lime,
+  success: DARK_TOKENS.success,
+  warning: DARK_TOKENS.warning,
+  failure: DARK_TOKENS.failure,
+  off: mixHex(DARK_TOKENS.muted, t.obsidian, 0.1),
+});
+
+/**
+ * Build the scene palette from tokens. Pure: the theme follows the canvas
+ * token's lightness. Dark: an obsidian diorama under a warm key and a cool
+ * rim. Light: the same model in pale, matte materials (an architectural
+ * maquette), so it belongs to the light interface instead of sitting in it
+ * as a dark box.
+ */
 export function buildPalette(t: SceneTokens): ScenePalette {
   const light = luminance(t.obsidian) > 0.5;
-  if (light) {
-    return {
-      theme: 'light',
-      tokens: t,
-      slabTop: mixHex(t.obsidian, t.slateHi, 0.35),
-      slabSide: mixHex(t.slateHi, t.muted, 0.35),
-      slabEdge: mixHex(t.slateHi, t.muted, 0.2),
-      corridor: mixHex(t.graphite, t.slate, 0.35),
-      room: t.graphite,
-      wall: t.slateHi,
-      wallCap: mixHex(t.graphite, t.slate, 0.2),
-      curb: t.slate,
-      inlay: mixHex(t.obsidian, t.slateHi, 0.9),
-      metal: mixHex(t.slateHi, t.muted, 0.28),
-      metalDark: mixHex(t.slateHi, t.muted, 0.55),
-      metalLight: mixHex(t.graphite, t.slate, 0.6),
-      screenOff: mixHex(t.ice, t.muted, 0.25),
-      robotShell: mixHex(t.slate, t.slateHi, 0.5),
-      robotJoint: mixHex(t.slateHi, t.muted, 0.65),
-      visor: t.ice,
-      active: t.lime,
-      success: t.success,
-      warning: t.warning,
-      failure: t.failure,
-      muted: t.muted,
-      ice: t.ice,
-      identity: t.identity,
-      identityNeutral: t.identityNeutral,
-      // Tuned so top faces render close to their token colour and sides fall off (no tone mapping).
-      lights: {
-        ambient: 0.9,
-        hemiSky: '#ffffff',
-        hemiGround: mixHex(t.slateHi, t.muted, 0.5),
-        hemi: 0.8,
-        key: 1.6,
-        keyColor: '#ffffff',
-        fill: 0.3,
-        fillColor: '#eef1f6',
-        env: 0.25,
-      },
-      glow: false,
-    };
-  }
-  return {
-    theme: 'dark',
+  const shared = {
     tokens: t,
-    slabTop: mixHex(t.obsidian, t.graphite, 0.3),
-    slabSide: mixHex(t.worldBg, '#000000', 0.25),
-    slabEdge: mixHex(t.slateHi, t.ice, 0.12),
-    corridor: t.graphite,
-    room: mixHex(t.graphite, t.slate, 0.3),
-    wall: t.slate,
-    wallCap: mixHex(t.slateHi, t.ice, 0.1),
-    curb: mixHex(t.slate, t.graphite, 0.3),
-    inlay: mixHex(t.graphite, t.slateHi, 0.75),
-    metal: t.slateHi,
-    metalDark: mixHex(t.slate, t.obsidian, 0.35),
-    metalLight: mixHex(t.slateHi, t.muted, 0.35),
-    screenOff: mixHex(t.obsidian, t.slate, 0.4),
-    robotShell: mixHex(t.ice, t.muted, 0.08),
-    robotJoint: mixHex(t.muted, t.slate, 0.35),
-    visor: t.obsidian,
+    visor: mixHex(DARK_TOKENS.obsidian, '#000000', 0.2),
+    eyes: VISOR_EYES(t),
     active: t.lime,
     success: t.success,
     warning: t.warning,
@@ -228,16 +199,79 @@ export function buildPalette(t: SceneTokens): ScenePalette {
     ice: t.ice,
     identity: t.identity,
     identityNeutral: t.identityNeutral,
+  };
+  if (light) {
+    return {
+      ...shared,
+      theme: 'light',
+      // A white maquette on a pale grey plinth: floors a step darker than the walls, so the walls and robots stand out.
+      slabTop: mixHex(t.slateHi, t.muted, 0.18),
+      slabSide: mixHex(t.slateHi, t.muted, 0.3),
+      slabEdge: t.graphite,
+      boardShadow: 0.22,
+      corridor: mixHex(t.obsidian, t.slateHi, 0.55),
+      room: mixHex(t.obsidian, t.slate, 0.3),
+      tileVariation: 0.45,
+      occlusion: 0.16,
+      wall: t.graphite,
+      wallCap: t.graphite,
+      curb: mixHex(t.graphite, t.obsidian, 0.5),
+      wallFoot: 0.78,
+      path: mixHex(t.slateHi, t.muted, 0.35),
+      metal: mixHex(t.slate, t.slateHi, 0.6),
+      metalDark: mixHex(t.slateHi, t.muted, 0.45),
+      metalLight: t.graphite,
+      screenOff: mixHex(t.ice, t.muted, 0.35),
+      robotShell: t.graphite,
+      robotJoint: mixHex(t.slateHi, t.muted, 0.6),
+      // Lit like a white model on a desk, with the same warm/cool split as the dark scene.
+      lights: {
+        ambient: 0.4,
+        hemiSky: '#ffffff',
+        hemiGround: mixHex(t.slateHi, t.muted, 0.5),
+        hemi: 0.85,
+        key: 1.75,
+        keyColor: '#fff0dc',
+        rim: 0.9,
+        rimColor: '#cfdcff',
+        env: 0.35,
+      },
+      glow: false,
+    };
+  }
+  return {
+    ...shared,
+    theme: 'dark',
+    // Obsidian corridors, so the tinted rooms read as lit spaces.
+    slabTop: mixHex(t.worldBg, t.obsidian, 0.5),
+    slabSide: mixHex(t.graphite, t.slate, 0.35),
+    slabEdge: mixHex(t.slateHi, t.ice, 0.18),
+    boardShadow: 0,
+    corridor: mixHex(t.graphite, t.obsidian, 0.45),
+    room: mixHex(t.graphite, t.slate, 0.6),
+    tileVariation: 0.6,
+    occlusion: 0.32,
+    wall: mixHex(t.slate, t.slateHi, 0.5),
+    wallCap: mixHex(t.slateHi, t.ice, 0.06),
+    curb: mixHex(t.slate, t.graphite, 0.2),
+    wallFoot: 0.45,
+    path: mixHex(t.slate, t.muted, 0.18),
+    metal: t.slateHi,
+    metalDark: mixHex(t.slate, t.obsidian, 0.35),
+    metalLight: mixHex(t.slateHi, t.muted, 0.35),
+    screenOff: mixHex(t.obsidian, t.slate, 0.4),
+    robotShell: mixHex(t.ice, '#ffffff', 0.3),
+    robotJoint: mixHex(t.muted, t.slate, 0.45),
     lights: {
-      ambient: 0.75,
-      hemiSky: '#dfe5ee',
-      hemiGround: t.obsidian,
-      hemi: 0.85,
-      key: 2.4,
-      keyColor: '#fff8ef',
-      fill: 0.7,
-      fillColor: '#c9d3e3',
-      env: 0.45,
+      ambient: 0.15,
+      hemiSky: '#a3b4d4',
+      hemiGround: '#1a140e',
+      hemi: 0.8,
+      key: 3.3,
+      keyColor: '#ffd3a3',
+      rim: 2.0,
+      rimColor: '#86a9ff',
+      env: 0.5,
     },
     glow: true,
   };
@@ -245,17 +279,31 @@ export function buildPalette(t: SceneTokens): ScenePalette {
 
 /** Room floor colour: the zone's colour, desaturated, as a quiet tint of the floor. */
 export function zoneFloor(p: ScenePalette, zoneColor: string): string {
-  return mixHex(p.room, desaturate(zoneColor, 0.35), p.theme === 'light' ? 0.16 : 0.11);
+  return mixHex(p.room, desaturate(zoneColor, 0.45), p.theme === 'light' ? 0.34 : 0.24);
 }
 
-/** Wall tops: the wall colour with a trace of the room's tint. */
+/** Wall faces: the wall colour with a trace of the room's tint. */
+export function zoneWall(p: ScenePalette, zoneColor: string): string {
+  return mixHex(p.wall, desaturate(zoneColor, 0.4), p.theme === 'light' ? 0.12 : 0.12);
+}
+
+/** Wall tops: the cap colour with more of the room's tint. */
 export function zoneCap(p: ScenePalette, zoneColor: string): string {
-  return mixHex(p.wallCap, desaturate(zoneColor, 0.4), p.theme === 'light' ? 0.3 : 0.14);
+  return mixHex(p.wallCap, desaturate(zoneColor, 0.45), p.theme === 'light' ? 0.42 : 0.22);
 }
 
-/** Small accents in a zone's colour (wall caps, pad outlines, signs): desaturated, never emissive. */
+/** Small accents in a zone's colour (pad outlines, signs): desaturated, never emissive. */
 export function zoneAccent(p: ScenePalette, zoneColor: string): string {
-  return mixHex(p.wallCap, desaturate(zoneColor, 0.45), p.theme === 'light' ? 0.5 : 0.3);
+  return mixHex(p.wallCap, desaturate(zoneColor, 0.55), p.theme === 'light' ? 0.6 : 0.42);
+}
+
+/**
+ * A station screen at rest: dim glass in its environment's tint (it carries
+ * no state, so it never glows past 1.0 and never blooms).
+ */
+export function zoneScreen(p: ScenePalette, zoneColor: string, lit: number): string {
+  const tint = desaturate(zoneColor, 0.6);
+  return p.theme === 'light' ? mixHex(mixHex(p.screenOff, '#ffffff', 0.4), tint, 0.25 + 0.2 * lit) : mixHex(p.screenOff, tint, 0.3 + 0.25 * lit);
 }
 
 /**

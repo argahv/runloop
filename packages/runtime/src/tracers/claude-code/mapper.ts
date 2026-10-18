@@ -50,6 +50,7 @@ import {
   splitExitCode,
   successSummary,
   toolCategory,
+  toolTarget,
 } from './summarize';
 
 export interface MapContext {
@@ -531,10 +532,19 @@ class Step {
       }
     }
     this.s.calls[callId] = call;
+    const target = toolTarget(tool, input, this.cwd);
     this.emit(
       {
         type: 'tool.call_started',
-        payload: { callId, agentId, ...(taskId ? { taskId } : {}), tool, category, inputSummary: inputSummary(tool, input, this.cwd) },
+        payload: {
+          callId,
+          agentId,
+          ...(taskId ? { taskId } : {}),
+          tool,
+          category,
+          inputSummary: inputSummary(tool, input, this.cwd),
+          ...(target ? { target } : {}),
+        },
         // Commands can carry credentials the redaction patterns do not know.
         ...(isShellTool(tool) ? { visibility: 'sensitive' as const } : {}),
       },

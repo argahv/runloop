@@ -1,6 +1,6 @@
 # Event model
 
-> Updated 2026-10-17. Source of truth: `packages/events/src/{envelope,payloads,event,parse,redact}.ts`. Schema version **1**, 21 event types.
+> Updated 2026-10-18 (`target` on `tool.call_started`, `speed` on `run.started`). Source of truth: `packages/events/src/{envelope,payloads,event,parse,redact}.ts`. Schema version **1**, 21 event types.
 
 A run is an ordered list of events. Every view in Runloop is a fold over that list: execution state (`packages/core`), the world (`packages/world-engine`), and replay at any sequence (`packages/replay`).
 
@@ -51,7 +51,7 @@ Required fields are plain; optional fields end in `?`.
 
 | Type | Payload | Notes |
 |---|---|---|
-| `run.started` | `title`, `missionId`, `worldId`, `adapter {id, kind: scripted\|llm\|external, label}`, `seed?`, `workspace?`, `mode?: executed\|traced`, `source?` | Always sequence 1. `mode: traced` ⇔ `source` present ⇔ `adapter.kind: external`. Executed runs need `seed` and `workspace` (relative to the data dir). |
+| `run.started` | `title`, `missionId`, `worldId`, `adapter {id, kind: scripted\|llm\|external, label}`, `seed?`, `workspace?`, `speed?`, `mode?: executed\|traced`, `source?` | Always sequence 1. `mode: traced` ⇔ `source` present ⇔ `adapter.kind: external`. Executed runs need `seed` and `workspace` (relative to the data dir). `speed` (executed runs, added 2026-10-18) is the scripted adapter's pacing multiplier (1 normal, 0 no delays); compare does not judge durations of runs at different paces. |
 | `run.paused` | `reason?` | Executed runs only |
 | `run.resumed` | — | Executed runs only |
 | `run.completed` | `outcome: succeeded\|failed\|stopped\|interrupted`, `summary?` | Terminal. A Claude Code session that ends normally is `stopped` (shown as "ended"). Boot recovery and the idle sweep give `interrupted`. |
@@ -83,11 +83,24 @@ Required fields are plain; optional fields end in `?`.
 
 | Type | Payload | Notes |
 |---|---|---|
-| `tool.call_started` | `callId`, `agentId`, `taskId?`, `tool`, `category?`, `inputSummary` | `category`: `read`, `search`, `web`, `edit`, `execute`, `test`, `deploy`, `mcp`, `delegate`, `plan`, `other`. The world places robots by category. |
+| `tool.call_started` | `callId`, `agentId`, `taskId?`, `tool`, `category?`, `inputSummary`, `target?` | `category`: `read`, `search`, `web`, `edit`, `execute`, `test`, `deploy`, `mcp`, `delegate`, `plan`, `other`. The world places robots by category. `target` (1–300 chars) is what the call acts on, when the source names it; see below. |
 | `tool.call_completed` | `callId`, `status: success\|error`, `durationMs`, `exitCode?`, `outputSummary`, `metrics? {tests, passed, failed}`, `failingTests?[]`, `outputArtifactIds?[]`, `errorType?` | **The tool ran.** A failing test run is `status: error` with its real counts. Traced failures carry `errorType: exit_nonzero` (with `exitCode`) or `tool_error`. |
 | `tool.call_failed` | `callId`, `errorType`, `message`, `durationMs` | **The tool could not run, or its end was never observed.** `errorType`: `timeout`, `denied`, `aborted`, `spawn_error`, `exception`, `runtime_restarted`, `unobserved` (traced: Runloop closed it, inferred). |
 | `tool.permission_requested` | `permissionId`, `agentId`, `callId?`, `action`, `scope` | |
 | `tool.permission_resolved` | `permissionId`, `decision: approved\|denied`, `by` | Claude Code reports no denial in default mode, so denials are inferred with `by: 'unknown'` |
+
+**`target`** (added 2026-10-18, additive; DL-008). Run compare reads it for "files touched" and the first divergence. It is never guessed from free text, and absent means *not reported*.
+
+| Source | Tools | `target` |
+|---|---|---|
+| Claude Code | `Read`, `Edit`, `Write` | `file_path`, made relative to the project like the input summary |
+| Claude Code | `NotebookEdit` | `notebook_path` |
+| Claude Code | `Grep`, `Glob` | `path` (the directory searched), when given |
+| Claude Code | `Bash`, `PowerShell`, `Monitor` | The command's first word as a base name, after `NAME=value` assignments and wrappers such as `sudo`, `env` or `time` (`./node_modules/.bin/vitest run` → `vitest`). Never the arguments, so no secret can reach it. |
+| Scripted demo (executed) | `read_file`, `write_file`, `list_files` | The workspace-relative path |
+| Scripted demo (executed) | `run_command` | The program's base name (`node`) |
+
+Logs recorded before 2026-10-18 have no `target`. Compare treats a missing target as unknown, never as different, and says the file lists are incomplete.
 
 ### Artifacts
 
@@ -117,7 +130,7 @@ Required fields are plain; optional fields end in `?`.
 |---|---|
 | SessionStart | None (pending state). A later start on an open run gives `run.marker` (`session_resumed`, `compaction` or `other`). |
 | UserPromptSubmit | First event of a run: `run.started`, `agent.registered` for `user` and `main`. Then `task.created {turn-n, kind: turn}`, `task.started`, `agent.message_sent user→main`, `agent.state_changed working`. |
-| PreToolUse | `tool.call_started` with `category`. Main with no open turn gets an implicit turn (inferred). |
+| PreToolUse | `tool.call_started` with `category` and, when the input names it, `target`. Main with no open turn gets an implicit turn (inferred). |
 | PostToolUse / PostToolUseFailure | `tool.call_completed`, `success` or `error`, with exit code and test counts parsed from the output tail. A result without a start first synthesises the start (inferred). `Agent` results also give `agent.usage_reported` for the subagent. |
 | PermissionRequest | `tool.permission_requested`, matched to the open call by agent, tool and input hash (inferred link) |
 | PermissionDenied (auto mode) | `tool.permission_resolved denied`, then `tool.call_failed denied` |

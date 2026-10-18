@@ -8,7 +8,9 @@ import { isRunPage } from '../state/format';
 import { selectRun } from '../state/hooks';
 import { isTracedRun, runSourceLabel, shortId } from '../state/runs';
 import { runStatusView } from '../state/view';
+import { baselineFor, compareHref, isPinned } from '../state/baselines';
 import { toast } from '../ui/Toast';
+import { usePinToggle } from './Baseline';
 import { useStartDemo } from './useStartDemo';
 
 /** Everything the ⌘K palette can do, built from the current state. */
@@ -25,6 +27,7 @@ export function useStudioCommands(pathname: string): Command[] {
   const worldView = useStudio((s) => s.worldView);
   const follow = useStudio((s) => s.follow);
   const demo = useStartDemo();
+  const pin = usePinToggle();
 
   return useMemo(() => {
     const s = () => store.getState();
@@ -35,6 +38,7 @@ export function useStudioCommands(pathname: string): Command[] {
       [ROUTES.overview, 'Overview', 'home health runs'],
       [ROUTES.world, 'Live World', '3d world agents watch'],
       [ROUTES.traces, 'Traces', 'timeline logs inspect search filter'],
+      [ROUTES.experiments, 'Experiments', 'compare diff baseline pin runs a/b'],
       [ROUTES.integrations, 'Integrations', 'claude code plugin connect install'],
       [ROUTES.settings, 'Settings', 'theme motion quality runtime url privacy shortcuts'],
     ];
@@ -90,6 +94,30 @@ export function useStudioCommands(pathname: string): Command[] {
             if (!isRunPage(pathname)) go(ROUTES.traces);
           },
         },
+        ...(() => {
+          const open = runs.find((r) => r.runId === runId);
+          if (!open) return [];
+          const base = baselineFor(runs, runId);
+          const out: Command[] = [
+            {
+              id: 'pin',
+              group: 'Actions',
+              label: isPinned(open) ? 'Unpin this run as a baseline' : 'Pin this run as a baseline',
+              keywords: 'baseline compare experiments pin unpin',
+              run: () => void pin.toggle(open),
+            },
+          ];
+          if (base) {
+            out.push({
+              id: 'compare',
+              group: 'Actions',
+              label: 'Compare this run with the baseline',
+              keywords: `experiments diff ${base.title}`,
+              run: () => go(compareHref({ a: base.runId, b: runId })),
+            });
+          }
+          return out;
+        })(),
         {
           id: 'copy-link',
           group: 'Actions',
@@ -141,5 +169,5 @@ export function useStudioCommands(pathname: string): Command[] {
       });
     });
     return cmds;
-  }, [store, router, pathname, runs, runId, lastSequence, themePref, motionPref, quality, cameraMode, worldView, follow, demo]);
+  }, [store, router, pathname, runs, runId, lastSequence, themePref, motionPref, quality, cameraMode, worldView, follow, demo, pin]);
 }

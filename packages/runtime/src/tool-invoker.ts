@@ -68,6 +68,22 @@ export function describeInput(call: ToolCall): string {
 }
 
 /**
+ * What a call acts on (tool.call_started `target`): the workspace-relative
+ * path for the file tools, the program's base name for run_command.
+ */
+export function targetOf(call: ToolCall): string {
+  switch (call.tool) {
+    case 'list_files':
+      return path.posix.normalize((call.path ?? '.').split(path.sep).join('/'));
+    case 'read_file':
+    case 'write_file':
+      return path.posix.normalize(call.path.split(path.sep).join('/'));
+    case 'run_command':
+      return path.basename(call.argv[0] ?? '') || 'command';
+  }
+}
+
+/**
  * Runs tools inside one run's workspace and records them. Every
  * tool.call_started gets exactly one terminal event (completed or failed),
  * linked to it by parentEventId, with any artifact.created events in between.
@@ -88,7 +104,7 @@ export class ToolInvoker {
     const callId = `call-${++this.callN}`;
     const started = recorder.append(runId, {
       type: 'tool.call_started',
-      payload: { callId, agentId, taskId, tool: call.tool, inputSummary: this.scrubPaths(describeInput(call)) },
+      payload: { callId, agentId, taskId, tool: call.tool, inputSummary: this.scrubPaths(describeInput(call)), target: this.scrubPaths(targetOf(call)).slice(0, 300) },
     });
     const link = { actorId: agentId, taskId, parentEventId: started.eventId };
     const t0 = performance.now();

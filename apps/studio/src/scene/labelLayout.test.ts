@@ -99,7 +99,7 @@ describe('label placement', () => {
     expect(p.form === null || p.y - 22 >= 46).toBe(true);
   });
 
-  it('signs only shift sideways (never stacked) and hide when blocked', () => {
+  it('signs only shift sideways or just below (never stacked above) and hide when blocked', () => {
     const sign: LabelItem = { id: 'zone', x: 790, y: 100, priority: 100, movable: false, slots: SIGN_SLOTS, forms: [{ form: 'full', w: 120, h: 20 }] };
     const p = placeLabels([sign], { width: 800, height: 400 }).get('zone')!;
     expect(p.form).toBe('full');
@@ -107,6 +107,11 @@ describe('label placement', () => {
     expect(p.x + 60).toBeLessThanOrEqual(796);
     const blocked = placeLabels([sign, badge('a', 730, 100, 900, { forms: [{ form: 'compact', w: 400, h: 60 }] })], { width: 800, height: 400 });
     expect(blocked.get('zone')!.form).toBeNull();
+    // A badge on its row (but not below it) pushes the sign just under its anchor.
+    const centred = { ...sign, x: 400 };
+    const below = placeLabels([centred, badge('b', 400, 100, 900, { forms: [{ form: 'compact', w: 400, h: 60 }] })], { width: 800, height: 400 }).get('zone')!;
+    expect(below.form).toBe('full');
+    expect(below.y).toBeGreaterThan(100);
   });
 
   it('expands a hovered label in place, moving smaller neighbours instead', () => {
