@@ -1,0 +1,10 @@
+{
+ "title": "A World That Keeps Running",
+ "duration": 75,
+ "formats": [
+  "16x9"
+ ],
+ "poster": 65.25,
+ "fps": 30,
+ "note": "Render with --fps 30 (founder decision); the grid is beats.json (96 BPM, 30 bars). film.js is still the scaffold template: build it only after the shot list is approved."
+}

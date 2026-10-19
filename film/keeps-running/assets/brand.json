@@ -1,0 +1,81 @@
+{
+  "source": "docs/design/design-system.md (Runloop Signature v1), apps/studio/src/app/tokens.css (dark theme), apps/studio/src/town/townPalette.ts and sky.ts (the 3-D town's own colours), plus the founder brief of 2026-10-18 and the founder's decisions for this film. Gathered by hand: the Studio is being reworked, so gather.mjs was not run.",
+  "signature": {
+    "obsidian": "#101114",
+    "graphite": "#1B1D22",
+    "slate": "#292C33",
+    "slateHi": "#33363E",
+    "line": "rgba(232,235,240,0.08)",
+    "lineStrong": "rgba(232,235,240,0.14)",
+    "ice": "#E8EBF0",
+    "muted": "#9297A2",
+    "faint": "#878C97",
+    "lime": "#B8F36A",
+    "limeSoft": "rgba(184,243,106,0.12)",
+    "onLime": "#101114",
+    "success": "#48C78E",
+    "warning": "#F5B84B",
+    "failure": "#FF6B76",
+    "worldBg": "#0C0D10",
+    "glass": "rgba(27,29,34,0.74)",
+    "scrim": "rgba(6,7,9,0.62)"
+  },
+  "identityHues": {
+    "note": "Agent identity hues never signal state; lime is never an identity hue. The film's agent HQ band uses id1 (the hue the fixture and the screenshots give 'Engineering House').",
+    "id1": "#5AA9F5", "id2": "#E0946A", "id3": "#43C6D9", "id4": "#A08CF9",
+    "id5": "#E67CCB", "id6": "#8FA4BF", "id7": "#C38BD9", "id8": "#CDB592"
+  },
+  "town": {
+    "note": "The product's own 3-D town colours (townPalette.ts). Lime never appears in town materials (CIEDE2000 >= 12). Only state glows.",
+    "glow": { "window": "#FFD18A", "lamp": "#FFD89A", "sign": "#FFF1D6" },
+    "nightSky": { "zenith": "#0A1226", "horizon": "#1D2944", "haze": "#1A233B", "cloud": "#38425A", "moonlight": "#9FB2FF", "hemiSky": "#4D5F96", "hemiGround": "#1D1F2E" },
+    "dawn0530": { "zenith": "#2A3766", "horizon": "#C99089", "haze": "#8C88A3", "sun": "#FFB385" },
+    "dusk1930": { "zenith": "#384886", "horizon": "#E29B78", "haze": "#A08A98", "sun": "#FF9C6E" },
+    "day": { "zenith": "#5D9ADB", "horizon": "#CDE0EF", "haze": "#D3E0EA", "sun": "#FFF5E6" },
+    "ground": { "grass": "#A7C08B", "park": "#9BBB7E", "water": "#6AA6C6", "asphalt": "#646A74", "laneMark": "#EFE6CF", "sidewalk": "#E2D8C6", "crosswalk": "#F3EEE2", "plaza": "#E9DFCB", "path": "#D6C39B" },
+    "building": { "windowDay": "#8EAEC4", "windowUnlit": "#46566A", "door": "#7A5A42", "chimney": "#B2765A", "plinth": "#BBA98F", "greenhouseGlass": "#CFE6DF" },
+    "agentHq": { "shell": "#5D636E", "shellLight": "#727986", "glass": "#93ACC8", "trim": "#33373F", "roof": "#C3C7CD", "forecourt": "#C8CCD2", "pad": "#9AA1AB", "unpaintedShell": "#D4D8DE", "unpaintedGlass": "#B9C0CA" },
+    "hqBeacon": { "working": "#B8F36A", "waiting": "#F5B84B", "awaitingApproval": "#F5B84B", "incident": "#FF6B76", "idle": "#E8EBF0", "off": "#5D626C" }
+  },
+  "film": {
+    "note": "The film's night grade. Every value is the product's own night (sky.ts NIGHT_SKY, GLOW) except 'void', a deeper midnight for the frame edges and the opening darkness.",
+    "void": "#05070F",
+    "midnight": "#0A1226",
+    "midnightHorizon": "#1D2944",
+    "haze": "#1A233B",
+    "moonlight": "#9FB2FF",
+    "amberWindow": "#FFD18A",
+    "amberLamp": "#FFD89A",
+    "realAgent": "#B8F36A",
+    "failure": "#FF6B76",
+    "replayPlayhead": "#E8EBF0"
+  },
+  "colourRules": [
+    "Real-agent events in 3-D are LIME #B8F36A (founder decision 2026-10-18; replaces the brief's cyan). Lime marks only what a real Claude Code session reported: the HQ beacon while live and working, event pulses, the trail from a building element to a trace row.",
+    "Amber (#FFD18A windows, #FFD89A lamps) belongs to the simulated town's life: lit windows where residents are home or at work, street lamps at night.",
+    "Failure #FF6B76 only for a recorded failure (the exit-1 node --test); warning #F5B84B only for a recorded permission wait.",
+    "Ice #E8EBF0 is the neutral light: type, the replay playhead, the road-network trace that becomes the logo.",
+    "No cyan, no neon, no glow on UI chrome. Bloom only on emissive state (windows, lamps, beacon, event pulses)."
+  ],
+  "fonts": {
+    "display": { "family": "Geist", "file": "fonts/display.ttf", "source": "geist@1.8.1 dist/fonts/geist-sans/Geist-Variable.ttf (wght 100-900, default 400)", "use": "titles, 3-D type", "tracking": "-0.02em" },
+    "display3d": { "family": "Geist SemiBold", "file": "fonts/display-semibold.ttf", "source": "geist@1.8.1 Geist-SemiBold.ttf (static 600)", "use": "TTFLoader / text3D only: a variable TTF loads at its default 400 instance" },
+    "ui": { "family": "Geist Mono", "file": "fonts/ui.ttf", "source": "geist@1.8.1 dist/fonts/geist-mono/GeistMono-Variable.ttf (wght 100-900)", "use": "data, event rows, captions, clock" },
+    "license": "SIL Open Font License 1.1 (fonts/LICENSE-Geist-OFL.txt)",
+    "missingGlyphs": "Neither face has U+25C7 (the Studio's 'Simulated' diamond), U+2713 (check) or U+23F8 (pause). Draw them as shapes, never as text. Both faces have · × → ← — – … ▶."
+  },
+  "wordmark": {
+    "mark": "assets/logo-mark.svg (Studio BrandRing: path 'M12 3a9 9 0 1 1-8.5 6', stroke 2.4 round, dot r 2.1 at 5.2,5.6, in lime on a slate tile)",
+    "text": "Runloop",
+    "style": "Geist 600, letter-spacing -0.01em, Ice on Obsidian; the Studio sets 'Studio' after it in Muted 500 (not used in the film)"
+  },
+  "decisions": {
+    "realAgentColour": "lime #B8F36A (founder, 2026-10-18)",
+    "simulatedLifeColour": "amber (#FFD18A / #FFD89A)",
+    "fps": 30,
+    "formats": ["16x9"],
+    "voiceOver": "none",
+    "music": "synthesized (audio/score.py)",
+    "realCapture": "one real Claude Code Haiku session (<= $0.10), captured after the Studio's immersive rework is final; not part of this pass"
+  }
+}

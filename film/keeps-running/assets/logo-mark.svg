@@ -1,0 +1,7 @@
+<!-- Runloop loop mark, extracted verbatim from apps/studio (BrandRing in src/components/world/hud/bits.tsx,
+     the same paths in src/ui/Sidebar.tsx). In the Studio it is drawn in currentColor = --rl-accent-text
+     (lime #B8F36A on the dark theme). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="240" height="240">
+  <path d="M12 3a9 9 0 1 1-8.5 6" fill="none" stroke="#B8F36A" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="5.2" cy="5.6" r="2.1" fill="#B8F36A"/>
+</svg>
