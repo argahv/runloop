@@ -202,7 +202,7 @@ The next challenge is to connect these capabilities into one coherent system.
 | World autonomy | Deterministic resident simulation | Explainable society-level goals and evolving situations |
 | Experimentation | Replay and run comparison | World checkpoints, forks, altered conditions, and outcome comparison |
 | Scale and reliability | Initial town and population benchmarks | Larger-world validation, performance budgets, and robust recovery |
-| Product experience | Local prototype | Better onboarding, accessibility, and sustained user validation |
+| Product experience | Immersive local prototype: a full-screen 3D town with a game HUD, where every action opens inside the world | Better onboarding, accessibility, and sustained user validation |
 
 These are product directions, not claims that every capability is already implemented. See [TASKS.md](TASKS.md) and the [current-state report](docs/status/current-state.md) for the implementation status of individual milestones.
 
@@ -238,6 +238,7 @@ The near-term priority is to make the world functionally meaningful before expan
 5. Validate that users can understand the world, accomplish useful work, and find reasons to return.
 
 **The measure of progress is not how many residents populate the town or how many agents Runloop can trace. It is how much meaningful activity the world supports, how well users can understand and influence it, and how coherently simulated society and real AI systems work together.**
+
 ## Security notes
 
 - The runtime listens on loopback only. Ingest from the plugin needs a per-user token (`~/.config/runloop/ingest-token`, created by the runtime) and rejects browser requests.
