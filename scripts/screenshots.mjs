@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Visual regression screenshots of every Studio page and key state (design-system.md, Verification):
-// the town (`/`) and its panels, agents and dialogs, then the run pages (Live World, Traces, Experiments).
+// the immersive town (`/`: horizon and street views, cards, the café, Add to World's lot picking, the agent
+// and its building, the Intelligence and Lab sheets, the Esc menu), then the full pages (Live World, Traces,
+// Experiments, Overview, Integrations, Settings).
 //
 // Needs a running runtime (world on, ideally with one agent added and a traced session) and the Studio, for example:
 //   pnpm dev                       # runtime on :4380, Studio on :3000
@@ -46,6 +48,7 @@ const only = args.only ? new Set(list(args.only, [])) : null;
 const HEIGHT = { 1280: 800, 1440: 900, 1920: 1080, 390: 844 };
 const MOBILE_MAX = 760;
 const DEAD_RUNTIME = 'http://127.0.0.1:9';
+const SIMULATED_WHY = 'text=Simulated resident · rule-based decision';
 
 const suffix = typeof args.suffix === 'string' ? args.suffix : '';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -135,34 +138,30 @@ const pinned = pinnedHere ?? runs.find((r) => r.pinnedAt)?.runId ?? null;
 /** @type {State[]} */
 const STATES = [];
 if (worldInfo) {
-  const SIMULATED = 'text=Simulated resident · rule-based decision';
   STATES.push(
+    // The immersive town (`/`): edge to edge, the free camera, the HUD over it.
     { name: 'town', url: '/', world: true },
+    { name: 'town-horizon', url: '/?cam=48,36,14,200,10', world: true },
+    { name: 'town-tilted-street', url: '/?cam=40,47,51,45,15', world: true },
     { name: 'town-district', url: '/?focus=district:dst_civic_atrium', world: true },
     { name: 'town-street', url: '/?focus=spot:spot_cafe_patio', world: true },
     { name: 'town-map', url: '/', world: true, desktopOnly: true, prepare: (p) => press(p, 'm', 1200) },
     { name: 'town-directory', url: '/', world: true, prepare: (p) => press(p, 'l', 1200) },
-    { name: 'cafe-interior', url: '/?focus=building:bld_corner_cafe', world: true, prepare: (p) => click(p, 'button', 'Enter', 3000, true) },
-    { name: 'world-log', url: '/?mode=intelligence', world: true },
+    { name: 'cafe-interior', url: '/?focus=building:bld_corner_cafe', world: true, prepare: (p) => enter(p, 'Enter') },
+    { name: 'intelligence', url: '/?mode=intelligence', world: true },
     { name: 'agents-mode', url: '/?mode=agents', world: true },
-    {
-      name: 'add-to-world-1',
-      url: '/',
-      world: true,
-      prepare: async (p) => {
-        await click(p, 'button', 'Add to World', 800);
-        await p.getByRole('dialog').getByLabel('Building name').fill('Engineering House').catch(() => {});
-      },
-    },
-    { name: 'add-to-world-2', url: '/', world: true, prepare: (p) => addToWorldStep(p, 2) },
-    { name: 'add-to-world-3', url: '/', world: true, prepare: (p) => addToWorldStep(p, 3) },
+    { name: 'add-to-world-lots', url: '/', world: true, prepare: (p) => press(p, 'n', 3500) },
+    { name: 'add-to-world-card', url: '/', world: true, prepare: (p) => addToWorldCard(p) },
+    { name: 'menu', url: '/', world: true, prepare: (p) => press(p, 'Escape', 2500) },
+    { name: 'menu-sound', url: '/', world: true, prepare: async (p) => (await press(p, 'Escape', 1000), await click(p, 'tab', 'Sound', 800)) },
+    { name: 'menu-controls', url: '/', world: true, desktopOnly: true, prepare: async (p) => (await press(p, 'Escape', 1000), await click(p, 'tab', 'Controls', 800)) },
   );
-  if (resident) STATES.push({ name: 'resident-why', url: `/?focus=resident:${resident.id}`, world: true, waitFor: SIMULATED });
+  if (resident) STATES.push({ name: 'resident-why', url: `/?focus=resident:${resident.id}`, world: true, prepare: (p) => residentWhy(p) });
   if (agent) {
     const focus = `/?mode=agents&focus=agent:${agent.agentId}`;
     STATES.push(
       { name: `agent-${agent.health.replace(/_/g, '-')}`, url: focus, world: true },
-      { name: 'agent-interior', url: focus, world: true, prepare: (p) => click(p, 'button', 'Enter building', 3500) },
+      { name: 'agent-interior', url: focus, world: true, prepare: (p) => enter(p, 'Enter building') },
       { name: 'dispatch-compose', url: focus, world: true, prepare: (p) => assignTask(p, false) },
     );
     if (!args['no-preview']) STATES.push({ name: 'dispatch-review', url: focus, world: true, desktopOnly: true, prepare: (p) => assignTask(p, true) });
@@ -179,6 +178,10 @@ STATES.push(
   { name: 'offline-world', url: '/world/', apiBase: DEAD_RUNTIME, expectConsoleErrors: true },
   { name: 'offline-town', url: '/', apiBase: DEAD_RUNTIME, expectConsoleErrors: true },
 );
+for (const s of subjects) {
+  const fail = s.failSeq ? `&event=${s.failSeq}` : '';
+  if (worldInfo) STATES.push({ name: `trace-sheet-${s.kind}`, url: `/?overlay=trace&run=${s.runId}${fail}`, world: true });
+}
 for (const s of subjects) {
   const run = `run=${s.runId}`;
   const fail = s.failSeq ? `&event=${s.failSeq}` : '';
@@ -199,6 +202,7 @@ STATES.push(
   { name: 'experiments', url: '/experiments/', waitFor: pairs.length ? COMPARED : undefined },
   { name: 'experiments-offline', url: '/experiments/', apiBase: DEAD_RUNTIME, expectConsoleErrors: true },
 );
+if (worldInfo && pairs.length) STATES.push({ name: 'lab', url: `/?mode=lab&a=${pairs[0].a}&b=${pairs[0].b}`, world: true, waitFor: COMPARED });
 for (const p of pairs) {
   const url = `/experiments/?a=${p.a}&b=${p.b}`;
   STATES.push(
@@ -216,22 +220,45 @@ async function click(page, role, name, settle = 800, exact = false) {
   await sleep(settle);
 }
 
+/**
+ * Let the town draw `n` more frames. Under software WebGL a frame can take a second or more, and transitions
+ * (a roof lifting off as the camera flies in) advance per frame, so waiting a fixed time can catch them halfway.
+ */
+async function frames(page, n, maxMs = 45000) {
+  const frame = () => page.evaluate(() => window.__runloopCam?.frame ?? 0).catch(() => 0);
+  const start = await frame();
+  const t = Date.now();
+  while (Date.now() - t < maxMs && (await frame()) - start < n) await sleep(250);
+}
+
+/** Enter a building from its card and wait for the fly-in and the roof to finish. */
+async function enter(page, name) {
+  await click(page, 'button', name, 500, true);
+  await frames(page, 16);
+  await sleep(500);
+}
+
 async function press(page, key, settle = 800) {
   await page.keyboard.press(key);
   await sleep(settle);
 }
 
-/** Add to World up to step 2 (a lot) or 3 (the workspace), never submitting. */
-async function addToWorldStep(page, step) {
-  await click(page, 'button', 'Add to World', 800);
-  const dlg = page.getByRole('dialog');
-  await dlg.getByLabel('Building name').fill('Engineering House');
-  for (let i = 1; i < step; i++) {
-    await dlg.getByRole('button', { name: 'Next' }).click({ timeout: 8000 });
-    await sleep(500);
-  }
-  if (step === 3) await dlg.getByText('A folder on this machine').click({ timeout: 5000 }).catch(() => {});
+/** Add to World in the town: N, pick the first free lot (its label button), fill the card; never submitting. */
+async function addToWorldCard(page) {
+  await press(page, 'n', 3500);
+  await page.getByRole('button', { name: /Lot \d+ · Free/ }).first().click({ timeout: 15000 });
+  await sleep(2500);
+  const form = page.locator('form').filter({ has: page.getByLabel('Building name') }).first();
+  await form.getByLabel('Building name').fill('Engineering House');
+  await form.getByText('A folder on this machine').click({ timeout: 5000 }).catch(() => {});
   await sleep(1200);
+}
+
+/** A resident's card with its Why open. */
+async function residentWhy(page) {
+  await page.getByRole('button', { name: /^Why/ }).first().click({ timeout: 15000 }).catch(() => {});
+  await page.waitForSelector(SIMULATED_WHY, { timeout: 15000 }).catch(() => {});
+  await sleep(800);
 }
 
 /** Assign task: compose (and optionally the review with the exact command), never approving. */
@@ -284,7 +311,8 @@ try {
 }
 
 async function captureAll() {
-  const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const launch = () => chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  let browser = await launch();
   for (const theme of themes) {
     for (const width of widths) {
       const dir = path.join(out, `${theme}-${width}`);
@@ -292,6 +320,11 @@ async function captureAll() {
       for (const state of STATES) {
         if (only && !only.has(state.name)) continue;
         if (state.desktopOnly && width <= MOBILE_MAX) continue;
+        // A long run of software-WebGL pages can take the browser down; start a new one and go on.
+        if (!browser.isConnected()) {
+          console.warn('The browser closed; starting a new one.');
+          browser = await launch();
+        }
         const context = await browser.newContext({
           viewport: { width, height: HEIGHT[width] ?? Math.round(width * 0.625) },
           deviceScaleFactor: 1,
@@ -303,6 +336,8 @@ async function captureAll() {
         await context.addInitScript((p) => {
           try {
             window.localStorage.setItem('runloop.prefs.v1', JSON.stringify(p));
+            // Not a first visit: the 6-second controls hint would sit in every shot of the town.
+            window.localStorage.setItem('runloop.hud.hints.v1', '1');
           } catch {}
         }, prefs);
         const page = await context.newPage();
@@ -336,12 +371,12 @@ async function captureAll() {
         manifest.shots.push({ theme, width, state: state.name, url: state.url, file: path.relative(out, file), errors: counted, notes });
         const flags = [...counted, ...notes];
         console.log(`${theme} ${String(width).padStart(4)} ${state.name}${flags.length ? `  ! ${flags.join(' | ')}` : ''}`);
-        await context.close();
+        await context.close().catch(() => {});
       }
     }
   }
 
-  await browser.close();
+  await browser.close().catch(() => {});
 }
 
 fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify(manifest, null, 2));

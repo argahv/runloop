@@ -5,12 +5,9 @@
  */
 import type { CompiledTown } from '@runloop-world/town';
 import type { LotPick } from '../../../town/types';
+import { lotLabel } from '../../../world/lots';
 
-/** "Lot 3" from "lot_agent_3". */
-export function lotLabel(id: string): string {
-  const n = Number(id.replace(/\D+/g, ''));
-  return Number.isFinite(n) && n > 0 ? `Lot ${n}` : id;
-}
+export { lotLabel };
 
 export function lotPickModel(
   town: Pick<CompiledTown, 'agentLots'>,

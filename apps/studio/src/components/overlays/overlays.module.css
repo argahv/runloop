@@ -9,6 +9,8 @@
   position: absolute;
   right: 16px;
   z-index: 40;
+  /* Reading: vertical scrolling only, never a page zoom over the town. */
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
   border-radius: 16px;
@@ -21,6 +23,12 @@
   color: var(--rl-text);
   overflow: hidden;
   animation: sheetIn var(--rl-dur-standard, 200ms) var(--rl-ease-out, ease-out);
+}
+/* The sheet takes focus when it opens (a landing point, not a control): keep its own edge, no ring around the whole sheet. */
+.sheet:focus-visible {
+  box-shadow:
+    0 12px 32px rgb(0 0 0 / 0.35),
+    0 0 0 1px var(--rl-line);
 }
 .sheet[data-mobile] {
   left: 0;
@@ -140,6 +148,8 @@
 
 /* ── the session strip inside an agent's building (S) ──────────────── */
 .strip {
+  /* The replay bar inside drops its speed buttons when the strip is narrow (a wide sheet beside it carries them). */
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 6px;

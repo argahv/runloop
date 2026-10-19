@@ -52,3 +52,16 @@ export function isDimmedHq(a: Pick<AgentPresence, 'health'>): boolean {
 export function isLitHq(a: Pick<AgentPresence, 'health'>): boolean {
   return a.health === 'live' || a.health === 'idle';
 }
+
+/** The provenance chip an agent keeps in its compact form. */
+export const SHORT_CHIP = 'Agent';
+
+/**
+ * The words a label shows in each form. Compact drops the long chip and the
+ * detail, but a warning or a failure keeps its status word ("Incident",
+ * "Needs approval"): a state is never told by the dot's colour alone.
+ */
+export function labelText(l: { kind: string; chip: string | null; detail: string | null; tone: LabelTone }, form: 'full' | 'compact' | 'icon'): { chip: string | null; detail: string | null } {
+  if (form === 'full') return { chip: l.chip, detail: l.detail };
+  return { chip: l.kind === 'agent' ? SHORT_CHIP : null, detail: (l.tone === 'warn' || l.tone === 'fail') && l.detail ? l.detail : null };
+}

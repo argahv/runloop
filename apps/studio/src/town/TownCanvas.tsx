@@ -8,7 +8,7 @@ import { LabelLayer } from '../scene/labels';
 import { AgentHqs } from './AgentHq';
 import { ScopedLabelStore } from './AgentHouse';
 import { AmbientLife } from './AmbientLife';
-import { entityAnchor } from './anchors';
+import { entityAnchor, entityBox } from './anchors';
 import { Atmosphere } from './Atmosphere';
 import { groundHit, project } from './cameraMath';
 import { TickSmoother, frameTick } from './clock';
@@ -191,6 +191,24 @@ export default function TownCanvas(props: TownCanvasProps) {
       projectEntity: (ref) => {
         const a = entityAnchor(ctx, ref);
         return a ? screen(a[0], a[1], a[2]) : null;
+      },
+      projectBounds: (ref) => {
+        const b = entityBox(ctx, ref);
+        const ctl = ctx.cam.ctl;
+        if (!b || ctl.width <= 1) return null;
+        let left = Infinity;
+        let top = Infinity;
+        let right = -Infinity;
+        let bottom = -Infinity;
+        for (let i = 0; i < 8; i++) {
+          const s = project(ctl.view, i & 1 ? b[3] : b[0], i & 2 ? b[4] : b[1], i & 4 ? b[5] : b[2]);
+          if (!(s.depth > 0.5)) return null;
+          left = Math.min(left, s.x);
+          right = Math.max(right, s.x);
+          top = Math.min(top, s.y);
+          bottom = Math.max(bottom, s.y);
+        }
+        return { left: Math.max(0, left), top: Math.max(0, top), right: Math.min(ctl.width, right), bottom: Math.min(ctl.height, bottom) };
       },
       projectCell: (x, z, height = 0) => screen(sceneX(f, x), height, sceneZ(f, z)),
       groundAt: (px, py) => {

@@ -17,15 +17,17 @@ import { uiSound } from './sound';
 /** The lots Add to World can pick from: free ones glow; taken ones show their agent's name. */
 export function useLotPickModel() {
   const town = useWorld((s) => s.town);
-  useWorld((s) => s.rev);
+  // The snapshot is folded in place: `rev` says when its agents changed (a lot just taken reads taken at once).
+  const rev = useWorld((s) => s.rev);
   const agents = useWorld((s) => s.snapshot?.agents);
   const lotPick = useWorld((s) => s.lotPick);
-  return useMemo(() => (lotPick && town ? lotPickModel(town, agents ?? [], lotPick.selected) : null), [lotPick, town, agents]);
+  return useMemo(() => (lotPick && town ? lotPickModel(town, agents ?? [], lotPick.selected) : null), [lotPick, town, agents, rev]);
 }
 
-export function GuideBanner({ reason }: { reason: string | null }) {
+export function GuideBanner() {
   const store = useWorldStore();
   const lotPick = useLotPickModel();
+  const reason = useWorld((s) => s.lotPick?.reason ?? null);
   const entered = useWorld((s) => s.entered);
   const follow = useWorld((s) => s.follow);
   const snapshot = useWorld((s) => s.snapshot);
@@ -97,11 +99,13 @@ export function GuideBanner({ reason }: { reason: string | null }) {
 
 const HINT_KEY = 'runloop.hud.hints.v1';
 
-/** First visit only: how to get around, for 6 s or until the first input. */
-export function ControlsHint() {
+/** First visit only: how to get around (touch words on a phone), for 6 s after the town appears or until the first input. */
+export function ControlsHint({ touch = false }: { touch?: boolean }) {
   const [show, setShow] = useState(false);
+  // It starts (and counts as seen) only once the town is on screen: never over the loading veil.
+  const ready = useWorld((s) => s.townReady);
   useEffect(() => {
-    if (safeStorage.getItem(HINT_KEY)) return;
+    if (!ready || safeStorage.getItem(HINT_KEY)) return;
     setShow(true);
     safeStorage.setItem(HINT_KEY, '1');
     const hide = () => setShow(false);
@@ -116,11 +120,17 @@ export function ControlsHint() {
       window.removeEventListener('wheel', hide, opts);
       window.removeEventListener('keydown', hide, opts);
     };
-  }, []);
+  }, [ready]);
   if (!show) return null;
   return (
     <p className={styles.controlsHint} role="status">
-      Drag to move · Scroll to zoom · Right-drag to turn · <Kbd keys={['Esc']} /> for menu
+      {touch ? (
+        'Drag to move · Pinch to zoom · Twist to turn · Double-tap a building to go in'
+      ) : (
+        <>
+          Drag to move · Scroll to zoom · Right-drag to turn · <Kbd keys={['Esc']} /> for menu
+        </>
+      )}
     </p>
   );
 }

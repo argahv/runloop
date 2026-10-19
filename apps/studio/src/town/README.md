@@ -21,7 +21,7 @@ ambient life are scenery, never state (see "Truth" below).
 | `cameraRequest` | `{ id, kind: focus \| enter \| exit \| overview \| level \| rotate \| cam \| goto, ref?, level?, dir?, deg?, cam?, point?, motion? }`. A new `id` triggers it; viewer input interrupts it; reduced motion cuts. `goto` centres a cell (`point`, the minimap); `rotate` turns `deg` (default 90). A focus or enter whose entity has no position yet (a deep link on load) is retried each frame for up to 6 s. |
 | `initialCam`, `onCamChange` | `cam=x,z,zoom[,az[,tilt]]` deep links: target in town cells (x column, z row), px per cell at the target, azimuth and tilt in degrees (defaults 45° and 37°, so 3-part links frame as before). Reported (all five) once the camera settles. |
 | `onSelect`, `onEnter`, `onHover`, `onFollowBroken`, `onLongPress` | What the viewer did: click (null = empty ground), double-click a building or robot, hover, a pan/rotate/zoom that broke a follow, a 500 ms press (select and expand). |
-| `apiRef` | Filled with `TownApi`: `projectEntity(ref)` (head, roof or centre on screen), `projectCell(x, z, h)`, `groundAt(px, py)` (cells; null = sky), `getCamera()` (`TownCamState`: cells, zoom, degrees, fovY, level, moving, ground `footprint`), `onFrame(fn)`. For anchored cards and the minimap; cheap, no React state. |
+| `apiRef` | Filled with `TownApi`: `projectEntity(ref)` (head, roof or centre on screen), `projectBounds(ref)` (the screen box a building, headquarters, lot, resident or robot covers, so a card stands beside it, not on it), `projectCell(x, z, h)`, `groundAt(px, py)` (cells; null = sky), `getCamera()` (`TownCamState`: cells, zoom, degrees, fovY, level, moving, ground `footprint`), `onFrame(fn)`. For anchored cards and the minimap; cheap, no React state. |
 | `viewInsets` | Screen space the HUD covers (px from each edge). The view's centre is the centre of what is left (`setViewOffset`, eased), framing keeps clear of it, and labels avoid it. |
 | `lotPick`, `onPickLot`, `onHoverLot` | Add to World: free lots glow (ice outline over a graphite under-stroke, breathing; static under reduced motion), the picked one lime; every lot is a label button ("Lot 3 · Free", or its agent's name). Clicking a free lot calls `onPickLot`, never `onSelect`. |
 | `onInteraction` | A viewer drag, rotation, tilt or pinch started / ended (the HUD fades while it runs). |
@@ -56,8 +56,8 @@ tested).
 | left drag / one finger | pan, ground-anchored; release with inertia (≤ 4 view widths/s, `e^(−6t)`) |
 | wheel / trackpad pinch (ctrl) | zoom at the cursor (the ground under it stays put; over the sky, at the centre), eased; shift + wheel turns |
 | right or middle drag | turn (0.3°/px, with a little inertia) and tilt (0.2°/px) |
-| two fingers | pinch zoom at the centroid, twist (after 6°) turns, both fingers up or down tilt |
-| click / tap · double click / tap · long press | select · enter a building or robot's HQ (open ground: fly there one level in) · select and expand |
+| two fingers | pinch zoom at the centroid, twist (after 6°) turns, both fingers up or down tilt; also when they land on the HUD (marked `data-town-gestures`; the HUD takes no browser gestures, so a pinch never zooms the page) |
+| click / tap · double click / tap · long press | select · enter a building or robot's HQ (open ground: fly there one level in; two presses within 320 ms and 24 px, timed by `input.ts` itself, even when the second lands on the card the first opened) · select and expand |
 | W A S D / arrows (Shift ×2.5) | pan one view height per second, screen-relative, 120 ms ramp |
 | Q / E · Z / X | turn ∓45° (hold: 90°/s) · tilt toward the horizon / top-down (30°/s) |
 | + / − · 0, Home · R | zoom ×1.3 · the whole town · reset to 45° / 37° |
@@ -89,7 +89,9 @@ hysteresis); picking scales each resident's reach with its own distance.
   windows are dark. Every agent label carries "Agent · Claude Code".
 - **Interiors** (`Interior.tsx`, `geometry/interior.ts`): only the open building; walls facing the camera cut
   low; decoration in front hidden whole (`cutRect`); furniture; residents at their slots (floor 0). An agent HQ
-  mounts `scene/{Board,Stations,Paths,Props,Characters,Effects}` at 0.5 scale (`AgentHouse.tsx`).
+  mounts `scene/{Board,Stations,Paths,Props,Characters,Effects}` at 0.5 scale (`AgentHouse.tsx`) in fixed town
+  materials (`hqDioramaPalette()`: matte HQ greys, rooms tinted by zone, lit by the town's own sun and sky),
+  never the HUD theme's tokens (the standalone Live World page keeps those).
 - **The land beyond** (`geometry/surroundings.ts` layout, `geometry/surroundMeshes.ts`, `Surroundings.tsx`):
   a terrain disc out to 900 units (flat around the town, hills under a forest belt to the north and
   north-east, gentle rolls far out), the four roads out (lamps along the first 130 units; nothing else out
@@ -98,7 +100,8 @@ hysteresis); picking scales each resident's reach with its own distance.
   bridges) and far mountains faceted into the haze. One draw each, trees in four instanced quadrants.
 - **Sky and atmosphere** (`sky.ts`, `SkyRig.tsx`, `Atmosphere.tsx`): sun or moon, hemisphere and ambient from
   the world's time (DL-011), soft variance shadow maps re-rendered only when the sun has turned, lamp pools at
-  night; a sky dome (zenith, horizon, haze, sun glow, stars at night), linear haze that never reaches the
+  night; a sky dome (zenith, horizon, haze, sun glow, stars at night that come out just above the haze line, so
+  the thin band of sky at the lowest tilt holds them), linear haze that never reaches the
   town (it starts past the town's farthest corner) and blends the land into the horizon, low-poly clouds that
   drift and fade where they would be in the way, and their soft shadows on the ground. The theme changes the
   HUD and the labels only.

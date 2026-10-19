@@ -4,10 +4,11 @@
  * count), so the ticker and the catch-up never say anything the log does not.
  *
  * Severity: critical (a session failed, an approval waits, a connection was
- * lost mid-task) › attention (agent offline, an incident, a rejected command,
- * an unclaimed Claude Code session) › notable (sessions, buildings, agents
- * housed, conversations, the world resuming) › ambient (movement and needs;
- * never in the ticker, searchable in Intelligence).
+ * lost mid-task) › attention (an incident, a rejected command, an unclaimed
+ * Claude Code session) › notable (sessions, an agent going offline after its
+ * session closed, buildings, agents housed, conversations, the world resuming)
+ * › ambient (movement and needs; never in the ticker, searchable in
+ * Intelligence). "Need you" is only for what the viewer can act on.
  */
 import type { AgentPresence, EntityRef, WorldEvent, WorldProvenance } from '@runloop-world/events';
 
@@ -84,7 +85,8 @@ export function classify(e: WorldEvent, prev?: AgentPresence | null): Classified
       if (e.p.attention === 'dispatch_awaiting_approval') return { severity: 'critical', groupKey: `dispatch:${e.p.agentId}`, kind: 'dispatch_approval', refs: ref };
       if (e.p.health === 'offline' && prev && prev.health !== 'offline') {
         if (prev.activeRunId) return { severity: 'critical', groupKey: `lost:${e.p.agentId}`, kind: 'lost_mid_task', refs: ref };
-        return { severity: 'attention', groupKey: `offline:${e.p.agentId}`, kind: 'agent_offline', refs: ref };
+        // Its session had already closed (a failure is its own critical item): the normal end of work, nothing to act on.
+        return { severity: 'notable', groupKey: `offline:${e.p.agentId}`, kind: 'agent_offline', refs: ref };
       }
       if (e.p.attention === 'incident' && prev?.attention !== 'incident') return { severity: 'attention', groupKey: `incident:${e.p.agentId}`, kind: 'incident', refs: ref };
       if (e.p.health === 'live' && prev && prev.health !== 'live') return { severity: 'notable', groupKey: `live:${e.p.agentId}`, kind: 'agent_live', refs: ref };

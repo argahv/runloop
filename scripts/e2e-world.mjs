@@ -64,6 +64,8 @@ try {
 
   // 2. Residents move within 3 s; the clock advances.
   const snapA = await getJson('/api/world/snapshot');
+  // The world clock is `/api/world`'s tick; a snapshot's tick is its last event's, which can stand still at night.
+  const infoA = await getJson('/api/world');
   const clockA = await page.locator('[aria-label^="Day "]').first().textContent().catch(() => null);
   const moving = new Set(walking(snapA));
   for (let i = 0; i < 6; i++) {
@@ -71,6 +73,7 @@ try {
     for (const id of walking(await getJson('/api/world/snapshot'))) moving.add(id);
   }
   const snapB = await getJson('/api/world/snapshot');
+  const infoB = await getJson('/api/world');
   const clockB = await page.locator('[aria-label^="Day "]').first().textContent().catch(() => null);
   const freshNeeded = Math.ceil(snapA.residents.length * 0.6);
   // At night most residents sleep; walking is required only by day (a fresh world starts at 08:00).
@@ -82,7 +85,7 @@ try {
     of: snapA.residents.length,
     ticks: [before.tick, snapA.tick, snapB.tick],
   });
-  check('clock advances', snapB.tick > snapA.tick && (snapB.speed === 0 || clockA !== clockB), { clockA, clockB, speed: snapB.speed });
+  check('clock advances', (infoB.speed === 0 || infoB.tick > infoA.tick) && (infoB.speed === 0 || clockA !== clockB), { clockA, clockB, ticks: [infoA.tick, infoB.tick], speed: infoB.speed });
   if (shots) await page.screenshot({ path: path.join(shots, `world-e2e-town-${theme}.png`) });
 
   // 3. ⌘K → a walking resident → their Why.
@@ -118,8 +121,9 @@ try {
   await page.waitForSelector('[data-world-ready="true"]', { timeout: 30000 }).catch(() => {});
   const cafe = await page.getByRole('heading', { level: 2, name: 'Corner Café' }).waitFor({ timeout: 10000 }).then(() => true, () => false);
   check('focus link opens the café panel', cafe);
-  await page.getByRole('button', { name: 'Enter', exact: true }).first().click({ timeout: 5000 }).catch(() => {});
-  await sleep(3000);
+  // Clicks wait for the town's frame under software rendering (a click can take several seconds there).
+  await page.getByRole('button', { name: 'Enter', exact: true }).first().click({ timeout: 20000 }).catch(() => {});
+  await page.getByRole('button', { name: 'Leave interior' }).first().waitFor({ timeout: 15000 }).catch(() => {});
   check('Enter shows the café interior', (await page.getByRole('button', { name: 'Leave interior' }).count()) > 0);
   if (shots) await page.screenshot({ path: path.join(shots, `world-e2e-cafe-${theme}.png`) });
 } catch (err) {

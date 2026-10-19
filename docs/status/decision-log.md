@@ -4,6 +4,30 @@ Short records of consequential decisions. Newest first. Each entry gives the pro
 
 ---
 
+## DL-014 · The town is a game you stay in: full screen, free camera, a HUD, everything in place (2026-10-18)
+
+**Problem.** The founder: "the simulation looks good but still looks like a webapp. I want it to look like an immersive game, fully scrollable and movable … the user should be able to do everything while being inside the simulation." The town sat as a slab on a void inside a boxed stage, beside a mode rail, a context panel and a top bar; most actions (Traces, compare, Add to World, settings) left for a page.
+
+**Options.**
+- Keep the app shell and enlarge the stage.
+- Make `/` the world edge to edge with a game HUD, a free perspective camera and land to the horizon, and bring every page and action into it; keep the pages as full pages for old links and long reading.
+
+**Choice.** The second, per the experience contract written for it (immersive contract, 2026-10-18):
+- **One place.** `/` is the canvas at 100vw × 100dvh: no sidebar, no top bar, no boxed stage. The land goes on past the town (outskirts, farms, fields, the Brook, a lake, forest, hills, mountains) into haze and a sky that follows sim time. The theme changes the HUD and labels only, no longer the backdrop (a note on DL-011 and DL-013).
+- **Camera.** A perspective camera with a narrow field of view (20° at the default 37° tilt), so the default view keeps the isometric look; free rotation, tilt 10°–62°, zoom to the cursor, inertia, soft bounds, WASD/QE/ZX, follow, fly-in with the roof lifting. `cam=x,z,zoom` keeps its px-per-cell meaning; `az,tilt` are optional fourth and fifth parts.
+- **HUD.** Glass controls (world chip, Find, bell, clock and speed with the sound toggle, minimap, hotbar) and opaque cards anchored next to their entity; notifications; an Esc menu that holds Settings, Sound, Controls, Runtime, Connections and Pages. It fades while you drag and hides with H; a needs-you dot never hides.
+- **Everything in place.** Add to World picks a lot in 3D and collects name and workspace in a card on the lot; Assign task keeps its exact-command review; Intelligence is the World Log at the Commons Library and the full trace inspector in a sheet; Lab is compare at the Lattice Lab; Sessions and Connections are sheets; an agent's building shows its diorama and a session strip (scrub = replay inside). Run links go through one navigation (`useStudioNav`): sheets on `/`, the pages elsewhere. The legacy routes stay full pages with "Open in the world"; `/?run=` without `overlay=` still redirects; `/?overlay=…` opens a sheet.
+- **Phones** get a light 3D town (low quality, lighter surroundings, 12 labels) instead of the 2D map; the map stays for WebGL off and as a setting. The design-system rule "never a desktop-sized 3D scene" holds.
+- **Ambient decorative life.** Cars on the roads out, bird flocks, drifting clouds and a windmill are decoration and say so: never pickable, never in the directory, minimap, log or ⌘K, never within 12 cells of an agent lot, still when the world is paused, and gone under reduced motion. They never stand for activity, simulated or real (rule zero of the design system, applied).
+- **Sound.** Synthesized with the Web Audio API (no files, no dependencies): an ambient bed that follows the camera and sim time, UI sounds, and four event cues that play only for live, real agent events (`classifyCue`: never for `simulation` provenance), rate-limited, each repeated by a notification with icon and text. No sound before the first gesture; a hidden tab is silent; settings per viewer.
+- **Approval moved to the runtime** (from the second review pass, §8 of the verification report): the Studio shows the exact command, then opens the runtime's own approval page; it never holds the nonce.
+
+**Why.** The world is the product (DL-009); a page shell around it undercut that. With the pages inside the world as sheets, the utility layers (why did this fail, did this change help, give an agent work) stay one key away without leaving the place.
+
+**Trade-off.** More GPU work on `/` (the land adds ≤ 16 draw calls and ≤ 70k triangles; every budget still holds under SwiftShader) and no real-GPU frame time yet; in the software renderer camera moves and held keys run at its frame rate. Two places show the same pages (sheets and full pages), held together by one set of components. Nobody has listened to the sound yet; levels are set by measurement.
+
+**Reverse.** The pieces are separable: `AppShell` can give `/` its old layout back, `TownCanvas` takes `surroundings="off"`, `ambientLife={false}` and a fixed camera, the sheets are the page components, and `getAudio().update({ enabled: false })` (or the speaker toggle) silences sound.
+
 ## DL-012 · Real agents in the town: observe by default, dispatch only with approval (2026-10-18)
 
 **Problem.** The town must show real Claude Code agents next to simulated residents without blurring the two, and may let the user hand an agent a task without giving Runloop a way to run code silently.

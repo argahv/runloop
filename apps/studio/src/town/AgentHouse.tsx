@@ -8,7 +8,6 @@ import { Characters } from '../scene/Characters';
 import { CameraBus, SceneContext, type SceneCtx } from '../scene/context';
 import { Effects } from '../scene/Effects';
 import { LabelProjector, LabelStore, type Anchor, type LabelContent } from '../scene/labels';
-import { buildPalette, documentTokens } from '../scene/palette';
 import { Paths } from '../scene/Paths';
 import { Props } from '../scene/Props';
 import { SLAB_DEPTH } from '../scene/layout';
@@ -16,6 +15,7 @@ import { Stations } from '../scene/Stations';
 import { cellY } from './coords';
 import { useTown } from './context';
 import { MergeStatic } from './MergeStatic';
+import { hqDioramaPalette } from './townPalette';
 import type { LocalFrame } from './geometry/frame';
 import type { AgentHouseSource } from './types';
 
@@ -43,7 +43,8 @@ export class ScopedLabelStore extends LabelStore {
  * An agent's headquarters, entered: the Live World diorama of its current
  * session (Board, Stations, Paths, Characters and Effects from scene/) at half
  * scale on its lot, driven by the StudioStore frame the shell provides. It
- * keeps the Signature look, so a real agent's house reads as Runloop's.
+ * keeps the Signature layout in the town's own fixed HQ materials (never the
+ * HUD theme), lit by the town's sun and sky.
  * Without a loaded session it shows nothing but the lot (the shell says why).
  */
 export const AgentHouse = memo(function AgentHouse({ agentId, lot, frame: f }: { agentId: string; lot: Lot; frame: LocalFrame }) {
@@ -52,7 +53,8 @@ export const AgentHouse = memo(function AgentHouse({ agentId, lot, frame: f }: {
   const [source, setSource] = useState<AgentHouseSource | null>(() => live.agentHouse?.(agentId) ?? null);
   const group = useRef<Group>(null);
   const [camera] = useState(() => new CameraBus());
-  const palette = useMemo(() => buildPalette(documentTokens()), []);
+  // Town materials, not the HUD theme: the diorama is part of the sunlit (or night) town in both themes.
+  const palette = useMemo(() => hqDioramaPalette(), []);
   const incidentStations = useMemo(() => new Map<string, string>(), [source?.world]);
   const ctx = useMemo<SceneCtx | null>(
     () =>

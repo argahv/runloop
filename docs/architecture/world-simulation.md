@@ -282,6 +282,8 @@ At boot, any agent still unhoused is resubmitted.
 
 ## 5. Studio
 
+> **Updated by DL-014 (2026-10-18), the immersive town.** On `/` the chrome below became a game HUD over a full-screen world: no mode rail, context panel or ticker (the hotbar, anchored entity cards and notifications replace them), Lab and Intelligence open as sheets in the town instead of linking to `/experiments` and `/traces`, and `?overlay=` opens a sheet by link. The panels' content and truth rules are unchanged. See `docs/design/design-system.md` ("The town") and `apps/studio/src/world/README.md`.
+
 **Routes**
 - `/` renders `WorldHome`. `world/link.ts` parses `?mode=explore|agents|intelligence|lab&focus=kind:id&cam=`.
 - **Agents mode** focuses the Agent District and lists agents and Arrivals.

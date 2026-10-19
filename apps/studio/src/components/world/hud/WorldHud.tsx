@@ -11,7 +11,7 @@
  * hides it (a needs-you dot stays). Reduced motion: no fades, instant.
  */
 import type { EntityRef } from '@runloop-world/events';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStudioStore } from '../../../state/context';
 import type { AttentionItem } from '../../../world/attention';
 import { useWorld, useWorldStore } from '../../../world/context';
@@ -28,12 +28,37 @@ import { ControlsHint, GuideBanner, HiddenHint } from './Guide';
 import Hotbar from './Hotbar';
 import Minimap from './Minimap';
 import Notifications from './Notifications';
+import { townLabelOf, useReturnFocus } from './bits';
 import { hasCritical } from './notify';
 import Sheets, { useSheetWidths } from './Sheets';
 import styles from './hud.module.css';
 import { uiSound } from './sound';
 import { Bell, FindButton, useNotificationItems, WorldChip } from './TopBar';
-import type { Viewport } from './anchor';
+import { stripBox, type Viewport } from './anchor';
+
+/** An element's height (0 while it is empty or absent), kept current with a ResizeObserver. */
+function useHeight<T extends HTMLElement>(): [(el: T | null) => void, number] {
+  const [el, setEl] = useState<T | null>(null);
+  const [h, setH] = useState(0);
+  useEffect(() => {
+    if (!el) return setH(0);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setH(Math.round(el.offsetHeight)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return [setEl, h];
+}
+
+/**
+ * Leaving the building from the strip (Leave, Esc) gives focus back to what
+ * entered it, else the card's Enter button or the agent's label.
+ */
+function StripFocus({ agentId }: { agentId: string }) {
+  const none = useRef<HTMLElement>(null);
+  useReturnFocus(none, () => document.querySelector<HTMLElement>('[data-card-enter]') ?? townLabelOf({ kind: 'agent', id: agentId }));
+  return null;
+}
 
 /** Fade after 120 ms of dragging; come back 400 ms after it ends. */
 function useDragFade(interacting: boolean): boolean {
@@ -77,15 +102,15 @@ export default function WorldHud({
   const fade = useDragFade(interacting) && !reduced;
   const bellOpen = useWorld((s) => s.bellOpen);
   const setBellOpen = useCallback((v: boolean) => store.getState().setBellOpen(v), [store]);
-  const [lotReason, setLotReason] = useState<string | null>(null);
   const phone = layout.size === 'phone';
   const sheets = useSheetWidths(layout.vw);
   const critical = hasCritical(items);
 
-  useEffect(() => {
-    if (!lotPick) setLotReason(null);
-  }, [lotPick]);
+  const [guideRef, guideH] = useHeight<HTMLDivElement>();
+  const [stripRef, stripH] = useHeight<HTMLDivElement>();
 
+  // The bottom-left corner the minimap (or, without it, the Directory button) holds.
+  const corner = phone ? undefined : layout.minimap && stage === '3d' ? { w: 16 + layout.minimap.w + 8 + 8, h: 16 + layout.minimap.h + 42 } : { w: 16 + 140, h: 16 + 40 };
   const vp: Viewport = {
     w: layout.vw,
     h: layout.vh,
@@ -94,7 +119,15 @@ export default function WorldHud({
     top: layout.top,
     // The hotbar, and the session strip above it inside an agent's building.
     bottom: layout.hotbar.height + layout.hotbar.bottom + 8 + (enteredAgent ? 104 : 0),
+    ...(corner ? { corner } : {}),
   };
+  // The strip and the guide banner centre in the area the sheets leave free (not under a sheet).
+  const strip = stripBox(vp);
+  // Risen above the minimap (a wide sheet beside it): cards keep clear of it there too.
+  if (enteredAgent && strip.bottom !== null && !phone) vp.bottom = Math.max(vp.bottom, strip.bottom + (stripH || 104) + 8);
+  const freeMid = Math.round((vp.left + vp.w - vp.right) / 2);
+  // Notifications start below the guide banner while it shows (they never cover "Inside … · Esc to leave").
+  const notesTop = guideH > 0 ? Math.max(phone ? 68 : 96, (phone ? 68 : 76) + guideH + 10) : undefined;
 
   const openItem = (item: AttentionItem) => {
     const s = store.getState();
@@ -120,12 +153,14 @@ export default function WorldHud({
           layout="anchored"
           lotId={lotPick.selected}
           fromSessionId={lotPick.fromSessionId}
-          onLotChange={(id, reason) => {
-            setLotReason(reason ?? null);
-            store.getState().pickLot(id);
-          }}
+          onLotChange={(id, reason) => store.getState().pickLot(id, reason ?? null)}
           onClose={() => store.getState().cancelLotPick()}
           onDone={(agentId) => store.getState().focusEntity({ kind: 'agent', id: agentId })}
+          // Its first real event: the agent's own card takes over (the arrival shot already flies to its robot).
+          onArrived={(agentId) => {
+            store.getState().cancelLotPick();
+            store.getState().focusEntity({ kind: 'agent', id: agentId }, { camera: false });
+          }}
         />
       </CardFrame>
     );
@@ -136,7 +171,16 @@ export default function WorldHud({
   }
 
   return (
-    <div className={styles.hud} data-size={layout.size} data-fade={fade || undefined} data-hidden={hidden || undefined} data-stage={stage ?? undefined}>
+    <div
+      className={styles.hud}
+      data-size={layout.size}
+      data-fade={fade || undefined}
+      data-hidden={hidden || undefined}
+      data-stage={stage ?? undefined}
+      data-inside={enteredAgent ? '' : undefined}
+      data-town-gestures=""
+      style={{ ['--strip-h' as string]: `${enteredAgent ? stripH : 0}px` }}
+    >
       {phone ? (
         <div className={styles.topPhone}>
           <ClockWidget size="phone" sound={sound} onFind={onOpenPalette} />
@@ -155,12 +199,22 @@ export default function WorldHud({
         </>
       )}
 
-      <div className={styles.notesWrap} style={{ width: layout.notifications, right: phone ? 12 : 16 + (sheets.right ? sheets.right + 16 : 0) }}>
+      <div
+        className={styles.notesWrap}
+        style={{
+          width: layout.notifications,
+          ...(notesTop !== undefined ? { top: notesTop } : {}),
+          ['--notes-right' as string]: `${phone ? 12 : 16 + (sheets.right ? sheets.right + 16 : 0)}px`,
+          // A card docked top-right (its entity is off-screen or under the HUD) pushes the notifications left of it.
+          ['--docked-card' as string]: `${layout.card.expanded + 12}px`,
+          ['--notes-w' as string]: `${layout.notifications}px`,
+        }}
+      >
         <Notifications onOpen={openItem} single={phone} />
       </div>
 
-      <div className={styles.guideWrap}>
-        <GuideBanner reason={lotReason} />
+      <div ref={guideRef} className={styles.guideWrap} style={phone ? undefined : { left: freeMid, maxWidth: Math.max(240, layout.vw - vp.left - vp.right - 32) }}>
+        <GuideBanner />
       </div>
 
       {card && (
@@ -170,7 +224,8 @@ export default function WorldHud({
       )}
 
       {enteredAgent && (
-        <div className={styles.stripWrap}>
+        <div ref={stripRef} className={styles.stripWrap} style={phone ? undefined : { left: strip.x, width: strip.w, ...(strip.bottom !== null ? { bottom: strip.bottom } : {}) }}>
+          <StripFocus agentId={enteredAgent} />
           <SessionStrip
             agentId={enteredAgent}
             onOpenTrace={(seq) => {
@@ -238,7 +293,7 @@ export default function WorldHud({
         {...(menuExtras?.runtime ? { runtimeExtra: menuExtras.runtime } : {})}
       />
 
-      <ControlsHint />
+      <ControlsHint touch={phone} />
       <HiddenHint hidden={hidden} />
       {hidden && critical && (
         <button type="button" className={styles.criticalDot} aria-label="Something needs you: show the HUD" onClick={() => store.getState().setHudHidden(false)}>

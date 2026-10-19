@@ -6,7 +6,7 @@ import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Vector3 } from 'three';
 import { placeLabels, type LabelItem, type Placement } from '../scene/labelLayout';
 import { ROBOT_LABEL_Y } from './AgentHq';
-import { agentStatus, type LabelTone } from './status';
+import { agentStatus, labelText, type LabelTone } from './status';
 import { sceneX, sceneZ } from './coords';
 import { useTown, type TownCtx } from './context';
 import { buildingShape } from './geometry/buildings';
@@ -58,20 +58,19 @@ function textWidth(text: string, weight: number): number {
   return w;
 }
 
-/** The provenance chip an agent keeps in its compact form. */
-const SHORT_CHIP = 'Agent';
 /** Agents' labels stay beside their robot (never stacked far away). */
 const NEAR_SLOTS = [0, 9, 10, 1, 2, 3, 4, 5];
 
-/** Pill sizes for a label's two forms (compact = title only; agents keep a short chip). */
+/** Pill sizes for a label's two forms (compact = title only; agents keep a short chip; alerts keep their status). */
 function sizes(l: TownLabel): { full: { w: number; h: number }; compact: { w: number; h: number } } {
   const pad = 20;
   const dot = l.tone !== 'none' || l.kind === 'agent' ? 14 : 0;
   const title = textWidth(l.title, 600);
-  const chip = l.chip ? textWidth(l.chip, 500) + 18 : 0;
-  const short = l.kind === 'agent' ? textWidth(SHORT_CHIP, 500) + 18 : 0;
-  const detail = l.detail ? textWidth(l.detail, 400) + 14 : 0;
-  return { full: { w: Math.ceil(pad + dot + chip + title + detail), h: 26 }, compact: { w: Math.ceil(pad + dot + short + title), h: 26 } };
+  const width = (form: 'full' | 'compact') => {
+    const t = labelText(l, form);
+    return Math.ceil(pad + dot + title + (t.chip ? textWidth(t.chip, 500) + 18 : 0) + (t.detail ? textWidth(t.detail, 400) + 14 : 0));
+  };
+  return { full: { w: width('full'), h: 26 }, compact: { w: width('compact'), h: 26 } };
 }
 
 /** Anchors that never move (buildings, districts), computed once per town. */
@@ -350,12 +349,12 @@ export function TownLabelProjector({ pool, obstacles }: { pool: React.RefObject<
         el.dataset.selected = l.required ? 'true' : 'false';
         const [dot, chip, title, detail] = Array.from(el.children) as HTMLElement[];
         dot!.hidden = l.tone === 'none' && l.kind !== 'agent';
-        const chipText = p.form === 'full' ? l.chip : l.kind === 'agent' ? SHORT_CHIP : null;
-        chip!.textContent = chipText ?? '';
-        chip!.hidden = !chipText;
+        const text = labelText(l, p.form);
+        chip!.textContent = text.chip ?? '';
+        chip!.hidden = !text.chip;
         title!.textContent = l.title;
-        detail!.textContent = p.form === 'full' && l.detail ? l.detail : '';
-        detail!.hidden = !(p.form === 'full' && l.detail);
+        detail!.textContent = text.detail ?? '';
+        detail!.hidden = !text.detail;
         el.setAttribute('aria-label', l.kind === 'lot' ? `${l.title}, agent lot` : [l.title, l.chip, l.detail].filter(Boolean).join(', '));
         el.tabIndex = 0;
       }

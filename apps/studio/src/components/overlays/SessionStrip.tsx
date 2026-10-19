@@ -9,12 +9,13 @@
 import { useEffect } from 'react';
 import { baselineFor } from '../../state/baselines';
 import { useStudio, useStudioStore } from '../../state/context';
-import { selectRun } from '../../state/hooks';
+import { selectRun, useTicker } from '../../state/hooks';
 import { Button } from '../../ui/Button';
 import { Icon } from '../../ui/Icon';
 import { useWorld } from '../../world/context';
 import ReplayBar from '../ReplayBar';
 import { useStudioNav } from './nav';
+import { sessionStateLabel, stripMode } from './stripMode';
 import styles from './overlays.module.css';
 
 export function SessionStrip({ agentId, onOpenTrace, onLeave }: { agentId: string; onOpenTrace: (seq: number | null) => void; onLeave: () => void }) {
@@ -26,6 +27,7 @@ export function SessionStrip({ agentId, onOpenTrace, onLeave }: { agentId: strin
   const runs = useStudio((s) => s.runs);
   const selectedSeq = useStudio((s) => s.selectedSeq);
   const following = useStudio((s) => s.cursor.mode === 'live');
+  const health = useWorld((s) => s.snapshot?.agents.find((a) => a.agentId === agentId)?.health ?? summary?.health ?? null);
   const sessions = summary?.sessions ?? [];
   const current = sessions.find((s) => s.runId === runId) ?? null;
   const base = current ? baselineFor(runs, current.runId) : null;
@@ -35,7 +37,9 @@ export function SessionStrip({ agentId, onOpenTrace, onLeave }: { agentId: strin
   useEffect(() => (currentRun ? studio.getState().mountWorld() : undefined), [currentRun, studio]);
 
   const recording = current?.status === 'running';
-  const mode = !current ? null : following ? (recording ? 'Live' : 'Recorded · latest') : 'Replay · recorded state';
+  useTicker(recording && health === 'idle', 15_000);
+  // The run's state, with the agent's own health: a quiet open session is "Open · idle 12m", never "Live".
+  const mode = current ? stripMode({ following, open: recording, health, lastEventAt: summary?.lastEventAt ?? null, nowMs: Date.now() }) : null;
 
   return (
     <section className={styles.strip} aria-label={`Inside ${name}: its sessions`} data-keys="own">
@@ -55,16 +59,16 @@ export function SessionStrip({ agentId, onOpenTrace, onLeave }: { agentId: strin
               return (
                 <option key={s.runId} value={s.runId}>
                   Session #{sessions.length - i}
-                  {title ? ` · ${title}` : ''} · {s.status === 'running' ? 'Live' : 'Recorded'}
+                  {title ? ` · ${title}` : ''} · {sessionStateLabel(s.status)}
                 </option>
               );
             })}
           </select>
         </label>
         {mode && (
-          <span className={styles.stripMode} data-live={(following && recording) || undefined}>
-            <Icon name={following ? (recording ? 'pulse' : 'checkCircle') : 'clock'} size={12} />
-            {mode}
+          <span className={styles.stripMode} data-live={mode.live || undefined}>
+            <Icon name={mode.icon} size={12} />
+            {mode.text}
           </span>
         )}
         <span className={styles.stripActions}>
@@ -82,7 +86,7 @@ export function SessionStrip({ agentId, onOpenTrace, onLeave }: { agentId: strin
         </span>
       </div>
       {current ? (
-        <ReplayBar glass />
+        <ReplayBar glass followLabel={health === 'live' ? null : 'Latest'} />
       ) : (
         <p className={styles.stripNote}>{sessions.length ? 'Choose a session to watch it here.' : 'This agent has no session yet: start Claude Code in its folder.'}</p>
       )}

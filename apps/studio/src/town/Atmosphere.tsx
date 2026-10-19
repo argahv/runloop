@@ -52,13 +52,15 @@ void main() {
   float s = max(dot(d, uSunDir), 0.0);
   col += uSunColor * (pow(s, 900.0) * 0.9 + pow(s, 24.0) * 0.12) * uSunVis * smoothstep(-0.02, 0.04, h);
   if (uStars > 0.01 && h > 0.0) {
-    vec3 p = d * 150.0;
+    // Fine cells, so the thin band of sky a low view shows (about 4 degrees at the lowest tilt) still holds stars.
+    vec3 p = d * 320.0;
     vec3 c = floor(p);
     float r = hash3(c);
-    if (r > 0.993) {
+    if (r > 0.992) {
       vec3 f = fract(p) - 0.5;
-      float st = smoothstep(0.16, 0.0, length(f)) * uStars * smoothstep(0.03, 0.25, h);
-      col += vec3(0.95, 0.96, 1.0) * st * (0.75 + 0.25 * sin(uTime * 1.7 + r * 90.0));
+      // They come out just above the haze line, not a quarter of the way up the sky (out of every view).
+      float st = smoothstep(0.34, 0.0, length(f)) * uStars * smoothstep(0.003, 0.045, h);
+      col += vec3(0.95, 0.96, 1.0) * st * (0.8 + 0.2 * sin(uTime * 1.7 + r * 90.0));
     }
   }
   gl_FragColor = vec4(col, 1.0);

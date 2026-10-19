@@ -12,12 +12,12 @@ import { useLotPickModel } from './hud/Guide';
 import { hudInsets } from './hud/layout';
 import { floatingRects } from './hud/occlusion';
 import { useSheetWidths } from './hud/Sheets';
-import styles from './hud/hud.module.css';
 
 /** three.js and the town scene load on the client only, after the shell. */
 const TownCanvas = dynamic(() => import('../../town/TownCanvas'), {
   ssr: false,
-  loading: () => <div className={styles.stageMessage}>Loading the town…</div>,
+  // TownStage's loading veil covers the stage until the first frames are drawn.
+  loading: () => null,
 });
 
 /**
@@ -109,6 +109,7 @@ export default function Town3D({
   const onPickLot = useCallback((lotId: string) => store.getState().pickLot(lotId), [store]);
   // A deep-linked focus asked before the town was drawn is framed once it is (no animation on load).
   const onReady = useCallback(() => {
+    store.getState().setTownReady(true);
     // After a few frames, so the renderer knows where residents and agents stand.
     setTimeout(() => {
       const s = store.getState();

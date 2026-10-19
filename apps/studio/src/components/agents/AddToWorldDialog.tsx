@@ -8,9 +8,9 @@ import { createAgent, WorldApiError } from '../../world/api';
 import { refreshAgents } from '../../world/connect';
 import { useWorld, useWorldStore } from '../../world/context';
 import { Button } from '../../ui/Button';
-import { CommandSnippet } from '../../ui/CommandSnippet';
 import { Dialog } from '../../ui/Dialog';
 import { Icon } from '../../ui/Icon';
+import AddedAgentStatus from './AddedAgentStatus';
 import styles from './agents.module.css';
 
 type Step = 1 | 2 | 3 | 'done';
@@ -236,17 +236,16 @@ export default function AddToWorldDialog({ open, onClose, fromSessionId }: { ope
 
           {step === 'done' && created && (
             <div className={styles.done}>
-              <p className={styles.doneTitle}>
-                <Icon name="hourglass" size={16} />
-                {created.displayName} is in the Agent District, waiting for its first event.
-              </p>
-              <p className={styles.hint}>
-                The building stays dimmed until Claude Code really sends a hook from {created.workspace ? `“${created.workspace.label}”` : 'its workspace'}. Install the plugin once, then run <code>claude</code> in that folder:
-              </p>
-              <CommandSnippet command={CC.shellInstall} />
-              <p className={styles.hint}>
-                Or load it from a Runloop checkout with <code>{CC.pluginDir}</code>. Details and <code>--doctor</code> are on <Link href={ROUTES.integrations}>Connect</Link>.
-              </p>
+              {/* Live state, not the create answer: the step follows the agent once its first real event arrives. */}
+              <AddedAgentStatus
+                created={created}
+                titleClass={styles.doneTitle}
+                more={
+                  <>
+                    Or load it from a Runloop checkout with <code>{CC.pluginDir}</code>. Details and <code>--doctor</code> are on <Link href={ROUTES.integrations}>Connect</Link>.
+                  </>
+                }
+              />
             </div>
           )}
 

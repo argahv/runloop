@@ -7,11 +7,12 @@ game HUD). Everything here is plain TypeScript (no React except
 
 | File | What |
 |---|---|
-| `store.ts` | `createWorldStore()`: a vanilla zustand store, separate from the StudioStore. The snapshot is folded with the sim's own `applyEvent` (in place; `rev` bumps on every change). Commands are never optimistic (`pending`, cleared by their effect event or shown with their rejection). Panel stack (the entity card), follow, entered building, camera requests, the HUD (`overlay`, `menu`, `hud.hidden/interacting`, `cardExpanded`, `bellOpen`, `stage`, `townPaused`), Add to World's lot picking (`lotPick`), attention, agents API data. |
+| `store.ts` | `createWorldStore()`: a vanilla zustand store, separate from the StudioStore. The snapshot is folded with the sim's own `applyEvent` (in place; `rev` bumps on every change). Commands are never optimistic (`pending`, cleared by their effect event or shown with their rejection). Panel stack (the entity card), follow, entered building, camera requests, the HUD (`overlay`, `menu`, `hud.hidden/interacting`, `cardExpanded`, `bellOpen`, `stage`, `townPaused`, `townReady` for the loading veil), Add to World's lot picking (`lotPick`, with the reason a pick was refused), attention, agents API data. A mode switch that moves the camera (and opening the World Log or compare) leaves the building the viewer is in first. |
 | `connect.ts` | `connectWorld(store)`: world info and town, then `/api/world/stream` (snapshot, event batches, 1 Hz clock); a gap or an unparsable frame resyncs from a fresh snapshot. Polls `/api/agents` and arrivals every 4 s. Seeds attention from the log. |
 | `api.ts` | Fetch helpers for `/api/world/*` and `/api/agents/*` (types from `@runloop-world/events` `world-protocol.ts`). |
 | `link.ts` | `?mode=&focus=kind:id&cam=x,z,zoom[,az,tilt]&overlay=`, `modeOfRoute`, and `legacyRedirect` (old `/?run=…` links still reach their page, unless they name an `overlay`). |
-| `attention.ts` | Severity, grouping (same group within 10 sim-minutes), the popup pacing (one item per 4 s; critical skips it), titles from recorded facts only. |
+| `attention.ts` | Severity, grouping (same group within 10 sim-minutes), the popup pacing (one item per 4 s; critical skips it), titles from recorded facts only. An agent going offline after its session closed is notable (bell list only); lost mid-task is critical. The HUD's `notify.ts` shows a real-agent cue's fact at once (with its sound) and drops a queued notable that newer facts about the same agent overtook. |
+| `lots.ts` | Agent lot names ("Lot 3") and `lotRefusal`: Add to World picks only a free agent lot of this town (a link can name anything). |
 | `catchUp.ts` | "While you were away": attention groups over the events since the viewer's last seen seq, each citing its seqs. |
 | `entityIndex.ts` | Every resident, agent, building, place and district for ⌘K and the directory tree. |
 | `selectors.ts` | Panel view models and provenance chips. P10 on the UI side: "Real" only on external-agent entities and events; agent views have no Why; Why factors without a source are dropped. |
@@ -28,7 +29,7 @@ the town back (sheets close). Opening a mode's sheet sets its mode; closing it r
 to Explore. A deep link sets the mode without moving the camera.
 
 `openAddToWorld()` is lot picking in the 3D town (`overlay: 'add'`, the camera flies
-to the Agent District, free lots glow) or, without the 3D view (no WebGL, the 2D map
+to the Agent District, free lots outlined) or, without the 3D view (no WebGL, the 2D map
 view, another page), the dialog with its lot list (`addToWorld`).
 
 ## The town on `/` (`components/world/`)

@@ -15,7 +15,7 @@ routes stay as full pages, unchanged at their URLs, each with an
 | `nav.tsx` | `useStudioNav()`: a provider's nav, else in-world on `/`, else today's router navigation. `useWorldNav`, `useRouterNav`, `StudioNavProvider`, `useInWorld`, `NavButtonLink` (a page link that opens its sheet in the world). |
 | `OverlayHost.tsx` | The sheet frame (non-modal region, focus in and back, Esc clears the trace selection then closes, "Full page", the place it frames) and `SheetContent`. |
 | `TraceSheet.tsx` | The trace sheet: compact `RunHeader`, `ReplayBar`, tabs World · Timeline · Logs · Metrics · State · Metadata, the inspector. The World tab is the run's Live World; the town pauses while it shows 3D. Keeps `tab=world` and the filter in the URL while open. |
-| `SessionStrip.tsx` | Inside an agent's building: session picker, Live / Recorded / Replay mode (icon and text), `ReplayBar` (scrubbing moves the diorama to the recorded state), Trace, Compare, Leave. It mounts the run world while shown, so a finished run settles inside. |
+| `SessionStrip.tsx` | Inside an agent's building: session picker (Open / Recorded), the state chip from `stripMode.ts` ("Live" only when the agent is live, else "Open · idle 12m"; "Recorded · latest"; "Replay · recorded state"; icon and text), `ReplayBar` (scrubbing moves the diorama to the recorded state; "Latest" without the live dot when the agent is not live; its speeds drop out when the strip is narrow), Trace, Compare, Leave. It mounts the run world while shown, so a finished run settles inside. |
 | `SheetScroll.tsx` | The scrolling body for page panels, and the `rl-sheet` container their CSS sizes grids by. |
 | `OpenInWorld.tsx` | "Open in the world" on legacy pages; Settings get "Back to the world". |
 

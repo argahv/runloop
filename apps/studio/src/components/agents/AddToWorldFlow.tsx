@@ -23,6 +23,7 @@ import { Chip } from '../../ui/Chip';
 import { CommandSnippet } from '../../ui/CommandSnippet';
 import { Icon } from '../../ui/Icon';
 import { lotLabel } from '../world/hud/lots';
+import AddedAgentStatus from './AddedAgentStatus';
 import AddToWorldDialog from './AddToWorldDialog';
 import styles from './agents.module.css';
 
@@ -35,6 +36,7 @@ export default function AddToWorldFlow({
   onLotChange,
   onClose,
   onDone,
+  onArrived,
   fromSessionId = null,
 }: {
   layout: 'anchored' | 'dialog';
@@ -44,10 +46,12 @@ export default function AddToWorldFlow({
   onClose: () => void;
   /** After "Done": the new agent's id. */
   onDone?: (agentId: string) => void;
+  /** The new agent's first real event arrived while the last step was open (hand over to its card). */
+  onArrived?: (agentId: string) => void;
   fromSessionId?: string | null;
 }) {
   if (layout === 'dialog') return <AddToWorldDialog open onClose={onClose} fromSessionId={fromSessionId} />;
-  return <AnchoredFlow lotId={lotId} onLotChange={onLotChange} onClose={onClose} onDone={onDone} fromSessionId={fromSessionId} />;
+  return <AnchoredFlow lotId={lotId} onLotChange={onLotChange} onClose={onClose} onDone={onDone} onArrived={onArrived} fromSessionId={fromSessionId} />;
 }
 
 function AnchoredFlow({
@@ -55,12 +59,14 @@ function AnchoredFlow({
   onLotChange,
   onClose,
   onDone,
+  onArrived,
   fromSessionId,
 }: {
   lotId: string | null;
   onLotChange: (lotId: string | null, reason?: string) => void;
   onClose: () => void;
   onDone?: (agentId: string) => void;
+  onArrived?: ((agentId: string) => void) | undefined;
   fromSessionId: string | null;
 }) {
   const id = useId();
@@ -91,7 +97,8 @@ function AnchoredFlow({
   const nameOk = name.trim().length > 0 && name.trim().length <= 60;
   const sourceOk = source.kind === 'arrival' ? arrivals.some((a) => a.sessionId === source.sessionId) : path.trim().length > 0;
   const apiMissing = agentsApi === 'unavailable';
-  const lotOk = lotId !== null && !taken.has(lotId);
+  // Only a real agent lot of this town that nobody holds (a deep link can name anything).
+  const lotOk = lotId !== null && lot?.use === 'agent' && !taken.has(lotId);
 
   const submit = async () => {
     if (!lotId || !nameOk || !sourceOk) return;
@@ -120,17 +127,8 @@ function AnchoredFlow({
   if (created) {
     return (
       <div className={styles.flow}>
-        <p className={styles.flowTitle}>
-          <Icon name="hourglass" size={16} />
-          {created.displayName} is in the Agent District, waiting for its first event.
-        </p>
-        <p className={styles.hint}>
-          The building stands unpainted until Claude Code really sends a hook from {created.workspace ? `“${created.workspace.label}”` : 'its workspace'}. Install the plugin once, then run <code>claude</code> in that folder:
-        </p>
-        <CommandSnippet command={CC.shellInstall} />
-        <p className={styles.hint}>
-          Or load it from a Runloop checkout with <code>{CC.pluginDir}</code>.
-        </p>
+        {/* Live state, not the create answer: from the first real event this hands over to the agent's own card. */}
+        <AddedAgentStatus created={created} {...(onArrived ? { onArrived } : {})} />
         <div className={styles.flowFoot}>
           <Button
             variant="primary"
@@ -161,7 +159,8 @@ function AnchoredFlow({
           Add to World
         </h2>
         <p className={styles.hint}>
-          {lotId ? lotLabel(lotId) : 'No lot'} · {lot ? `${lot.rect[2]}×${lot.rect[3]} cells` : ''} · {lotOk ? 'free' : 'taken'}
+          {lotId ? lotLabel(lotId) : 'No lot'}
+          {lot ? ` · ${lot.rect[2]}×${lot.rect[3]} cells` : ''} · {lotOk ? 'free' : lot?.use === 'agent' ? 'taken' : 'not an agent lot'}
           <button type="button" className={styles.inlineLink} onClick={() => onLotChange(null)}>
             Change lot
           </button>

@@ -83,6 +83,17 @@ This is a hypothesis to validate with users.
   - **Intelligence:** traces, events, explanations.
   - **Lab:** forks, experiments, compare.
 - **Navigation:** spatial camera, world map and fast travel, command palette (⌘K), contextual transitions. Spatial navigation is never the only route.
+- **You stay in the world (DL-014, 2026-10-18).** `/` is a game, not a web app: the town fills the screen and the land runs on to the horizon; a free camera (pan, zoom to the cursor, turn, tilt, follow, fly into a building); a HUD floats over it (clock, minimap, hotbar, cards anchored to what they describe, notifications, an Esc menu). Every page and action happens in place:
+  - **Explore:** the town; click anyone or anything for its card.
+  - **Agents:** the Agent District and its card; **Add to World** picks a lot in 3D and the building stands unpainted until the first real event; **Assign task** opens from the agent's card with the exact command, and a person approves it on the runtime's own page.
+  - **Intelligence:** the World Log at the Commons Library, and any run's full trace in a sheet beside the live town.
+  - **Lab:** compare at the Lattice Lab, in a sheet.
+  - **An agent's building:** its run diorama and a session strip; scrubbing replays the recorded state inside.
+  - **Settings, sound, controls, connections:** the Esc menu.
+
+  The pages (Traces, Experiments, Live World, Overview, Integrations, Settings) stay as full pages for old links and long reading, each with "Open in the world".
+- **Ambient decorative life** (cars, birds, clouds, a windmill) makes the place feel lived in and is labelled as decoration: never pickable or listed, never near an agent's building, still when the world is paused. Only the simulation's residents are "the society", and only agents are real.
+- **Sound** follows the same truth rule as motion: a calm bed that follows the camera and the time of day, and event cues only for real agent events.
 - **Three levels of interaction:**
   1. **World view:** explore.
   2. **Entity view:** a resident, building or agent.

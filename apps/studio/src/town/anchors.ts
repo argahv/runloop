@@ -65,3 +65,49 @@ export function entityAnchor(ctx: TownCtx, ref: EntityRef): [number, number, num
   }
   return null;
 }
+
+/** A world-space box: [minX, minY, minZ, maxX, maxY, maxZ]. */
+export type WorldBox = [number, number, number, number, number, number];
+
+/**
+ * The box an entity fills on screen, so a card can sit beside it instead of on
+ * it: a building's or headquarters' footprint up to its roof, a lot's rect, a
+ * resident or robot around its head. Districts and spots have none (their
+ * card points at a centre). Null when it has no place yet.
+ */
+export function entityBox(ctx: TownCtx, ref: EntityRef): WorldBox | null {
+  const { town } = ctx;
+  const f = { width: town.width, height: town.height };
+  const rect = (x: number, y: number, w: number, h: number, y0: number, y1: number): WorldBox => [sceneX(f, x) - 0.5, y0, sceneZ(f, y) - 0.5, sceneX(f, x + w - 1) + 0.5, y1, sceneZ(f, y + h - 1) + 0.5];
+  switch (ref.kind) {
+    case 'resident':
+    case 'agent': {
+      const a = entityAnchor(ctx, ref);
+      if (!a) return null;
+      const r = ref.kind === 'agent' ? 0.7 : 0.45;
+      return [a[0] - r, a[1] - 1.2, a[2] - r, a[0] + r, a[1] + 0.2, a[2] + r];
+    }
+    case 'building': {
+      const b = town.buildingById.get(ref.id);
+      if (b) {
+        const [x, y, w, h] = b.def.footprint;
+        return rect(x, y, w, h, 0, buildingShape(b).top);
+      }
+      const agent = ctx.frame.snapshot?.agents.find((a) => a.buildingId === ref.id);
+      const lot = agent ? town.lotById.get(agent.lotId) : town.agentLots.find((l) => l.buildingId === ref.id);
+      if (!lot) return null;
+      const [x, y, w, h] = lot.rect;
+      return rect(x, y, w, h, 0, hqLayout(town, lot).top);
+    }
+    case 'lot': {
+      const lot = town.lotById.get(ref.id);
+      if (!lot) return null;
+      const [x, y, w, h] = lot.rect;
+      // A free lot is flat; a taken one carries its headquarters.
+      const held = ctx.frame.snapshot?.agents.some((a) => a.lotId === ref.id);
+      return rect(x, y, w, h, 0, held ? hqLayout(town, lot).top : 0.6);
+    }
+    default:
+      return null;
+  }
+}

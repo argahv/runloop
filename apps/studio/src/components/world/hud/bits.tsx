@@ -1,6 +1,7 @@
 'use client';
 /** Small pieces several HUD parts share: the clock text, the world status chip, entity names, glyphs. */
-import type { EntityRef } from '@runloop-world/events';
+import { formatEntityRef, type EntityRef } from '@runloop-world/events';
+import { useEffect, useRef, type RefObject } from 'react';
 import { useWorld, useWorldTick } from '../../../world/context';
 import { entityName } from '../../../world/entityIndex';
 import { clockParts } from '../../../world/interpolate';
@@ -81,3 +82,33 @@ export function Glyph({ name, size = 16, className }: { name: GlyphName; size?: 
     </svg>
   );
 }
+
+/** Focus `el` if it can take it; true when it did (hidden or detached elements cannot). */
+function tryFocus(el: HTMLElement | null | undefined): boolean {
+  if (!el?.isConnected) return false;
+  el.focus({ preventScroll: true });
+  return document.activeElement === el;
+}
+
+/**
+ * When a HUD surface closes (a card, the directory, the session strip), focus
+ * goes back to what opened it, as OverlayHost's sheets do: the element that
+ * had focus when it opened, else `fallback()`. Only when focus fell to the
+ * page body (never stolen from something the viewer moved to).
+ */
+export function useReturnFocus(root: RefObject<HTMLElement | null>, fallback?: () => HTMLElement | null): void {
+  const fb = useRef(fallback);
+  fb.current = fallback;
+  useEffect(() => {
+    const a = document.activeElement;
+    const opener = a instanceof HTMLElement && a !== document.body && !root.current?.contains(a) ? a : null;
+    return () => {
+      const lost = !document.activeElement || document.activeElement === document.body;
+      if (lost && !tryFocus(opener)) tryFocus(fb.current?.());
+    };
+  }, [root]);
+}
+
+/** The town's label for an entity, when it is on screen (a card's way back for keyboard users). */
+export const townLabelOf = (ref: EntityRef): HTMLElement | null =>
+  document.querySelector<HTMLElement>(`[data-town-label][data-shown="true"][data-ref="${CSS.escape(formatEntityRef(ref))}"]`);

@@ -155,7 +155,7 @@ export async function main(argv: string[]): Promise<number> {
     if (rt.world) {
       const w = rt.world.info();
       console.log(`World: ${rt.world.town.def.name} · ${formatClock(w.tick)} · ${w.population} residents · ${w.speed}× (${server!.url}/api/world)`);
-      console.log(rt.dispatch ? 'Task dispatch on (Studio asks you to approve each one)' : 'Task dispatch off');
+      console.log(rt.dispatch ? 'Task dispatch on (each task waits for your approval on the runtime’s own page)' : 'Task dispatch off');
     } else console.log('World off (RUNLOOP_WORLD=off)');
     return new Promise<number>(() => {}); // until a signal arrives
   }

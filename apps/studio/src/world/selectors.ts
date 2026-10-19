@@ -370,6 +370,40 @@ export function agentView(presence: AgentPresence | null, summary: AgentSummary 
   };
 }
 
+/** Health before any real hook has reached the agent (the HQ stands unpainted). */
+export const awaitsFirstEvent = (h: ConnectionHealth) => h === 'awaiting_first_event' || h === 'not_connected';
+
+/** What Add to World's last step says about the agent it just created: live state only, never the POST answer once it is stale. */
+export interface AddedAgentView {
+  name: string;
+  /** No real event yet: the building stands unpainted and the step shows how to connect. */
+  waiting: boolean;
+  health: HealthView;
+  attention: string | null;
+  lastEvent: string;
+  /** Sim tick of the agent's first connection event in the loaded log, when it is there. */
+  firstEventTick: number | null;
+}
+
+export function addedAgentView(
+  created: AgentSummary,
+  presence: AgentPresence | null,
+  summary: AgentSummary | null,
+  log: readonly WorldEvent[],
+  nowMs: number,
+): AddedAgentView {
+  const health = presence?.health ?? summary?.health ?? created.health;
+  const first = log.find((e) => e.type === 'agent.connection_changed' && e.p.agentId === created.agentId && !awaitsFirstEvent(e.p.health));
+  return {
+    name: presence?.displayName ?? summary?.displayName ?? created.displayName,
+    waiting: awaitsFirstEvent(health),
+    health: healthView(health),
+    attention: attentionText(presence?.attention ?? summary?.attention ?? created.attention),
+    lastEvent: lastEventText((summary ?? created).lastEventAt, nowMs),
+    firstEventTick: first ? first.tick : null,
+  };
+}
+
 // ── Events (World Log) ───────────────────────────────────────────────
 
 /** One line for a world event, from its payload only. `name` resolves residents, buildings and agents. */

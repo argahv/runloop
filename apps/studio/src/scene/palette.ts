@@ -148,6 +148,8 @@ export interface ScenePalette {
   lights: SceneLights;
   /** Emissive glow (and bloom) is allowed: dark theme only, where light reads as light. */
   glow: boolean;
+  /** How much of its zone's colour a room floor takes (default by theme; the in-town diorama sets more). */
+  zoneTint?: number;
 }
 
 const luminance = (c: string) => {
@@ -279,7 +281,7 @@ export function buildPalette(t: SceneTokens): ScenePalette {
 
 /** Room floor colour: the zone's colour, desaturated, as a quiet tint of the floor. */
 export function zoneFloor(p: ScenePalette, zoneColor: string): string {
-  return mixHex(p.room, desaturate(zoneColor, 0.45), p.theme === 'light' ? 0.34 : 0.24);
+  return mixHex(p.room, desaturate(zoneColor, 0.45), p.zoneTint ?? (p.theme === 'light' ? 0.34 : 0.24));
 }
 
 /** Wall faces: the wall colour with a trace of the room's tint. */

@@ -64,15 +64,16 @@ describe('attention severity', () => {
     expect(classify(conn(1, 1, 'offline'), presence({ activeRunId: RUN })).severity).toBe('critical');
   });
 
-  it('attention: offline without a session, an incident, a rejected command, an unclaimed session', () => {
-    expect(classify(conn(1, 1, 'offline'), presence()).severity).toBe('attention');
+  it('attention: an incident, a rejected command, an unclaimed session', () => {
     expect(classify(conn(1, 1, 'live', 'incident'), presence()).severity).toBe('attention');
     expect(classify({ seq: 1, tick: 1, type: 'command.rejected', prov: 'user', cmdId: 'c1', p: { cmdId: 'c1', code: 'invalid' } }).severity).toBe('attention');
     expect(arrivalItems([{ sessionId: 's1', projectLabel: 'demo' }])[0]).toMatchObject({ severity: 'attention', prov: 'external-agent', events: null });
   });
 
-  it('notable: sessions ending, buildings, conversations; ambient: movement and needs', () => {
+  it('notable: sessions ending, going offline after the session closed, buildings, conversations; ambient: movement and needs', () => {
     expect(classify(ended(1, 'stopped')).severity).toBe('notable');
+    // Offline is the normal state once a session's run closes: nothing for the viewer to act on.
+    expect(classify(conn(1, 1, 'offline'), presence())).toMatchObject({ severity: 'notable', kind: 'agent_offline' });
     expect(classify(talk(1, 1)).severity).toBe('notable');
     const moves = fixtureEvents().filter((e) => e.type.startsWith('resident.'));
     expect(moves.length).toBeGreaterThan(100);

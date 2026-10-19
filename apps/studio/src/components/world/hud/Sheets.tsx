@@ -14,6 +14,7 @@ import { isSheetId, OverlayHost, sheetWidth, type SheetId } from '../../overlays
 import EntityDirectory from '../EntityDirectory';
 import WorldMap from '../WorldMap';
 import type { HudLayout } from './layout';
+import { useReturnFocus } from './bits';
 import styles from './hud.module.css';
 
 export const isSheet = (o: Overlay): o is SheetId => isSheetId(o);
@@ -74,12 +75,15 @@ export function Sheet({
   children: React.ReactNode;
 }) {
   const body = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLElement>(null);
+  // Closing it (×, Esc) gives focus back to the button that opened it.
+  useReturnFocus(root);
   useEffect(() => {
     // Keyboard users land in the sheet's content (its first control), not on Close.
     body.current?.querySelector<HTMLElement>('input, select, button, [tabindex="0"]')?.focus({ preventScroll: true });
   }, []);
   return (
-    <section className={styles.sheet} data-side={side} data-phone={phone || undefined} style={{ width, bottom }} role="region" aria-label={label} data-keys="own">
+    <section ref={root} className={styles.sheet} data-side={side} data-phone={phone || undefined} style={{ width, bottom }} role="region" aria-label={label} data-keys="own">
       <header className={styles.sheetHead}>
         <h2 className={styles.sheetTitle}>{label}</h2>
         <Button size="sm" variant="ghost" iconOnly icon="x" aria-label={`Close ${label}`} title="Close (Esc)" onClick={onClose} />

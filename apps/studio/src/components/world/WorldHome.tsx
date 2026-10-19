@@ -81,11 +81,19 @@ export default function WorldHome() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (parseOverlay(params) !== 'add') return;
-    const lot = params.get('lot');
+    let lot = params.get('lot');
+    let opened = false;
     return store.subscribe((s, p) => {
-      if (!s.stage || p.stage) return;
-      s.openAddToWorld();
-      if (lot && store.getState().lotPick) store.getState().pickLot(lot);
+      if (!opened && s.stage && !p.stage) {
+        opened = true;
+        s.openAddToWorld();
+      }
+      // The named lot is checked against the town and its agents once both are known (a link can name anything).
+      if (opened && lot && s.town && s.snapshot && store.getState().lotPick) {
+        const id = lot;
+        lot = null;
+        store.getState().pickLot(id);
+      }
     });
   }, [store]);
 

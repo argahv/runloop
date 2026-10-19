@@ -14,6 +14,8 @@
  *   it changes the chrome and the labels only.
  */
 
+import { buildPalette, DARK_TOKENS, type ScenePalette, type SceneTokens } from '../scene/palette';
+
 export const LIME = '#b8f36a';
 export const SEMANTIC = { success: '#48c78e', warning: '#f5b84b', failure: '#ff6b76' } as const;
 
@@ -115,6 +117,36 @@ export const AGENT_HQ_COLORS = {
   forecourt: '#c8ccd2',
   pad: '#9aa1ab',
 } as const;
+
+/**
+ * The run diorama inside an agent's headquarters (scene/ components at half
+ * scale), in town materials: pale HQ greys with zone-tinted rooms, matte and
+ * lit by the town's own sun and sky. Fixed, like the rest of the town: the
+ * theme never repaints it (the standalone Live World page keeps the token
+ * palette). Lime and the semantic colours stay for state only.
+ */
+export const HQ_DIORAMA_TOKENS: SceneTokens = {
+  // About the HQ's roof grey (light enough for the matte branch), with darker room greys, so floors under the
+  // midday sun stay grey (not white) and rooms keep their tint.
+  obsidian: '#bec3ca',
+  graphite: '#dde1e6',
+  slate: '#8d95a0',
+  slateHi: '#a5acb6',
+  lime: LIME,
+  ice: '#16181d',
+  muted: AGENT_HQ_COLORS.shell,
+  success: SEMANTIC.success,
+  warning: SEMANTIC.warning,
+  failure: SEMANTIC.failure,
+  worldBg: AGENT_HQ_COLORS.forecourt,
+  identity: [...DARK_TOKENS.identity],
+  identityNeutral: DARK_TOKENS.identityNeutral,
+};
+
+/** The diorama's palette: matte (light branch), with rooms taking over half their zone's colour so they read under the sun. */
+export function hqDioramaPalette(): ScenePalette {
+  return { ...buildPalette(HQ_DIORAMA_TOKENS), zoneTint: 0.55 };
+}
 
 /** Resident details that are not part of an outfit. */
 export const RESIDENT_COLORS = {

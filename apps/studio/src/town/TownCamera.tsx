@@ -39,6 +39,15 @@ const CARD: FitInsets = { top: 110, right: 400, bottom: 120, left: 110 };
 const INTERIOR: FitInsets = { top: 90, right: 400, bottom: 110, left: 90 };
 const DISTRICT: FitInsets = { top: 80, right: 400, bottom: 100, left: 80 };
 const TOWN: FitInsets = { top: 40, right: 24, bottom: 40, left: 24 };
+/** At or below this width the HUD is the phone layout: cards are bottom sheets, not beside their entity. */
+const NARROW_MAX = 760;
+/** Phone framing: no room kept on the right for a card; the bottom keeps room for a card's or the session strip's peek. */
+const NARROW: FitInsets = { top: 24, right: 16, bottom: 240, left: 16 };
+
+/** The margins for a framing on this viewport (the whole town keeps its own everywhere). */
+function framingMargins(margins: FitInsets, width: number): FitInsets {
+  return width <= NARROW_MAX && margins !== TOWN ? NARROW : margins;
+}
 const NO_INSETS: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
 
 /** The camera's per-frame state shared with the scene (labels, picking, fog, the HUD's API). */
@@ -155,7 +164,7 @@ export function TownCamera({
   /** Fit world points at the current (or given) angles, clear of the HUD and `margins`. */
   const fit = useCallback(
     (pts: [number, number, number][], margins: FitInsets, az = ctl.destination().az, tilt = ctl.destination().tilt) => {
-      const r = fitPoints(pts, az, tilt, vp(), addInsets(margins, ctl.goalInsets), cam.street * MAX_ZOOM_STREET);
+      const r = fitPoints(pts, az, tilt, vp(), addInsets(framingMargins(margins, size.width), ctl.goalInsets), cam.street * MAX_ZOOM_STREET);
       return { x: r.x, z: r.z, zoom: r.zoom };
     },
     [size.width, size.height, ctl, cam],
@@ -329,6 +338,8 @@ export function TownCamera({
           return;
         }
         if (request.kind === 'enter' && !before.current) before.current = { ...ctl.destination() };
+        // A focus asked as the viewer leaves a building (a mode's place) wins over restoring the view from before it.
+        if (request.kind === 'focus' && !entered) before.current = null;
         ctl.moveTo(v, motion);
         return;
       }

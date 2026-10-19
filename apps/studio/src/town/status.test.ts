@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agentStatus, isDimmedHq, isLitHq, robotStateOf } from './status';
+import { agentStatus, isDimmedHq, isLitHq, labelText, robotStateOf } from './status';
 
 const healths = ['not_connected', 'awaiting_first_event', 'live', 'idle', 'offline', 'unknown'] as const;
 const attentions = ['none', 'permission_requested', 'incident', 'dispatch_awaiting_approval'] as const;
@@ -31,5 +31,15 @@ describe('agent status (what buildings, robots and labels show)', () => {
     expect(agentStatus({ health: 'live', attention: 'permission_requested', execState: 'working' })).toEqual({ text: 'Needs approval', tone: 'warn' });
     expect(agentStatus({ health: 'live', attention: 'incident', execState: 'working' })).toEqual({ text: 'Incident', tone: 'fail' });
     expect(agentStatus({ health: 'unknown', attention: 'none', execState: 'idle' }).text).toBe('Not reported');
+  });
+});
+
+describe('label forms keep status in words', () => {
+  const label = (tone: 'none' | 'warn' | 'fail', detail: string) => ({ kind: 'agent', chip: 'Agent · Claude Code', detail, tone });
+  it('the compact form of a warning or failure keeps its status word (never the dot colour alone)', () => {
+    expect(labelText(label('fail', 'Incident'), 'compact')).toEqual({ chip: 'Agent', detail: 'Incident' });
+    expect(labelText(label('warn', 'Needs approval'), 'compact')).toEqual({ chip: 'Agent', detail: 'Needs approval' });
+    expect(labelText(label('none', 'Live · idle'), 'compact')).toEqual({ chip: 'Agent', detail: null });
+    expect(labelText(label('fail', 'Incident'), 'full')).toEqual({ chip: 'Agent · Claude Code', detail: 'Incident' });
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 /**
- * Floating entity cards (contract §1.4): anchored next to the selected
- * resident's head or building's roof, moved every frame by `transform` (no
+ * Floating entity cards (contract §1.4): anchored beside the selected
+ * resident's head or building's screen box, moved every frame by `transform` (no
  * React render), flipped near the edge, docked top-right with an edge chip
  * when the anchor is off-screen. Compact by default; Details ▸ expands the
  * full panel in place. Phones get a bottom sheet above the hotbar instead.
@@ -32,6 +32,7 @@ import { floatingRects } from './occlusion';
 import { useTownApi } from './context';
 import styles from './hud.module.css';
 import { useStudioNav } from '../../overlays/nav';
+import { townLabelOf, useReturnFocus } from './bits';
 import { uiSound } from './sound';
 
 const KIND_LABEL: Record<EntityRef['kind'], string> = {
@@ -78,7 +79,8 @@ export function useAnchor(el: React.RefObject<HTMLElement | null>, ref: EntityRe
       // Hold still while the viewer points at or types in the card (it follows again after); a new size always re-places it.
       if (lastDocked !== null && size === lastSize && (node.matches(':hover') || node.contains(document.activeElement))) return;
       lastSize = size;
-      const p = placeCard(ref && api ? api.projectEntity(ref) : null, box, vpRef.current, side.current);
+      // Beside the entity's whole screen box (a building, an interior, a lot), not on its roof.
+      const p = placeCard(ref && api ? api.projectEntity(ref) : null, box, vpRef.current, side.current, ref && api ? api.projectBounds(ref) : null);
       side.current = p.side;
       node.style.transform = `translate3d(${p.x}px, ${p.y}px, 0)`;
       floatingRects.card = { l: p.x, t: p.y, r: p.x + box.w, b: p.y + box.h };
@@ -141,6 +143,8 @@ export function CardFrame({
   const api = useTownApi();
   const el = useRef<HTMLElement>(null);
   useAnchor(el, phone ? null : anchor, vp, phone ? null : api);
+  // Closing it (×, Esc) gives focus back to what opened it, or to its entity's label.
+  useReturnFocus(el, () => (anchor ? townLabelOf(anchor) : null));
   return (
     <section
       ref={el}
@@ -163,7 +167,8 @@ export function CardFrame({
           <span className={styles.cardKind}>{kind}</span>
         )}
         <span className={styles.edgeChip} aria-hidden="true">
-          <Icon name="arrowUp" size={11} className={styles.diag} /> {title}
+          <Icon name="arrowUp" size={11} className={styles.diag} />
+          <span className={styles.edgeChipText}>{title}</span>
         </span>
         <span className={styles.cardHeadEnd}>
           {onExpand && (
@@ -362,6 +367,7 @@ function AgentCompact({ id, titleId }: { id: string; titleId: string }) {
               variant="secondary"
               icon={inside ? 'arrowUp' : 'arrowRight'}
               aria-keyshortcuts="Enter"
+              data-card-enter=""
               disabled={!buildingId}
               onClick={() => {
                 uiSound('select');
@@ -444,6 +450,7 @@ function BuildingCompact({ id, titleId }: { id: string; titleId: string }) {
           variant="secondary"
           icon={inside ? 'arrowUp' : 'arrowRight'}
           aria-keyshortcuts="Enter"
+          data-card-enter=""
           onClick={() => {
             uiSound('select');
             store.getState().enter(inside ? null : id);

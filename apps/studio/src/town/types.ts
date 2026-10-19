@@ -69,10 +69,24 @@ export interface ScreenPoint {
   depth: number;
 }
 
+/** A screen rectangle (px from the canvas top-left). */
+export interface ScreenBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 /** What the HUD can ask the renderer every frame (anchored cards, the minimap). Cheap; no React state. */
 export interface TownApi {
   /** Anchor: a resident's or robot's head, a building's roof, a lot's or district's centre. Null when unknown. */
   projectEntity(ref: EntityRef): ScreenPoint | null;
+  /**
+   * The screen box the entity covers (its corners projected, clipped to the
+   * canvas), so a card can stand beside it. Null for points (districts, spots),
+   * unknown entities, or when it is behind the camera.
+   */
+  projectBounds(ref: EntityRef): ScreenBox | null;
   /** A town cell (x column, z row; fractional) at `height` scene units. Null before the first frame. */
   projectCell(x: number, z: number, height?: number): ScreenPoint | null;
   /** The town cell under a canvas pixel; null = sky. */
