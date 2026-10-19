@@ -1,0 +1,133 @@
+/* The town's DOM layer: the labels over the world. Chrome colours come from tokens.css only. */
+
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Until the first frame: a neutral haze (the sky and the land are drawn from sim time, not the theme). */
+  background: linear-gradient(#c9d6e2, #a9bb98);
+}
+
+.fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--rl-space-6);
+  color: var(--rl-text-muted);
+  font: var(--rl-text-md) / 1.5 var(--rl-font-sans);
+  text-align: center;
+}
+
+.labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--rl-font-sans);
+}
+
+/* One pill per label: [state dot] [provenance chip] title · detail. */
+.label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--rl-radius-control);
+  background: color-mix(in srgb, var(--rl-surface) 92%, transparent);
+  box-shadow: 0 0 0 1px var(--rl-line-strong), 0 4px 14px rgba(0, 0, 0, 0.24);
+  color: var(--rl-text);
+  font: 600 var(--rl-text-xs) / 1.3 var(--rl-font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  will-change: transform;
+}
+.label:focus-visible {
+  outline: none;
+  box-shadow: var(--rl-focus-ring);
+}
+.label[data-selected='true'] {
+  box-shadow: 0 0 0 1px var(--rl-text), 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--rl-text-muted);
+}
+.label[data-tone='live'] .dot {
+  /* Lime marks only active execution (an agent working). */
+  background: var(--rl-lime);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rl-lime) 25%, transparent);
+}
+.label[data-tone='warn'] .dot {
+  background: var(--rl-warning);
+}
+.label[data-tone='fail'] .dot {
+  background: var(--rl-failure);
+}
+
+.chip {
+  padding: 1px 6px;
+  border-radius: var(--rl-radius-pill);
+  background: var(--rl-surface-3);
+  color: var(--rl-text-muted);
+  font-weight: 500;
+  font-size: var(--rl-text-2xs);
+}
+.label[data-kind='agent'] .chip {
+  background: color-mix(in srgb, var(--rl-text) 14%, var(--rl-surface));
+  color: var(--rl-text);
+}
+
+.title {
+  font-weight: 600;
+}
+
+.detail {
+  color: var(--rl-text-muted);
+  font-weight: 400;
+}
+.detail::before {
+  content: '·';
+  margin-right: 6px;
+}
+
+/* Lots on offer while Add to World picks one. */
+.label[data-kind='lot'] {
+  box-shadow: 0 0 0 1px var(--rl-ice), 0 4px 14px rgba(0, 0, 0, 0.24);
+}
+.label[data-kind='lot'][data-selected='true'] {
+  box-shadow: 0 0 0 2px var(--rl-lime), 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+
+/* District names: quiet signs over the map at far zoom. */
+.label[data-kind='district'] {
+  padding: 3px 9px;
+  background: color-mix(in srgb, var(--rl-surface) 72%, transparent);
+  box-shadow: 0 0 0 1px var(--rl-line);
+  color: var(--rl-text-muted);
+  font-size: var(--rl-text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.label[data-kind='district'] .dot {
+  display: none;
+}
+
+.label [hidden] {
+  display: none;
+}

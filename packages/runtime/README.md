@@ -105,6 +105,25 @@ The contract is `packages/events/src/protocol.ts`. Every request needs a `localh
 | `POST /api/ingest/claude-code` `{ envelopes }` | 202 `{ accepted, duplicates, ignored }`. Needs `X-Runloop-Token`. 403 with any `Origin`, 413 over 1 MiB, 401 bad token, 400 invalid or unknown protocol version (`supported: [1]`), 429 over 100 events/s per session (burst 1000). |
 | `GET /api/runs/:id/artifacts/:artifactId` | The stored bytes, with their media type. 409 if they no longer match the recorded sha256. |
 
+**The town** (`src/http/world.ts`; contract `packages/events/src/world-protocol.ts`). With `RUNLOOP_WORLD=off` every route below answers 404 `world_disabled`.
+
+| Route | Result |
+| --- | --- |
+| `GET /api/world` | `{ worldId, townId, contentHash, simVersion, seed, tick, seq, speed, prevSpeed, lagging, population, createdAt }` |
+| `GET /api/world/town` | The town file and its interiors (the stored copy wins over `worlds/` on disk) |
+| `GET /api/world/snapshot` | The whole state at `seq` (`WorldSnapshot`) |
+| `GET /api/world/events?after&limit&actor&type&prov` | `{ events, nextAfter, hasMore }` |
+| `GET /api/world/stream` | SSE: a `snapshot` frame, then event batches (`id` = last seq), a `clock` frame every second. `Last-Event-ID` resumes; more than 5 000 events behind (or behind pruned events) gets a fresh snapshot. |
+| `GET /api/world/explain?ref=resident:<id>&atSeq` | A resident's Why, built from its recorded `resident.decided` |
+| `POST /api/world/commands` `{ id, command }` | 202 with the result; the source is always `user`; a body with `source` or `prov` is 400 |
+| `GET /api/agents`, `GET /api/agents/:id` | `AgentSummary`: health, attention, capabilities, workspace label and path hint (never the path), sessions |
+| `POST /api/agents` `{ displayName, lotId, workspace: {path} \| {fromSessionId} }` | 201: Add to World (housed through the world, rolled back if it refuses) |
+| `GET /api/agents/arrivals`, `POST /api/agents/:id/claim` `{ sessionId }` | Unbound sessions; claim binds and backfills |
+| `GET /api/dispatches/policy` | Policy and the CLI probe. With `RUNLOOP_DISPATCH=off` the dispatch routes answer 404 `dispatch_disabled`. |
+| `POST /api/agents/:id/dispatches/preview` | The exact argv, environment variable names and a single-use nonce (nothing runs) |
+| `POST /api/dispatches` `{ previewId, approvalNonce }` | 201: runs it. Needs an allowed `Origin` (present). 403 bad nonce, 409 reused or expired nonce, moved workspace, CLI gone |
+| `GET /api/dispatches?agentId`, `GET /api/dispatches/:id[/stream]`, `POST /api/dispatches/:id/cancel` | Status, output (SSE), cancel (SIGTERM to the process group, SIGKILL after the grace period) |
+
 ## Tests
 
 ```sh
@@ -118,3 +137,5 @@ Tracer tests use the hook payloads in `test/fixtures/claude-code/` (real probe s
 - `claude-code-mapper.test.ts` folds each fixture into a run, compares it with `<fixture>.golden.txt`, and checks the invariants (no anomalies, one terminal event per call, subagent attribution, usage, no absolute paths, valid world placement). Update the goldens with `pnpm vitest run --project runtime -u` and review the diff.
 - `claude-code-plugin.e2e.test.ts` pipes every fixture line through the real plugin script into a live runtime, including an offline spool and flush.
 - `ingest.test.ts` covers the HTTP guards, dedupe, concurrent sessions, coexistence with the demo, restart and the idle sweep.
+
+World, agent and dispatch tests: `world-host.test.ts` and `world-http.test.ts` (clock, persistence, SIGKILL resume through `world-child.ts`, the stream), `agents*.test.ts` and `projector.test.ts` (binding, health, P4/P5/P7/P8), `dispatch*.test.ts` with a fake `claude` (`fake-claude.ts`), and `runtime-agents.int.test.ts` (everything wired through `createRuntime`).

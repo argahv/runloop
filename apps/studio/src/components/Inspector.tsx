@@ -21,6 +21,7 @@ import { toast } from '../ui/Toast';
 import { runtimeStatusView } from '../views/graph/model';
 import CharacterStatus from './CharacterStatus';
 import styles from './Inspector.module.css';
+import { inWorldHref } from './overlays/routes';
 import PayloadView from './PayloadView';
 import RunMetrics from './RunMetrics';
 import SourceFacts from './SourceFacts';
@@ -261,7 +262,10 @@ function EventView() {
   const copyLink = () => {
     if (!runId) return;
     const route = pathname.startsWith(ROUTES.traces) ? ROUTES.traces : ROUTES.world;
-    const url = new URL(linkTo(route, { runId, seq }), window.location.origin).href;
+    // In the world (`/`), the link reopens the trace sheet at this event beside the town.
+    const onTown = (pathname.replace(/\/+$/, '') || '/') === '/';
+    const href = onTown ? inWorldHref(linkTo(ROUTES.traces, { runId, seq })) : linkTo(route, { runId, seq });
+    const url = new URL(href, window.location.origin).href;
     navigator.clipboard.writeText(url).then(
       () => toast({ tone: 'ok', title: 'Link copied', description: `Opens event #${seq} of this run.` }),
       () => toast({ tone: 'err', title: 'Could not copy the link', description: url }),

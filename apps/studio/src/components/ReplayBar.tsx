@@ -10,7 +10,12 @@ import { Icon } from '../ui/Icon';
 import styles from './ReplayBar.module.css';
 
 /** Transport: previous / play / next, speed, scrubber with incident markers, live toggle. */
-export default function ReplayBar({ glass }: { glass?: boolean }) {
+/**
+ * `followLabel` names the follow state where "Live" would claim more than the
+ * run knows (inside an agent's building it is the agent's health that says
+ * live; a quiet open session follows its "Latest" event, without the live dot).
+ */
+export default function ReplayBar({ glass, followLabel = null }: { glass?: boolean; followLabel?: string | null }) {
   const store = useStudioStore();
   // Not the whole cursor: replay playback replaces it every animation frame.
   const live = useStudio((s) => s.cursor.mode === 'live');
@@ -117,8 +122,8 @@ export default function ReplayBar({ glass }: { glass?: boolean }) {
           disabled={runId === null}
           title="Follow the latest event (L)"
         >
-          <span className={styles.liveDot} data-on={live && !ended && !disabled ? 'true' : undefined} aria-hidden="true" />
-          {live ? (ended ? 'Latest' : 'Live') : 'Go live'}
+          <span className={styles.liveDot} data-on={live && !ended && !disabled && !followLabel ? 'true' : undefined} aria-hidden="true" />
+          {live ? (ended ? 'Latest' : (followLabel ?? 'Live')) : 'Go live'}
         </button>
       </div>
     </div>

@@ -145,8 +145,8 @@ export interface SessionState {
   runId: string | null;
   /** observedAt of the event that closed the run; deliveries observed before it are late. */
   closedAt: string | null;
-  /** What closed the run: Claude Code (ended), the idle sweep, or a runtime restart. */
-  closedBy: 'ended' | 'idle' | 'restart' | null;
+  /** What closed the run: Claude Code (ended), the idle sweep, a runtime restart, or Runloop stopping a dispatched session. */
+  closedBy: 'ended' | 'idle' | 'restart' | 'stopped' | null;
   /** From SessionStart, held until the run is created. */
   pending: { cwd: string | null; model: string | null; startSource: string | null };
   cwd: string | null;
@@ -250,10 +250,11 @@ export function mapHook(prev: SessionState, env: HookEnvelope, ctx: MapContext =
 }
 
 /**
- * Close everything still open (idle timeout or runtime restart). Events are
- * stamped `at` (normally the last observed time), all inferred.
+ * Close everything still open (idle timeout, runtime restart, or Runloop
+ * stopping a dispatched session it spawned). Events are stamped `at`
+ * (normally the last observed time), all inferred.
  */
-export function sweep(prev: SessionState, ctx: MapContext, reason: 'idle' | 'restart', at: string): MapResult {
+export function sweep(prev: SessionState, ctx: MapContext, reason: 'idle' | 'restart' | 'stopped', at: string): MapResult {
   if (prev.status !== 'open') return { state: prev, batch: null };
   const step = new Step(prev, at, ctx, { session_id: prev.sessionId, hook_event_name: 'Sweep' });
   step.closeAll(reason);
@@ -634,7 +635,7 @@ class Step {
   }
 
   /** Close everything (SessionEnd, idle sweep, restart). */
-  closeAll(reason: 'ended' | 'idle' | 'restart'): void {
+  closeAll(reason: 'ended' | 'idle' | 'restart' | 'stopped'): void {
     const s = this.s;
     this.denyPending(null);
     const why =
@@ -642,7 +643,9 @@ class Step {
         ? 'The session ended before a result was reported (inferred)'
         : reason === 'idle'
           ? `No events from Claude Code for ${this.ctx.idleMinutes} min; result not reported (inferred)`
-          : 'Runloop restarted; result not reported (inferred)';
+          : reason === 'stopped'
+            ? 'Runloop stopped the dispatched session; result not reported (inferred)'
+            : 'Runloop restarted; result not reported (inferred)';
     for (const [callId, call] of Object.entries(s.calls)) this.failCall(callId, call, 'unobserved', why, 'inferred');
     const taskSummary = reason === 'ended' ? 'Ended with the session (inferred)' : 'Closed without a reported end (inferred)';
     this.closeTurn(taskSummary, 'inferred');
@@ -668,7 +671,9 @@ class Step {
             summary:
               reason === 'idle'
                 ? `No events from Claude Code for ${this.ctx.idleMinutes} min; closed without a session end (inferred)`
-                : 'Runloop restarted while this session was traced (inferred)',
+                : reason === 'stopped'
+                  ? 'Runloop stopped this dispatched session (cancel or timeout); Claude Code sent no session end (inferred)'
+                  : 'Runloop restarted while this session was traced (inferred)',
           },
           actorId: 'system',
         },

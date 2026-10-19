@@ -1,4 +1,4 @@
-import type { TestMetrics, ToolCategory } from '@runloop-world/events';
+import type { RunEvent, RunOutcome, TestMetrics, ToolCategory } from '@runloop-world/events';
 import { CODING_MISSION, codingMissionFixture, runBuilder } from '@runloop-world/testkit';
 import { describe, expect, it } from 'vitest';
 import { diffRuns, summarizeRun, type RunDigest } from './compare';
@@ -10,7 +10,8 @@ interface CallSpec {
   tool: string;
   category?: ToolCategory;
   target?: string;
-  status?: 'success' | 'error' | 'denied';
+  /** running = started, no result yet (a live run). */
+  status?: 'success' | 'error' | 'denied' | 'running';
   metrics?: TestMetrics;
   failingTests?: string[];
   agentId?: string;
@@ -24,6 +25,10 @@ interface TracedSpec {
   /** Permission waits: ms until the answer, or 'inferred' for a denial Runloop reconstructed. */
   permissions?: (number | 'inferred')[];
   ended?: boolean;
+  /** How it ended (default stopped: a traced session's normal end). */
+  outcome?: RunOutcome;
+  /** A pause of this many ms (run.paused → run.resumed) before the calls. */
+  pauseMs?: number;
   ns?: number;
 }
 
@@ -46,6 +51,10 @@ function traced(spec: TracedSpec = {}): RunDigest {
   b.add('agent.registered', { agentId: 'main', name: 'Claude', role: 'main agent', model: spec.mainModel ?? null, tools: [], embodied: true }, rep);
   b.add('task.created', { taskId: 'turn-1', title: 'Turn 1', kind: 'turn', dependsOn: [] }, rep);
   b.add('task.started', { taskId: 'turn-1', agentId: 'main' }, rep);
+  if (spec.pauseMs !== undefined) {
+    b.wait(100).add('run.paused', {}, rep);
+    b.wait(spec.pauseMs).add('run.resumed', {}, rep);
+  }
   (spec.subagents ?? []).forEach((s, i) => {
     const id = `sa-${i + 1}`;
     b.wait(100).add('agent.registered', { agentId: id, name: s.name, role: 'Explore', model: null, tools: [], embodied: true }, rep);
@@ -69,6 +78,7 @@ function traced(spec: TracedSpec = {}): RunDigest {
       },
       rep,
     );
+    if (c.status === 'running') return;
     if (c.status === 'denied') {
       b.wait(500).add('tool.call_failed', { callId, errorType: 'denied', message: 'denied', durationMs: 500 }, { ...rep, parentEventId: started.eventId });
       return;
@@ -77,7 +87,7 @@ function traced(spec: TracedSpec = {}): RunDigest {
       'tool.call_completed',
       {
         callId,
-        status: c.status ?? 'success',
+        status: (c.status ?? 'success') as 'success' | 'error',
         durationMs: 500,
         outputSummary: '',
         ...(c.metrics ? { metrics: c.metrics } : {}),
@@ -92,8 +102,25 @@ function traced(spec: TracedSpec = {}): RunDigest {
     if (wait === 'inferred') b.wait(9000).add('tool.permission_resolved', { permissionId, decision: 'denied', by: 'unknown' }, { provenance: 'inferred' });
     else b.wait(wait).add('tool.permission_resolved', { permissionId, decision: 'approved', by: 'user' }, rep);
   });
-  if (spec.ended !== false) b.wait(1000).add('run.completed', { outcome: 'stopped', summary: 'Session ended' }, rep);
+  if (spec.ended !== false) b.wait(1000).add('run.completed', { outcome: spec.outcome ?? 'stopped', summary: 'Session ended' }, rep);
   return summarizeRun(foldExecution(b.events));
+}
+
+/** The scripted demo, stopped by the user after its first `keep` events (as POST /api/runs/:id/stop records it). */
+function stoppedDemo(keep: number, outcome: RunOutcome = 'stopped'): RunDigest {
+  const events = codingMissionFixture().slice(0, keep);
+  const last = events.at(-1)!;
+  const stop = {
+    eventId: '00000000-0000-4000-8000-00000000f00d',
+    runId: last.runId,
+    sequence: keep + 1,
+    timestamp: new Date(Date.parse(last.timestamp) + 100).toISOString(),
+    type: 'run.completed',
+    schemaVersion: last.schemaVersion,
+    visibility: 'public',
+    payload: { outcome, summary: 'Stopped by the user' },
+  } as RunEvent;
+  return summarizeRun(foldExecution([...events, stop]));
 }
 
 const T12 = (failed: number): TestMetrics => ({ tests: 12, passed: 12 - failed, failed });
@@ -425,7 +452,8 @@ describe('diffRuns', () => {
     const b = traced({ ended: false, calls: [{ tool: 'Read', category: 'read', target: 'a' }], ns: 0xb1 });
     const d = diffRuns(a, b);
     expect(d.outcome).toMatchObject({ a: 'stopped', b: null, comparable: false, changed: false, note: 'running_b' });
-    expect(d.durationMs).toMatchObject({ comparable: false, delta: null, note: 'not_reported_b' });
+    // Not "not reported": a live run has not ended yet.
+    expect(d.durationMs).toMatchObject({ comparable: false, delta: null, note: 'running_b' });
     expect(d.toolCalls).toMatchObject({ a: 0, b: 1, delta: 1, comparable: false, note: 'running_b' });
     expect(d.files).toMatchObject({ comparable: false, note: 'running_b' });
   });
@@ -478,5 +506,123 @@ describe('diffRuns', () => {
     const d = diffRuns(a, b);
     expect(d.failedCalls).toMatchObject({ a: 1, b: 0, delta: -1 });
     expect(d.firstDivergence).toMatchObject({ index: 0, kind: 'result', a: { status: 'failed' }, b: { status: 'success' } });
+  });
+
+  it('a demo run stopped early is never "faster" or "better": its time and counts are not judged', () => {
+    const full = summarizeRun(foldExecution(codingMissionFixture()));
+    const stopped = stoppedDemo(30);
+    expect(stopped).toMatchObject({ outcome: 'stopped', ended: true, tests: null });
+    const d = diffRuns(full, stopped);
+    expect(d.outcome).toMatchObject({ a: 'succeeded', b: 'stopped', changed: true });
+    for (const f of [d.durationMs, d.toolCalls, d.failedCalls, d.failures, d.openFailures, d.events]) {
+      expect(f).toMatchObject({ comparable: false, delta: null, caveat: 'incomplete_b' });
+    }
+    // The values themselves stay (they are recorded facts), and so does the other way round.
+    expect(d.durationMs.a).toBe(full.durationMs);
+    expect(diffRuns(stopped, full).failures).toMatchObject({ comparable: false, caveat: 'incomplete_a' });
+    // A run interrupted by a restart did not finish either (traced too: its normal end is "stopped", which does count).
+    const ended = traced({ calls: basic, ns: 0xa1 });
+    const interrupted = traced({ calls: basic.slice(0, 1), outcome: 'interrupted', ns: 0xb1 });
+    expect(diffRuns(ended, interrupted).durationMs).toMatchObject({ comparable: false, caveat: 'incomplete_b' });
+    expect(diffRuns(ended, traced({ calls: basic, ns: 0xb1 })).durationMs).toMatchObject({ comparable: true });
+  });
+
+  it('a stopped run’s latest test run is not judged either; two complete runs that end differently get no time verdict', () => {
+    const full = summarizeRun(foldExecution(codingMissionFixture()));
+    const afterFirstTests = codingMissionFixture().findIndex((e) => e.type === 'tool.call_completed' && 'metrics' in e.payload && e.payload.metrics);
+    const stopped = stoppedDemo(afterFirstTests + 1);
+    expect(stopped.tests?.latest).toMatchObject({ tests: 12, failed: 2 });
+    const d = diffRuns(full, stopped);
+    expect(d.tests.failed).toMatchObject({ a: 0, b: 2, comparable: false, delta: null, caveat: 'incomplete_b' });
+    // One failed, the other did not: time and counts say nothing about either; the tests still do.
+    const ok = traced({ calls: basic, ns: 0xa1 });
+    const failed = traced({ calls: basic, outcome: 'failed', ns: 0xb1 });
+    const f = diffRuns(ok, failed);
+    expect(f.durationMs).toMatchObject({ comparable: false, caveat: 'outcome_differs' });
+    expect(f.failures).toMatchObject({ comparable: false, caveat: 'outcome_differs' });
+    expect(f.tests.failed).toMatchObject({ comparable: true, delta: 0 });
+    // Executed "succeeded" against a traced session that ended claims nothing: no caveat (the modes are flagged).
+    expect(diffRuns(full, traced({ calls: basic })).toolCalls).toMatchObject({ comparable: true, note: 'mode_differs' });
+  });
+
+  it('a live run: a call with no result yet is no divergence, nor are calls it has not made yet', () => {
+    const done = traced({ calls: basic, ns: 0xa1 });
+    const firstRunning = traced({ calls: [{ ...basic[0]!, status: 'running' }], ended: false, ns: 0xb1 });
+    const d = diffRuns(done, firstRunning);
+    expect(d.firstDivergence).toBeNull();
+    expect(d.divergenceNote).toBe('running_b');
+    // Same so far, the candidate still recording: not "no divergence", not "only the baseline made more calls".
+    const sameSoFar = traced({ calls: basic.slice(0, 2), ended: false, ns: 0xb1 });
+    expect(diffRuns(done, sameSoFar)).toMatchObject({ firstDivergence: null, divergenceNote: 'running_b' });
+    // A different call is a divergence even while recording; so is a finished run's extra call once the other has ended.
+    const other = traced({ calls: [{ tool: 'Read', category: 'read', target: 'README.md' }], ended: false, ns: 0xb1 });
+    expect(diffRuns(done, other)).toMatchObject({ firstDivergence: { index: 0, kind: 'call' }, divergenceNote: null });
+    expect(diffRuns(traced({ calls: basic.slice(0, 2), ns: 0xb1 }), done)).toMatchObject({ firstDivergence: { kind: 'extra' }, divergenceNote: null });
+    // An unfinished call of a run that ended is a real difference (it never finished).
+    const cut = traced({ calls: [{ ...basic[0]!, status: 'running' }], outcome: 'interrupted', ns: 0xb1 });
+    expect(diffRuns(done, cut).firstDivergence).toMatchObject({ index: 0, kind: 'result' });
+    expect(d.divergenceNote).not.toBeNull();
+    expect(diffRuns(done, traced({ calls: basic, ns: 0xb1 })).divergenceNote).toBeNull();
+  });
+
+  it('a live run: test names it has not reached are not claimed as "failed only in the baseline"', () => {
+    const a = traced({ calls: [{ tool: 'Bash', category: 'test', target: 'node', status: 'error', metrics: T12(2), failingTests: ['x', 'y'] }], ns: 0xa1 });
+    const live = traced({ calls: [{ tool: 'Read', category: 'read', target: 'src/a.js' }], ended: false, ns: 0xb1 });
+    const d = diffRuns(a, live);
+    expect(d.tests.failedAlongTheWay).toMatchObject({ onlyA: [], complete: false, note: null });
+    expect(d.tests.pending).toBe('running_b');
+    expect(d.tests.failed).toMatchObject({ comparable: false, note: 'running_b' });
+    // Once it ends without those failures, they are the baseline's alone.
+    const ended = traced({ calls: [{ tool: 'Read', category: 'read', target: 'src/a.js' }], ns: 0xb1 });
+    expect(diffRuns(a, ended).tests.failedAlongTheWay.onlyA.map((t) => t.name)).toEqual(['x', 'y']);
+    expect(diffRuns(a, ended).tests.pending).toBeNull();
+  });
+
+  it('tests of a different scope: no "fixed", no pass/fail verdict, only the difference in scope', () => {
+    const all = traced({ calls: [{ tool: 'Bash', category: 'test', target: 'vitest', status: 'error', metrics: T12(2), failingTests: ['x', 'y'] }], ns: 0xa1 });
+    const oneFile = traced({ calls: [{ tool: 'Bash', category: 'test', target: 'vitest', metrics: { tests: 3, passed: 3, failed: 0 }, failingTests: [] }], ns: 0xb1 });
+    const d = diffRuns(all, oneFile);
+    expect(d.tests.fixed).toEqual([]);
+    expect(d.tests).toMatchObject({ namesComparable: false, namesCaveat: 'scope_differs' });
+    expect(d.tests.failed).toMatchObject({ a: 2, b: 0, comparable: false, delta: null, caveat: 'scope_differs' });
+    expect(d.tests.passed).toMatchObject({ comparable: false, caveat: 'scope_differs' });
+    expect(d.tests.total).toMatchObject({ a: 12, b: 3, delta: -9, comparable: true });
+    // Same scope: fixed as before.
+    const same = traced({ calls: [{ tool: 'Bash', category: 'test', target: 'vitest', metrics: T12(0), failingTests: [] }], ns: 0xb1 });
+    expect(diffRuns(all, same).tests).toMatchObject({ namesComparable: true, namesCaveat: null, failed: { delta: -2, comparable: true } });
+    expect(diffRuns(all, same).tests.fixed.map((t) => t.name)).toEqual(['x', 'y']);
+  });
+
+  it('duration leaves out the time a run was paused', () => {
+    const plain = traced({ calls: basic, ns: 0xa1 });
+    const paused = traced({ calls: basic, pauseMs: 20_000, ns: 0xb1 });
+    expect(paused.pausedMs).toBe(20_000);
+    expect(plain.pausedMs).toBe(0);
+    expect(diffRuns(plain, paused).durationMs).toMatchObject({ a: plain.durationMs, b: plain.durationMs! + 100, delta: 100, comparable: true });
+  });
+
+  it('duration of an executed run against a traced one is not comparable (paced or not real time, against real time)', () => {
+    const executed = summarizeRun(foldExecution(codingMissionFixture()));
+    expect(diffRuns(executed, traced({ calls: basic })).durationMs).toMatchObject({ comparable: false, delta: null, note: 'mode_differs' });
+  });
+
+  it('first divergence: the same test call failing different tests (both named all) is a different result', () => {
+    const call = (failing: string[]): CallSpec => ({ tool: 'Bash', category: 'test', target: 'node', status: 'error', metrics: T12(2), failingTests: failing });
+    const d = diffRuns(traced({ calls: [call(['x', 'y'])], ns: 0xa1 }), traced({ calls: [call(['z', 'w'])], ns: 0xb1 }));
+    expect(d.firstDivergence).toMatchObject({ index: 0, kind: 'result', a: { failingTests: ['x', 'y'] }, b: { failingTests: ['z', 'w'] } });
+    // Same names in another order, or names one side did not give in full: no divergence from names.
+    expect(diffRuns(traced({ calls: [call(['x', 'y'])], ns: 0xa1 }), traced({ calls: [call(['y', 'x'])], ns: 0xb1 })).firstDivergence).toBeNull();
+    expect(diffRuns(traced({ calls: [call(['x', 'y'])], ns: 0xa1 }), traced({ calls: [call(['z'])], ns: 0xb1 })).firstDivergence).toBeNull();
+  });
+
+  it('cost: as the source reported it per run, never 0 when not reported', () => {
+    const run = foldExecution(codingMissionFixture());
+    expect(summarizeRun(run).costUsd).toBeNull();
+    const a = summarizeRun(run, { costUsd: 0.0123 });
+    const b = summarizeRun(run, { costUsd: 0.0101 });
+    expect(a.costUsd).toBe(0.0123);
+    expect(diffRuns(a, b).costUsd).toMatchObject({ a: 0.0123, b: 0.0101, comparable: true });
+    expect(diffRuns(a, summarizeRun(run)).costUsd).toMatchObject({ comparable: false, note: 'not_reported_b' });
+    expect(summarizeRun(run, { costUsd: -1 }).costUsd).toBeNull();
   });
 });

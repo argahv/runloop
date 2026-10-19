@@ -17,6 +17,8 @@
     "@hono/node-server": "2.1.5",
     "@runloop-world/core": "workspace:*",
     "@runloop-world/events": "workspace:*",
+    "@runloop-world/sim": "workspace:*",
+    "@runloop-world/town": "workspace:*",
     "@runloop-world/world-engine": "workspace:*",
     "hono": "4.13.13"
   },

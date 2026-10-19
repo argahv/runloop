@@ -1,6 +1,6 @@
-# Verification report: Claude Code tracer, Runloop Signature Studio and run compare
+# Verification report: Claude Code tracer, Runloop Signature Studio, run compare and the town
 
-> 2026-10-17 (§1–§5) and 2026-10-18 (§6) · branch `claude/amazing-wright-rzio6c` · Node 22.22.0 · pnpm 10.28.0 · Claude Code 2.1.302 · Linux, headless Chromium (SwiftShader WebGL) for screenshots.
+> 2026-10-17 (§1–§5) and 2026-10-18 (§6, §7) · branch `claude/amazing-wright-rzio6c` · Node 22.22.0 · pnpm 10.28.0 · Claude Code 2.1.302 · Linux, headless Chromium (SwiftShader WebGL) for screenshots.
 >
 > Screenshots marked *(session)* were taken in this session's scratch directory and are not committed. The committed ones are in `docs/assets/`; on 2026-10-18 they were re-captured from the same recorded sessions in the current Studio (§6).
 
@@ -59,10 +59,10 @@ Session 2 added "exactly `node --test`, no pipes". Session 3 used a shorter task
 | A real `claude -p` session produces a **live** run in Studio | `/world/` opened with no run in the URL. The Studio opened the live session by itself (`?run=0d3a3dd9…`), and the header showed **Live** and **Traced · Claude Code · Live**. 4–5 captures per session while it ran. *(session)* `e2e/s1/live-0[1-5].png`, `e2e/s2/live-0[1-4].png`; committed at the time as `docs/assets/claude-code-live.png` (in git history; replaced on 2026-10-18 by `claude-code-session.png`, a replay of the same session in the current Studio, see §6). | Pass |
 | **Main agent plus subagent robots** | Session 2 recorded `agent.registered` for `main` ("Claude"), `sa-a694bca8d14490c32` ("Explore #1") and `sa-a9bcb8b405054a668` ("Explore #2"). Each subagent's tool calls carry its own `agentId`, so they are attributed by `agent_id`. Three robots are visible in the live captures. | Pass |
 | **Stations by tool category** | Recorded categories: `test` (`node --test`), `delegate` (Agent), `execute` (subagent `ls`/`cat`), `read`, `edit`. In the world, the main agent walks to the Probe Bench (Test Chamber) for the test run, and the subagents work at the Workshop stations for their shell reads. This was checked with `ReplayIndex.stateAt` (intents: `test`, then `build` for `execute`). | Pass |
-| **A failing Bash test shown as an incident**, with the real failure | Session 2, seq 9: `tool.call_completed {status: error, errorType: exit_nonzero, exitCode: 1, outputSummary: "Exit code 1 · 12 tests: 10 passed, 2 failed"}`. The failing tests are `listOpen returns only tasks that are not done` and `listOpen reflects complete()`. It was delivered by `PostToolUseFailure` and is shown as a red **Tool error** incident at the Test Chamber, with a failure marker on the scrubber. Committed `docs/assets/claude-code-failure.png`. | Pass |
+| **A failing Bash test shown as an incident**, with the real failure | Session 2, seq 9: `tool.call_completed {status: error, errorType: exit_nonzero, exitCode: 1, outputSummary: "Exit code 1 · 12 tests: 10 passed, 2 failed"}`. The failing tests are `listOpen returns only tasks that are not done` and `listOpen reflects complete()`. It was delivered by `PostToolUseFailure` and is shown as a red **Tool error** incident at the Test Chamber, with a failure marker on the scrubber. Committed at the time as `docs/assets/claude-code-failure.png` (in git history; removed from `docs/assets` on 2026-10-18 when the README moved to town images, §7). | Pass |
 | **The inspector on that tool call** | The inspector text at `?event=9`: "Bash error · 10 passed, 2 failed · Reported · Input `node --test` · Result Exit code 1 · Error type exit_nonzero · Exit code 1 · Provenance: Start reported by Claude Code, End reported by Claude Code · Test results 10 passed, 2 failed, 12 total". *(session)* `e2e/s2/post-world-incident.png`, `e2e/s2/post-traces-incident.png`. | Pass |
 | **Metrics**: subagent tokens "reported by Claude Code", main agent "not reported" | Traces → Metrics, the "Tokens and model per agent" table: Claude, *not reported*. Explore #1, `claude-haiku-5-5`, 20.8k, Claude Code. Explore #2, `claude-haiku-5-5`, 21.6k, Claude Code. Footnote: "Claude Code reports usage for subagents only…". Tokens card: 42.5k, "reported for 2 of 3 agents". Cost: *not reported*. *(session)* `e2e/s2/post-metrics-tokens.png`. | Pass |
-| **2D graph with delegation edges** | Network view: You → Claude ("Turn", 2 messages) and Claude → Explore #1 / Explore #2 ("Delegated", 1 message each). The subagent cards show reported tokens and model. It was captured live (*(session)* `e2e/s2/live-graph.png`) and after the run (committed `docs/assets/claude-code-network.png`). | Pass |
+| **2D graph with delegation edges** | Network view: You → Claude ("Turn", 2 messages) and Claude → Explore #1 / Explore #2 ("Delegated", 1 message each). The subagent cards show reported tokens and model. It was captured live (*(session)* `e2e/s2/live-graph.png`) and after the run (committed at the time as `docs/assets/claude-code-network.png`, in git history; removed on 2026-10-18, §7). | Pass |
 | **Refresh keeps history** | Reloading `/world/?run=0d3a3dd9…&event=9` restored the same run, event, agent (`&agent=main`) and inspector content, loaded from the runtime's log. *(session)* `e2e/s2/post-world-incident-after-refresh.png`. | Pass |
 | **Runtime restart: run persists, replays without re-execution** | The runtime was stopped with SIGTERM and started again on the same data dir. `/api/runs` before and after: `680b3596…` stopped/47, `0d3a3dd9…` stopped/45, unchanged. Replay of session 2 from event 1: the Studio showed **Replaying** ("Replaying persisted events; nothing is re-executed"). The workspace's `src/task-store.js` sha256 was unchanged, no workspace file changed during the replay, and event counts were unchanged. *(session)* `e2e/restart/replay-start.png`, `e2e/restart/replay-mid.png`. | Pass |
 | **Plugin with the runtime down (spool), then up (flush on the next hook)** | Session 3 started at 19:54:51.2Z with the runtime stopped. While it was down, the plugin spooled 6 envelopes in `~/.claude/plugins/data/runloop-tracer-inline/spool/39428e5f…/`, and `last-error.json` read "Runtime http://127.0.0.1:4380 answered fetch failed; events stay in the spool". The runtime restarted at 19:54:59.6Z. The `Stop` and `SessionEnd` hooks then flushed the spool. The run has all 19 events, in order, from `run.started` (observed 19:54:52.9) to `run.completed` (19:55:01.3), and the spool is empty. Claude Code exited 0, and its result was unaffected. | Pass |
@@ -266,7 +266,7 @@ Measured with the framing code at the stage sizes the framing tests use (canvas 
 | 1920×1080 | 80.7–82.3% | 60 px |
 
 - **Criteria:** ≥ 80% and ≥ 28 px at 1440 both pass; the tests assert both.
-- **Look:** the diorama with chibi robots was reviewed in both themes in the screenshot matrix. The light theme is the "architectural model" look recorded as DL-009.
+- **Look:** the diorama with chibi robots was reviewed in both themes in the screenshot matrix. The light theme is the "architectural model" look recorded as DL-013 (numbered DL-009 at the time).
 - **Not built:** the collapsible timeline from the task's description (now D11).
 - **Performance:** the world builder's figures were not re-measured here: draw calls 273 → 286 (high quality), and frame time 263 → about 329 ms under software WebGL, from the larger board.
 
@@ -275,3 +275,356 @@ Measured with the framing code at the stage sizes the framing tests use (canvas 
 - **Cost:** not compared, because no source reports it.
 - **Real-GPU frame rate.**
 - **Keyboard and reduced-motion runs of Experiments were not repeated here.** The compare builder's Playwright script covered keyboard picking (11/11 before this round). This round re-checked pinning through the UI on the final build: pin from the run header (toast, `aria-pressed`, API `pinnedAt`), unpin, Undo, and a reload, 7/7 with no page errors; the run was left unpinned.
+
+## 7. The town, real agents and dispatch (2026-10-18)
+
+> Integration of the world-simulation slice (S0–S4 of `docs/architecture/world-simulation.md`) after the five builders finished. Same machine and tools as above (Node 22.22.0, Claude Code 2.1.302, SwiftShader). Runtime on port 4380 with `RUNLOOP_DATA_DIR=<scratch>/data-world-e2e` and its own token file; Studio static export on port 3000 (`python3 -m http.server`).
+
+### Integration fixes
+
+The builders' reports listed gaps between workstreams; these were closed at the root, each with a test:
+
+| Problem | Fix | Test |
+|---|---|---|
+| `runtime.ts` did not wire the agent layer or dispatch: the shipped runtime answered 404 on `/api/agents` | `createRuntime` builds `AgentService` (the tracer's `onSessionSeen` feeds it) and the dispatch manager, mounts their routes, starts them after the world and stops them before it; `RUNLOOP_WORLD=off` answers 404 `world_disabled` on agent routes; exports and CLI help updated | `runtime-agents.int.test.ts` (Add to World, hooks over HTTP make the agent live in the real world host, a failing test shows as an incident, restart reads offline, the switches) |
+| A cancelled or timed-out dispatch sends no SessionEnd, so its run stayed open and the agent read live for 5 minutes | `TraceSessionManager.closeStopped` closes the run as interrupted (inferred), wired to dispatch's `onStopped` | same file |
+| **Found in the real run:** a dispatch in a workspace that had been traced with `--plugin-dir` got no `--plugin-dir` ("it already sent hooks"), so it ran untraced | The CLI probe also reads `claude plugin list --json`: `--plugin-dir` unless the tracer is installed and enabled; the old heuristic only when the CLI cannot say | `dispatch-units.test.ts`, `dispatch.int.test.ts` (fake CLI reporting the plugin installed) |
+| **Found in the E2E:** keys typed right after ⌘K went to page shortcuts (Space pauses the world) while a busy 3D frame delayed the dialog's focus | The dialog focuses its first field at once, then once more on the next frame | `scripts/e2e-world.mjs` (⌘K → name → Enter) |
+| A deep-linked `?focus=resident:` did not frame the resident (the request arrived before positions existed and was dropped) | The town camera keeps an unplaceable focus for up to 6 s and retries each frame | screenshots (`resident-why`) |
+| **Found in the real run:** inside an agent's building, the interior kept showing the session opened on Enter; a session that started while watching (a dispatched task) did not appear | The interior follows the building's open session (`Town3D`: when the entered agent's `activeRunId` changes, the Studio opens that run) | a fourth real dispatch, watched from inside (below) |
+| A grouped dispatch item in the feed showed "You" next to "completed" | A merged item takes the provenance of its latest event | `attention.test.ts` |
+| Render quality offered only high or low, so adaptive quality never ran | An "Automatic" preference (now the default) is passed to the town | `prefs.test.ts` |
+| `dispatch.int.test.ts` timed out on a loaded machine (a fake run replays a session through the real hook script) | 30 s per test, and a 1.5 s test "minute" for task timeouts | the file passes alone and next to three busy CPU loops |
+| The fold comment in `events/src/world.ts` said every building starts empty | Homes start occupied | — |
+
+### Deviations from the plan (all recorded by the builders, kept)
+
+- **Contracts, additive:** `world.created` carries `worldId`; `resident.decided` adds `rates` and `until`; `resident.arrived` carries `place`, `slotId`, `needs`, `rates`; needs are milli-points (0–100 000), so replay equals live exactly. `AgentPresence` adds `lotId`, `openIncidents`, `dispatch`. The town file has more top-level fields (start time, population, crossings, areas, landmarks, schedules, needs, look, agent HQ) and a sixth district, Brookside.
+- **Sim API:** `step` takes `{town, seed}` and `applyEvent` takes the town (the snapshot carries neither); `applyInputs` applies commands between ticks, so a paused world still answers commands. Walk paths are the BFS field descended from the target (same length as `bfs`, not always the same cells).
+- **Agents:** "first event" means the first recorded event of a bound run (a SessionStart alone stays *awaiting first event*); activity is sent only when it changes; a claim binds and backfills but adds no folder.
+- **Dispatch:** approval needs an Origin header (present and allowed); the nonce also binds the resolved `claude` executable; the environment allowlist adds `RUNLOOP_INGEST_TOKEN_FILE` and names listed in `RUNLOOP_DISPATCH_ENV`; dispatch is on by default; a task starting with `-` is refused; `lost` is reported by `system`; the "awaiting approval" attention is not emitted. **`--plugin-dir` follows `claude plugin list`** rather than "the workspace never sent a hook" (fixed above).
+- **Renderer:** the static town is a few merged meshes (per-building state in a small texture) rather than instanced per archetype; shadows are variance shadow maps updated only when the sun moves; the JS budget is checked at p50 under SwiftShader.
+- **Studio:** a resident's Why comes from `/api/world/explain` (built by the server from the recorded event; the panel still drops unsourced factors); the "while you were away" card exists although the plan defers catch-up.
+- **Decision log:** the light-world entry was renumbered DL-013 so DL-009–012 match the plan.
+
+### Checks
+
+| Command | Result |
+|---|---|
+| `pnpm install --frozen-lockfile` | OK; lockfile unchanged by the integration (no new dependencies) |
+| `pnpm -r typecheck` | 10/10 projects pass (events, testkit, core, world-engine, replay, town, sim, runtime, claude-code-plugin, studio) |
+| `pnpm test` | **96 files, 1082 tests, all passed** (two consecutive runs). By project: events 149, core 77, world-engine 60, replay 13, town 79, sim 70, runtime 294, testkit 3, claude-code-plugin 22, studio 315. New in the integration: `runtime-agents.int.test.ts` (4), plugin-probe unit and integration tests (3), feed provenance (1), automatic quality (prefs). |
+| `pnpm build` | Static export: `/` (the town), `/overview`, `/world`, `/traces`, `/experiments`, `/integrations`, `/settings`, 404 |
+| `claude plugin validate --strict integrations/claude-code-plugin` and `--strict .` | Validation passed |
+| `RUNLOOP_DATA_DIR=<fresh> pnpm demo -- --speed 0 --port 0` | 58 events; `run_command` 10 passed / 2 failed (seq 36), then 12/12 (seq 55); `run.completed succeeded`; exit 0; the database is at schema 5 with the world created |
+| `node scripts/e2e-world.mjs --fresh` (fresh runtime, new world at 08:00) | **11/11 checks pass:** the town rendered in 2.7 s; **62 of 80 residents** walked within 3 s (needed ≥ 48); the clock went 08:05 → 08:07; ⌘K on "Otto Haddad" opened the panel; the Why's 4 factors cite `resident.decided` seq 2 (`simulation`); Follow pressed; the café interior opened; no page errors |
+| `node scripts/e2e-world.mjs` (the e2e world, Day 5 04:00) | 10/11 before the day-only rule: 0 residents walked at 04:00, when nearly all sleep; the script now requires walking only by day (06:00–22:00) |
+| `node scripts/perf-town.mjs --port 3000` | All 9 views within budget, exit 0 (below) |
+| `pnpm --filter @runloop-world/sim bench` | Below |
+| `pnpm screenshots` | 172 images, exit 0, no page errors (below) |
+
+### Real end to end
+
+**Setup.** `pnpm serve -- --port 4380` with `RUNLOOP_DISPATCH_ENV=NODE_EXTRA_CA_CERTS,HTTPS_PROXY,NO_PROXY` (this sandbox's proxy). New world: `runloop-commons`, seed 725890276, content hash `6d0c75459a19e7e2`, 80 residents, created 10:19:48Z. Workspace: a git copy of `examples/coding-mission/repo` with `implement.buggy.js` as `src/task-store.js` (`node --test`: 10 passed, 2 failed).
+
+| Step | What happened | Result |
+|---|---|---|
+| (a) A living town | `scripts/e2e-world.mjs` (written for this check, plan S2 E2E) against the live world: the town rendered in 2.8–3.1 s; 5–16 residents walked in each 3 s window by day; the clock advanced ("Day 1 · 09:33" → "09:36"); ⌘K on a walking resident's name opened their panel; the Why was labelled "Simulated resident · rule-based decision" and its 4–5 factors all cited `resident.decided` events that exist (e.g. seq 377, prov `simulation`, actor = the resident); `?focus=building:bld_corner_cafe` → Enter showed the café interior. The first runs failed twice: ⌘K typing was lost while the 3D frame delayed the dialog's focus (fixed above), and the script's Follow check toggled a follow ⌘K had already set (fixed in the script). On a fresh world: see Checks (62 of 80 walking within 3 s, 11/11). | Pass |
+| Follow through lunch | Instead of watching at 4× in the browser, three residents (`res_0005`, `res_0012`, `res_0040`) were followed through Day 2, 11:00–14:00, in the recorded world log (`/api/world/events?actor=`): 29 events, 15 decisions. For each decision, `explain(atSeq)` named the same action and place as the recorded event, and the resident's next arrival was at that place (e.g. `res_0012`: lunch at the Café patio at 11:49, arrived 12:08; back to work at Signal House at 12:49, arrived 13:08). | Pass |
+| (b) Add to World | Through the dialog: "Claude", lot 1, the workspace path. `agt_abc0a41c-ac3b-40af-ac88-7339626e3f07` in `bld_agent_hq_1`, health `awaiting_first_event`, building dimmed with "Waiting for first event". | Pass |
+| (c) One real session | `env -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_CHILD_SESSION claude -p "<run node --test; one subagent reads the test file; fix with Edit; rerun>" --model haiku --session-id e7659ec6-205b-429c-800a-02b7859cbe10 --plugin-dir <repo>/integrations/claude-code-plugin --allowedTools "Read,Grep,Glob,Edit,Agent,Bash(node --test*)" --max-budget-usd 0.09`. **$0.0163, 6 turns, 18.3 s**, exit 0, 12/12 tests afterwards (`listOpen` filter fixed). 23 hook deliveries → run `4e234825-0948-535f-9129-478f11094eee` (32 events), bound by path at SessionStart (10:31:52.498Z). **Live 1.08 s after the first hook** (SessionStart observed 10:31:52.293Z; `agent.connection_changed live` at 10:31:53.375Z, 0.02 s after the first prompt arrived). The building showed counts by category as they came (test 1 → delegate → read → edit → test 2) and 1 subagent; 9 `agent.activity_observed` (external-agent, observed) and 2 `agent.session_changed`; offline at 10:32:11.6Z after SessionEnd while the clock ran on. No incident: Haiku ran `node --test 2>&1 \| tail -n 60`, which exits 0, so Claude Code reported success and the trace says so (the same finding as §2). The incident path is covered by `runtime-agents.int.test.ts`, which sends a recorded real session's failing `node --test` through ingest and sees `openIncidents > 0` and attention `incident`. | Pass, except the live incident (not exercised by this session) |
+| Interior | "Enter building" shows the research-campus diorama at 0.5 scale. For the real session it was captured after the session ended (under SwiftShader the page lags the runtime by seconds); Live World of the same session at event 17 shows Claude and "general-purpose #1" reading the test file. Watched from inside during dispatches 3 and 4 (below): dispatch 3 showed the old session (the bug above); after the fix, dispatch 4 showed Claude walking to and reading at the Observatory, the panel "Working · read 4 · from run events 1–14", the task "Running". | Pass |
+| (d) Assign task | Through the dialog, haiku, Read-only, $0.05: preview → approve → done. Dispatch 1 `dsp_35b64d6c-8c07-4564-a3a3-3c6adbac9341` completed in 6.8 s, **$0.0023**, exit 0, correct answer — but untraced (no run): the bug above. After the fix and a restart, dispatch 2 `dsp_b8119b59-6dd3-426c-b830-9f8320722c6f` (session `9dd86987-16ab-4a0c-aae8-2fd61a04368f`) ran with `--plugin-dir`, completed in 7.0 s, **$0.0015**, 2 turns, and was traced as run `5466ef3c-e80d-5984-ac07-15871a29c0d0`, **bound by dispatch**. World events: approved (user) → running (system) → live → session started and activity (search 1, external-agent) → finished `completed` (system) → offline. Audit: previewed, approved, spawned, bound, exited. Dispatches 3 and 4 were approved through the API with the Studio's origin (the same requests the dialog sends) while a page watched from inside the building: `dsp_e8663dd7-f591-48d6-b33d-5406351c9030` ($0.0036, 6 turns, 11.4 s, run `58afc2d2-d2a2-5526-bf0d-5dba2175d7e9`) and `dsp_f342795d-9b93-4928-b994-aebf28a4a25a` ($0.0033, 7 turns, 13.0 s, run `d598d378-4272-506a-9c33-4cd7a9c121a9`), both completed, traced and bound by dispatch. | Pass |
+| (e) Restart | SIGTERM (stopped in 1.3 s), restart on the same data dir. World id, content hash, seed, creation time, population and the roster (sha `2653ce58edfeca18`: ids, names, roles, homes, workplaces) identical; 28 buildings; `world.resumed_after_offline {offlineWallMs: 7534}` appended; the agent's building present, `housed`, **offline**; session `4e234825…` replays (32 events; Live World with the "Agent District › Claude › Session #1" crumb and Back to town). | Pass |
+| P8 | The workspace's realpath appears in 0 rows of `worlds`, `world_events`, `agents`, `workspaces`, `agent_connections`, `session_bindings`, `audit_log`, `dispatches`, `runs` and `events`, and in no response of `/api/world`, `/snapshot`, `/events`, `/api/agents`, `/arrivals`, `/api/dispatches`, `/api/runs`; it is in `workspace_roots` once. | Pass |
+
+**Spend:** session $0.0163 + dispatches $0.0023, $0.0015, $0.0036 and $0.0033 = **$0.027** (cap $0.15).
+
+### Performance
+
+`node scripts/perf-town.mjs` (SwiftShader, 1440×900, high quality; all 9 views pass, exit 0):
+
+| View | Draw calls (+shadow pass) | Triangles | JS per frame p50 / p95 (ms) | Frame p50 (ms) | Actors |
+|---|---|---|---|---|---|
+| town | 46 (+73) | 132,605 | 1.3 / 13 | 74 | 84 |
+| district (Market Street) | 46 (+73) | 163,645 | 1.3 / 19 | 33 | 84 |
+| street (Market) | 12 (+39) | 143,801 | 1.1 / 4.9 | 33 | 84 |
+| street (Atrium) | 14 (+41) | 144,189 | 1.4 / 5.3 | 27 | 84 |
+| café interior | 13 (+41) | 145,959 | 1.1 / 10.7 | 82 | 84 |
+| agent HQ interior | 218 (+236) | 178,975 | 1.9 / 18 | 86 | 84 |
+| town at night | 47 (+32) | 132,653 | 1.2 / 10.7 | 64 | 84 |
+| town, 504 actors | 46 (+73) | 147,725 | 1.7 / 5.7 | 72 | 504 |
+| street, 504 actors | 15 (+42) | 323,387 | 2.2 / 10.4 | 38 | 504 |
+
+Budgets (plan §9): draw calls ≤ 120 / 150 / 250 (town / street / interior), ≤ 400k triangles, JS ≤ 4 ms per frame with 500 actors (checked at p50; under SwiftShader the p95 measures pre-emption by the software rasteriser). Frame times here are SwiftShader's and are not a target; a real GPU was not available.
+
+`pnpm --filter @runloop-world/sim bench` (Node 22.22.0), two runs each:
+
+| Residents | Tick avg | p50 | p95 | p99 | max | One sim day | Events / day | Checkpoint (gz) |
+|---|---|---|---|---|---|---|---|---|
+| 120 | 0.19–0.27 ms | 0.16–0.23 | 0.44–0.59 | 0.89–1.02 | 3.5–4.2 ms | 275–390 ms | 4.8k, 1.6 MB | 11–12 KB |
+| 288 (bench-only 4-floor Commons) | 0.49–0.50 ms | 0.40–0.46 | 0.95–1.10 | 1.56–2.24 | 7.3–7.9 ms | 707–718 ms | 11.3–11.4k, 3.8 MB | 27 KB |
+
+Within budget: tick p99 ≤ 2 ms at 120; p99 ≤ 5 ms, max ≤ 15 ms and a day ≤ 2 s at 288; checkpoint ≤ 100 KB. **Over budget:** events per day (≤ 6k and ≤ 1 MB at 300).
+
+### Screenshots
+
+`pnpm screenshots --out <scratch>/matrix` against the e2e runtime and the static Studio: **172 images in ~65 min, exit 0, no page errors**: 22 states × {dark, light} × {1280, 1440, 1920, 390}, minus the two desktop-only states at 390. New states: `town`, `town-district`, `town-street`, `town-map`, `town-directory`, `cafe-interior`, `world-log`, `agents-mode`, `add-to-world-1/2/3`, `resident-why`, `agent-offline` (named after the agent's health), `agent-interior`, `dispatch-compose`, `dispatch-review`, `offline-town`, next to Overview, Integrations, Live World, Traces and Experiments. A night pass (`--suffix -night`) added town, district and street at night in both themes (1440).
+
+Looked at every contact sheet and fixed what they showed:
+- At 390 px the compact "Add" button had no "Add to World" name (Add to World states failed to open); it now carries the full accessible name.
+- `?focus=resident:` did not frame the resident (fixed above); `?focus=district:dst_market_street` frames almost the whole town because Market Street spans it, so the district state now uses Civic Atrium.
+- Dialogs were caught mid-fade under SwiftShader; the script waits for them.
+The district, Add to World and Assign task states were captured again after these fixes (40 images, exit 0, no notes).
+
+Earlier captures in the same session: the e2e steps (Add to World, the agent waiting, live, offline, its interior, the dispatch dialog and its result) and the night pass. Images in `docs/assets/` (town, town-night, resident-why, agent-live, agent-interior, add-to-world, assign-task) come from these runs; `claude-code-session.png` is kept from §6.
+
+### Not verified
+
+- A real cancel at the first tool call (plan S4 opt-in check): fake `claude` only.
+- An incident on the building from a real session (see (c)); an interactive, non `-p` session with an approval.
+- Watching one resident through lunch at 4× in the browser (the recorded log was followed instead, see above).
+- Frame time on a real GPU; event-loop lag at 16× while ingesting 50 envelopes/s; memory after 7 wall-days; boot time (plan: ≤ 300 ms).
+- Onboarding coachmarks, axe and keyboard-only passes (not built or not run).
+
+## 8. Review fixes in the packages (2026-10-18, second pass)
+
+The world/agents/compare review's findings that live in `packages/**` were re-checked, fixed at the root and guarded by tests. Studio-side halves were handed to the Studio team (scratchpad `ui-findings-for-immersive.json`, 10 entries); nothing in `apps/studio` was changed by this pass.
+
+### Fixed
+
+| Finding | Fix | Guarded by |
+|---|---|---|
+| **High: any page on an allowed origin could approve a dispatch** (preview handed out the nonce over CORS) | A person approves on the runtime's own page, `GET/POST /approve/:previewId` (no CORS, CSP `default-src 'none'`, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, COOP same-origin, `Referrer-Policy: same-origin`, a 1 s minimum review, Approve and Decline). A preview requested from another origin (Studio's too) carries `approvalNonce: ''` and an `approveUrl`; `POST /api/dispatches` needs the runtime's own Origin (`approve_in_runtime` otherwise). `GET /api/dispatches/previews/:id` says where an approval stands. | `dispatch.int.test.ts` (an allowed foreign origin gets no nonce and cannot approve even holding one; the page is escaped and unframeable; a click before review spends nothing; approve, decline); real Chromium check below |
+| Refused approval attempts were not audited | The app guard reports refused writes (`onRefusedWrite`); dispatch routes, the approval page and preview refusals write `dispatch.request_refused` / `dispatch.preview_refused` with ids, code and origin | `dispatch.int.test.ts` (exact audit rows) |
+| A restart killed a dispatch that was writing (EPIPE), recorded as `lost` | stdout/stderr go to files in `<data>/dispatch-output/` (0600, removed when the task ends) and are tailed (4 MiB per tick at most); an adopted orphan is tailed again from the start, and one that ended while Runloop was down ends with its own result line (else `lost`) | `dispatch.int.test.ts` (`[fake:chatty]` keeps writing across a restart, exits 0, ends `completed` with its reported cost, all 50 lines streamed, files gone) |
+| An adopted orphan lost its time limit and was invisible to capabilities | Its original deadline (created_at + timeout) is armed at adoption; running counts (`runningDispatches`, `dispatchAgentFor`) include `orphaned` | `dispatch.int.test.ts` (orphan times out at ≥ 3 s, cancel available, a second preview refused meanwhile) |
+| Health read `live` for a running dispatch with no events | `live` needs a hook in the last 5 min; an open run or a running dispatch without one is `idle` | `agents-units.test.ts` (rule table, "live always means a recent hook") |
+| `--plugin-dir` dropped after Runloop's own first dispatch when the CLI cannot say | Only sessions Runloop did not dispatch count as the workspace sending hooks (`registry.ownSessionCount`) | `dispatch.int.test.ts` (still passed after dispatches; dropped once a path-bound session of its own sends a hook through the real ingest) |
+| HTTP clients could send `agent.house` / `agent.dispatch` (phantom agents, forged outcomes) | `POST /api/world/commands` takes only `clock.set` and `building.set_open` (`UserWorldCommandSchema`) | `world-http.test.ts`, `world.test.ts` |
+| HTTP clients could take the runtime's own command ids (`sess:`, `act:`, `conn:`, `house:`, `dsp:`) first | Such ids are refused with 400 (`RUNTIME_COMMAND_ID_PREFIXES`) | `world-http.test.ts`, `world.test.ts` |
+| `world_events` grew forever (interactions never pruned); each prune scanned all history | Interactions are short-lived like the ambient events (`isShortLivedWorldEvent`; their effect is in every checkpoint's affinity); `MIGRATIONS[5]` marks existing rows and adds `(world_id, ambient, tick)`, which the prune uses (`INDEXED BY`) | `world-host.test.ts` (8 sim days: nothing short-lived older than the window, rows and pages flat from day 5, query plan, the world still boots), `world-migrations.test.ts` |
+| SSE resume trusted a Last-Event-ID from another world | Every new world gets its own id (`runloop-commons-<8 hex>`; existing worlds keep theirs); SSE ids are `<worldId>:<seq>`; another world, a seq ahead of this world, or `?world=` that differs gets a snapshot (bare numeric ids still accepted) | `world-http.test.ts`, `world.test.ts`, `world-host.test.ts` |
+| Studio kept the old speed for up to 1 s after a speed change (server half) | The stream sends a `clock` frame right after a batch with `world.clock_changed` | `world-http.test.ts` |
+| **High: compare rated a stopped or interrupted run "faster" / "fewer failures"** | `FieldDiff.caveat` (`incomplete*`, `outcome_differs`): duration, calls, failures, events (and test counts of an incomplete run) are not comparable; kept apart from `DiffNote` so Studio's wording table still compiles | `compare.test.ts` |
+| Compare stated divergence and test names as final while recording | A live run's pending call or missing calls are no divergence (`divergenceNote`); "failed only in A" is not claimed while B records (`tests.pending`); a live run's missing value reads `running_*` | `compare.test.ts` |
+| Fixed/newly failing across test runs of different scope | `scope_differs`: no fixed/newly failing, no pass/fail verdict; totals still compared | `compare.test.ts` |
+| Duration counted pauses; executed vs traced duration judged | The reducer records pause time (`run.pausedMs`); duration leaves it out; mode difference → `mode_differs`, not comparable | `compare.test.ts` |
+| Divergence ignored which tests failed | `DigestCall.failingTests`; different complete sets are a `result` divergence | `compare.test.ts` |
+| Dispatched runs' reported cost never reached compare | `GET /api/runs/:id` returns `dispatch {dispatchId, reportedCostUsd, sessionRuns}`; `summarizeRun(exec, {costUsd})` and `RunDiff.costUsd` | `dispatch.int.test.ts`, `compare.test.ts` |
+
+Not changed here (Studio-only, handed over): the client clock re-base on `world.clock_changed` and the use of `wallMs`; passing `world=` on Studio's own reopen; the approval flow in Assign task (open `approveUrl`, poll the preview status); the Real chip only for registered agents; the "task running, no events yet" state; caveat wording, `divergenceNote`, `tests.pending` and the cost tile on Experiments; the Experiments URL sync. `docs/status/current-state.md` ("No source reports cost") and the plan/DL-012 text need their owners' update.
+
+### Real checks
+
+- **Browser, approval** (`scratchpad/fixwave/csrf-check.mts`; runtime in process on an ephemeral port with a fake `claude`; Chromium with `--host-resolver-rules` so a plain non-Studio page has the origin `http://localhost:3000`): the page's preview came back with `approvalNonce: ""`; its approve got `403 approve_in_runtime`; reading the approval page failed (no CORS); its no-cors form post was refused and audited; nothing ran. A person on the approval page waited 1.2 s and pressed Approve: "Task started", status `approved`, the dispatch finished `completed` with the reported $0.0123. The first run of this check caught a real bug the unit tests had missed: with `Referrer-Policy: no-referrer`, Chromium sends `Origin: null` with the page's own form, so no one could approve; the page now uses `same-origin`, and a test pins it. Screenshots: `scratchpad/shots/world-dispatch-approval-{dark,light,390}.png`, `world-dispatch-approved.png`.
+- **Prune cost, steady state** (`scratchpad/fixwave/prune-steady.mts`: per sim day 400 interactions and 30 kept agent events, a checkpoint and a prune; same script on the pre-fix snapshot): before, prune took 10–20 ms at 1 wall-day of 1× time, 36–66 ms at 7, 143–197 ms at 30, with 774k rows and a 203 MB file; after, 2–10 ms at every point, 55k rows (the kept agent events), 22 MB.
+
+### Checks (this pass)
+
+```sh
+pnpm -r typecheck                                   # 10 projects, all Done
+pnpm test                                           # 102 files, 1174 tests passed (Studio included, at the time of the run)
+pnpm vitest run --project runtime                   # 25 files, 308 passed (one earlier run, in parallel with other projects, had a plugin e2e timeout; it passed alone and in the two full runs after)
+pnpm vitest run --project core --project events     # 86 + 153 passed
+pnpm vitest run --project sim --project town        # 15 files, 149 passed; determinism, day and purity: 3 files, 40 passed
+claude plugin validate --strict integrations/claude-code-plugin   # Validation passed
+RUNLOOP_DATA_DIR=<scratch> pnpm demo -- --speed 0 --port 0        # 10 passed / 2 failed, then 12/12; run succeeded
+pnpm --filter @runloop-world/sim bench              # see below
+```
+
+Sim bench (sim code unchanged by this pass; the machine had a load average of ~6 on 4 cores from another agent's SwiftShader run): 120 residents p99 0.99 ms / 4.8 ms in its two runs (max 3.0 / 36.7 ms), a day 338 / 469 ms; 288 residents p99 1.20 / 1.54 ms, max 4.4 / 9.9 ms, a day 532 / 639 ms; 4.8k events and 1.6 MB per day at 120 (still over the plan's event budget, as in §7). The second 120 run's p99 is over the 2 ms budget under this load; the first is within it, as in §7.
+
+### Deviations from the plan
+
+- **Approval (plan §4.4 "requires an allowed Origin"):** now the runtime's own origin, through its approval page; an allowed origin such as Studio's no longer receives the nonce. Studio's in-dialog Approve answers `approve_in_runtime` until it opens `approveUrl` (handed over).
+- **SSE ids (plan §2, §4.5 "id = last seq"):** `<worldId>:<seq>`; and a new world's id is no longer the town id.
+- **Retention (plan §4.1 "ambient events for 3 sim days"):** interactions are pruned with them (`MIGRATIONS[5]`).
+- **Health rule 4 (plan §4.3 "live: a dispatch is running, or …"):** live needs a recent hook; a running dispatch without one is idle.
+- **`--plugin-dir` (plan §4.4 "only if the workspace has never sent a hook", DL-012):** only hooks from sessions Runloop did not dispatch count.
+- **HTTP commands (plan §4.5):** only `clock.set` and `building.set_open`; `ALLOWED_SOURCES` is unchanged (the runtime still houses agents as `user` for Add to World).
+
+### Open
+
+- `POST /api/agents` (register a folder) is still guarded only by an allowed Origin, so a page on localhost:3000 can register a folder (it cannot dispatch into it without a person approving). The fix is to stop default-allowing the generic `:3000` origins and serve Studio on a dedicated port, which needs Studio, scripts and docs to move together.
+- Phantom agents created over HTTP before this fix stay in existing databases (no removal API).
+- An orphan's exit code stays unknown (`exitCode: null`); its outcome comes from its own result line.
+
+## 9. The immersive town (2026-10-18)
+
+DL-014; the experience contract (scratchpad `immersive-contract.md`) was written first, then four owners built it (WORLD: the camera, land, sky and ambient life; HUD: the shell, HUD, cards, menu, Add to World; OVERLAYS: the in-world sheets and navigation; SOUND: the soundscape), and this pass integrated them. Machine: the same sandbox (4 cores, no GPU); every browser check runs headless Chromium with SwiftShader WebGL, about **1–2 frames per second** at 960×600 on low quality (measured; fewer at 1440×900 high), so anything that runs per frame (held keys, flights, inertia, a roof lifting) is that slow here.
+
+### Integration
+
+- **Overlays into the HUD:** the right-hand sheets are `OverlayHost` (trace, compare, World Log, sessions, connections), the in-building strip is the overlays `SessionStrip`, and every run link (cards, panels, the World Log, Assign task, ⌘K) goes through `useStudioNav()`; the HUD's stand-ins (`hud/nav.ts`, `hud/SessionStrip.tsx`, the page-in-a-sheet frames) are gone. The Esc menu's Connections tab is the Integrations content. H hides the sheets with the HUD.
+- **Sound into the town:** `attachWorldAudio(store)` on `/`, the renderer's `onFly`/`onListener` to the engine, `SoundToggle` in the clock widget and phone bar, `SoundSettings` in the Esc menu, every HUD control's `uiSound` to `getAudio().ui`.
+- **Fixed while integrating:** notifications moved left of a card docked top-right (they covered it) and stay on screen with a wide sheet open; the sheet that takes focus on open no longer draws a lime ring around itself; lot labels read "taken" as soon as the agent is housed (the in-place snapshot fold did not refresh them); the phone top bar's clock no longer runs under its pause button; the first-visit hint uses touch words on phones.
+
+### Review findings handed over by the packages pass (§8): all 10 fixed
+
+| Finding | Fix | Test |
+|---|---|---|
+| Clock extrapolated at the old speed after a speed change | `applyEvents` re-bases the clock at `world.clock_changed` (pausing never moves time back) | `store.test.ts` "a pause event stops the clock at once…", `interpolate.test.ts` |
+| Steady 16× stepped back ~every 10 s | clock frames anchored at the runtime's `wallMs` (`frameAnchor`, not trusted from the future or > 2 s old) | `interpolate.test.ts` (30 jittered frames, never backwards) |
+| Resume trusted another world | `worldStreamUrl(after, worldId)` sends `&world=`; a snapshot of another world resets the store (`resetWorld`) and reloads info and town | `store.test.ts` "forgets the old world…" |
+| Studio's Approve got 403 `approve_in_runtime` | Assign task opens `approveUrl` in a window and polls `GET /api/dispatches/previews/:id`; `approveDispatch` removed | `AssignTaskApproval.test.ts`; browser check below |
+| "Real" on a phantom presence | `agentView(…, api)`: Real only with an AgentSummary; "Unregistered building" (no actions) when the API answered without it; "Agent · not confirmed" before it answers; the 2D map's title too | `selectors.test.ts` |
+| "Live" copy; a running dispatch without hooks | "Task running · no events yet" beside the health; "Live" = a session open and hooks in the last 5 min | `selectors.test.ts` |
+| Compare caveats unworded; succeeded → stopped/interrupted neutral | `caveatText` as the chip detail; a finished → unfinished run is a warning ("did not finish") | `compare.test.ts` |
+| Divergence and test names while recording | "Same calls so far; the candidate is still recording", "As of now: …", the scope caveat sentence; Duration "excluding time paused" | typecheck; screenshots |
+| `/experiments` ignored palette and toast compares | already fixed by the overlays pass (`compareRequests`), and the palette now uses `useStudioNav().openCompare` | `overlays.test.ts` |
+| Cost never shown | `useRunDigest` passes Claude Code's reported cost of a one-run dispatched session to `summarizeRun`; a Cost tile ("not reported" otherwise) | `compare.test.ts` (wording) |
+
+### Checks
+
+Run on the final tree of this pass (after the fixes below).
+
+| Command | Result |
+|---|---|
+| `pnpm install --frozen-lockfile` | OK, lockfile up to date |
+| `pnpm -r typecheck` | 10 projects, all pass |
+| `pnpm test` | 109 files, 1266 tests passed |
+| `pnpm build` | static export: `/`, `/experiments`, `/integrations`, `/overview`, `/settings`, `/traces`, `/world`, 404 |
+| `claude plugin validate --strict integrations/claude-code-plugin` | Validation passed |
+| `RUNLOOP_DATA_DIR=<fresh> pnpm demo -- --speed 0 --port 0` | `run_command` 10 passed / 2 failed (#36), then 12/12 (#55); `run.completed` succeeded (#58); exit 0 |
+| `node scripts/e2e-world.mjs` (runtime 4380, static Studio 3000) | 11/11 at night (Day 2 · 03:39; walking not required at night) and 11/11 by day (Day 14 · 14:50: 11 of 80 residents walked within 3 s; the café interior opened), exit 0 both |
+| `node scripts/perf-town.mjs` | 12/12 views within budget, exit 0 (table below) |
+| `node apps/studio/src/audio/check/render-check.mjs` | 51/51 PASS ("All sound checks passed."), exit 0 |
+
+### The journey on a real runtime
+
+Runtime `pnpm serve` on **4380** with a fresh data directory (`scratchpad/data-imm-e2e`) and its own ingest token file inside it; the Studio's static export on **3000** (`python3 -m http.server`). No real Claude session ran: agent activity came from the sanitized fixtures in `packages/runtime/test/fixtures/claude-code`, piped line by line through the real plugin hook script (`integrations/claude-code-plugin/scripts/runloop-hook.mjs`) with their recorded spacing, rewritten to a new session id and the added folder (`scratchpad/imm-e2e-feed.mjs`). Scripts: `scratchpad/imm-e2e-journey2.cjs`, `imm-e2e-routes2.cjs`, `imm-e2e-approve.cjs`; logs `imm-e2e-journey2-dark.log`, `imm-e2e-routes2.log`, `imm-e2e-approve.log`.
+
+**Desktop journey, 1440×900 dark: 47/47 passed.** Waits are frame-based where the renderer is involved (a held key is held until the camera reports the change, a flight until `moving` is false), because frames take 0.5–1 s here.
+- **The town:** `data-world-ready` 4.6 s after load under SwiftShader (the contract's "within 3 s" needs a real GPU to judge); the town canvas is 0,0,1440,900 with no sidebar or top bar; no AudioContext before a gesture (`locked`).
+- **Camera:** a drag panned 55,41 → 25,46 cells and the HUD faded while dragging; that first gesture started sound (`running`); five wheel steps zoomed 7.96 → 38.91 px/cell; E turned 45° → 90°; held Z tilted 37° → 31°; right-drag turned 90° → 45°; held Z stopped at exactly 10°; held W panned; R then 0 came back to az 45°, tilt 37°, level `town`.
+- **Sound follows the camera:** at the town view the listener was fresh with 12 sources and the bed's layers were breeze 0.60, wind 0.17, birds 0.12, murmur 0.20, traffic 0.35 (crickets 0.01 at 11:00); at street level by the café patio the wind went to 0 (zoom01 0 → 1). A separate look at the same spot later in the afternoon (`scratchpad/street-audio.jsonl`): murmur 0.81, breeze 0.35, birds 0.05, wind 0 (the patio had diners then; at 11:19 it had none and the murmur was 0.002: the murmur comes only from simulated occupancy). Inside the café the listener's level was `interior` (3 sources).
+- **A resident:** ⌘K → Felix Abara → the anchored card says Simulated, its Why "Simulated resident · rule-based decision", Follow pressed (the guide banner says "Following Felix Abara").
+- **The café:** Enter → the interior (Leave interior shown).
+- **Add to World:** N → "Pick a free lot for your agent" with the lots as buttons in the banner and on the lots → a lot → the card on the lot (name, folder, Connect Claude Code) → Add to World → the agent exists (`awaiting_first_event`) and the card says "Engineering House is in the Agent District, waiting for its first event."
+- **A Claude Code session (fixture `s1-basic`) after a key press unlocked sound:** the agent went live from the hooks; its card reads "Real · Claude Code · observed". Cues: `agentLive: play`, `needsApproval: play`, `incident: play`, then three `incident: cooldown` (the limiter); all six are this agent's, while the town logged 59 simulated events meanwhile and none made a cue.
+- **Its building:** Enter building → the session strip; scrubbing to the start read "Replay · recorded state"; Go live returned.
+- **Intelligence:** 3 → the World Log sheet at the Commons Library; a run link opened the trace sheet with the URL still on `/` (`?overlay=trace&run=…`); the clock went on from 14:19 to 14:37 beside it.
+- **Lab:** 4 → the compare sheet at the Lattice Lab.
+- **⌘K → Sessions** → the sheet; its demo button started the scripted demo, which opened in the town (trace sheet, World tab), `succeeded`, with test results 10/12 at #36 and 12/12 at #55 read back from the API.
+- **Esc menu:** the Esc cascade ended in the menu; Sound has four volume sliders; Connections shows the Integrations content; Esc closes it. Interface sounds recorded during the journey: select, whoosh, menu, hover, close. No uncaught page errors.
+
+**Routes, fallbacks and phone: 40/40 passed** (`imm-e2e-routes2.cjs`):
+- `/traces?run=&event=`, `/experiments?a=&b=`, `/world?run=`, `/overview`, `/settings`, `/integrations` render as full pages with no page errors (each has "Open in the world"; on the run pages it is the compact icon button); `/?run=X&event=5` still redirects to `/world/?run=X&event=5`; `/?overlay=trace&run=X&event=3` opens the trace sheet on `/`; `/?overlay=compare&a=&b=` restores the compare sheet.
+- The town canvas is exactly the viewport at 1920×1080, 1440×900 and 1280×800, with no sidebar.
+- Right-drag tilts clamp at 10° and 62°; `cam=10,5,20` frames as before (az 45°, tilt 37°); `cam=10,5,20,120,25` gives az 120°, tilt 25°; `mode=agents&focus=agent:` opens the agent card; L opens the directory tree.
+- At 960×600 low quality (1 fps under this load): held W panned 53.9,40.2 → 19.5,5.7; held Z tilted 37° → 16° in 5 s; R reset az 45°, tilt 37°; E without reduced motion was a flight (14 of 17 samples in between, `moving`).
+- **Sound in the town:** a click started the bed (breeze, wind, crickets, murmur, traffic). A second fixture session (`synthetic-permission-denied-then-stop`) then produced `agentLive: play`, `needsApproval: queued`, `needsApproval: cooldown`, `incident: play`, `incident: cooldown`, all for the agent, while the town ran to world seq 2610 with no cue from it. A hidden tab: `hidden: true`, `suspended`.
+- **WebGL off** (`getContext('webgl*')` returns null): the 2D map stage, the same hotbar, and N opens the Add to World dialog; its lot step lists Lot 1 "Taken · Engineering House" (disabled) and Lots 2–6 "Free · 12×10" (`scratchpad/nogl-lots.out`); no page errors.
+- **Reduced motion:** E is a cut (45° → 90° with nothing in between in 26 samples, never `moving`), no HUD fade while dragging, no whoosh, no page errors.
+- **390×844 phone with touch:** the light 3D town renders, the hotbar fits (4–386 px), a one-finger drag (CDP touch events) panned, the agent card is a bottom sheet, no page errors.
+
+**Assign task with the new approval** (`imm-e2e-approve.cjs`, 6/6): from the agent card, compose → Preview command → the review shows the exact `claude -p` argv, haiku, the budget (`--max-budget-usd`), "10 min (enforced by Runloop)", the tools, "Billed to your Anthropic account" and "valid once"; **Approve in Runloop…** opened `http://127.0.0.1:4380/approve/pvw_…` (the runtime's page, not the Studio), the Studio said it was waiting and that nothing runs until the approval; **Decline** on that page → the Studio: "You declined it on the approval page. Nothing was run."; the agent has no dispatched session. Nothing was approved (no spend).
+
+### Fixed during the journey and the screenshots
+
+- **Phones flew out instead of in** when entering a building: the framing kept 400 px on the right for a card even at 390 px wide, so the fit zoomed from 18 to 6 px/cell and the diorama was a speck. On the phone layout (≤ 760 px) framings now keep 16 px at the sides and 240 px at the bottom for the card or session strip (`town/TownCamera.tsx`): entering now goes 18 → 24 px/cell with the whole diorama in view.
+- **The card's off-screen chip** cut the entity's name mid-word in a crowded header; it now ends in an ellipsis.
+- `scripts/e2e-world.mjs` checked the clock with the snapshot's tick, which is its last event's and stands still at night; it now reads `/api/world`'s tick.
+- `scripts/screenshots.mjs` waits for the town to draw 16 frames after Enter (the roof dissolves per frame, so a fixed wait caught it half-gone under SwiftShader), starts a new browser if a long run takes the old one down, and skips the first-visit hint.
+- The runtime's startup line said the Studio asks for approval; it now says each task waits for approval on the runtime's own page.
+
+### Performance
+
+`node scripts/perf-town.mjs --port 3075` (SwiftShader, 1440×900, high quality; 12/12 views within budget, exit 0; report `scratchpad/perf-final.json`). Before is §7 (the orthographic town on a slab, measured the same way; `git stash` was not used), after is this tree (the perspective camera with the land):
+
+| View | Draw calls before → after (land) | Triangles before → after | JS p50 before → after (ms) |
+|---|---|---|---|
+| town | 46 → 62 (15) | 132,605 → 215,299 | 1.3 → 1.3 |
+| district (Market Street) | 46 → 61 (14) | 163,645 → 215,179 | 1.3 → 1.4 |
+| street (Market) | 12 → 27 (14) | 143,801 → 195,959 | 1.1 → 1.8 |
+| street (Atrium) | 14 → 29 (14) | 144,189 → 196,347 | 1.4 → 1.6 |
+| café interior | 13 → 26 (14) | 145,959 → 194,273 | 1.1 → 1.7 |
+| agent HQ interior | 218 → 227 (13) | 178,975 → 237,197 | 1.9 → 2.0 |
+| town at night | 47 → 62 (15) | 132,653 → 215,663 | 1.2 → 1.3 |
+| town, 504 actors | 46 → 62 (15) | 147,725 → 393,379 | 1.7 → 2.5 |
+| street, 504 actors | 15 → 29 (14) | 323,387 → 374,427 | 2.2 → 2.1 |
+| horizon (tilt 10°, az 200°) · new | — → 61 (14) | — → 215,179 | — → 1.2 |
+| tilted street (tilt 15°) · new | — → 29 (14) | — → 197,839 | — → 1.6 |
+| lot picking · new | — → 55 (14) | — → 206,183 | — → 1.6 |
+
+All within budget (draw calls ≤ 120 / 150 / 250, triangles ≤ 400k, JS ≤ 4 ms p50 with 500 actors, the land ≤ 16 calls and ≤ 0.3 ms: measured 13–15 calls and 0.1–0.2 ms). The tightest is the town with 504 actors at 393k triangles: under perspective the level of detail is chosen from the nearest ground, so residents draw as bodies at the town view. Frame times are SwiftShader's (p50 17–32 ms in this harness; p95 up to seconds when the software rasteriser is pre-empted) and are not a target.
+
+### Screenshots
+
+An updated `pnpm screenshots` (`scripts/screenshots.mjs`) against the journey's runtime, both themes, 1440 and 390, **138 images, no page errors or capture notes** (`scratchpad/shots-final/<theme>-<width>/`). The world runs at 1×, which is a sim hour per real minute, so the day pass ran in four segments (`scratchpad/shots-day.sh`), each after fast-forwarding to 08:00; the night pass was taken with the world paused at Day 2 · 04:44 (`--suffix -night`); the agent states were taken while a fixture session held the agent live (`scratchpad/shots-live.sh`, no SessionEnd, fed through the real hook).
+- **The town:** overview, tilted horizon, tilted street, a district, a street spot, the 2D map, the directory, day and night.
+- **In place:** the resident's anchored card with its Why, the café interior, Add to World's lot picking and its card on the lot, the agent live, its building with the session strip at Live, Assign task compose and the exact-command review, the World Log sheet (Intelligence), the trace sheet for a traced and an executed run, the compare sheet (Lab), the Esc menu (Resume, Sound, Controls), the runtime offline.
+- **Full pages:** Overview, Integrations, Settings, the command palette, Traces at a failure, Experiments, Live World.
+
+I looked at all of them. The fixes they led to are listed above (the phone fly-in, the card chip, the frame-based waits); a first pass also caught the Esc menu and the café roof mid-transition, which were screenshot timing (both now settle). `docs/assets/` now holds the immersive town: town, town-night, town-horizon, intelligence (the trace sheet), lab, cafe-interior, add-to-world, resident-why (from the journey), agent-live, agent-interior; `assign-task.png` (a real dispatched run, §7) and `claude-code-session.png` (§6) are kept.
+
+### Deviations
+
+- **Frame rate:** the journeys ran at 1–2 fps (software WebGL), so waits are frame-based; the contract's timings (fly-in ≤ 700 ms, inertia ≥ 150 ms) were not measured here.
+- **Approval:** the contract kept the in-dialog "Approve and run"; the runtime's security fix (§8) moved approval to its own page, so the Studio opens that page instead.
+- **Sound before a gesture:** cues that arrive before the page's first click or key are recorded as `off` (no AudioContext yet), as the autoplay policy requires.
+- **Free lots** are outlined (an ice frame over a graphite stroke that breathes) rather than glowing; by day on the pale lots the outline reads clearly. The docs say "outlined".
+
+### Not verified
+
+- Frame time on a real GPU or phone; real touch hardware (CDP touch events only).
+- Listening to the sound; Safari and iOS.
+- Light-theme glass contrast over a bright sky (looked at in screenshots, not measured); two WebGL canvases (the trace sheet's World tab) on real hardware.
+- A real Claude Code session (fixtures through the real hook only, by design: no spend) and a real approved dispatch with the new approval page (approve was not pressed).
+- An axe or screen-reader pass.
+
+## 10. Immersive town review fixes (2026-10-18)
+
+The review of §9 played the town as a viewer and found 17 problems (11 game feel, 6 truth and access). All 17 reproduced from their evidence or code and are fixed at the root; each has a test that guards the behaviour, and each was checked again in the browser. Machine and frame rate as in §9 (SwiftShader, 1–2 fps), so waits are frame-based.
+
+Setup: runtime `pnpm serve` on **4633** with a fresh data directory (`scratchpad/data-imm-fix`, its own ingest token file inside); the Studio's static export on **3093**; the town harness on 3094. No real Claude session ran: sessions came from the sanitized `s1-basic` fixture piped through the real plugin hook script (`scratchpad/fix-imm/feed.mjs`, once with SessionEnd and once without). Scripts and logs: `scratchpad/fix-imm/{add,inside,phone,misc}.cjs`; screenshots `scratchpad/shots/imm-fix-*.png`.
+
+| # | Finding | Root cause → fix | Test | Checked in the browser |
+|---|---|---|---|---|
+| 1 | Add to World's card kept saying "waiting for its first event" while the agent was live, had an incident or was offline | The done step rendered the POST answer. Now `AddedAgentStatus` reads the live presence and summary (`addedAgentView`); on the first real event it hands over to the agent's own card (honest health, its actions); the 2D dialog shows the same live status | `world/reviewFixes.test.ts` | Lot 1 → "Review House … waiting for its first event"; the fixture's first hook → the agent card "Real · Claude Code · observed · Live", then "Offline · last event 6 s ago" after SessionEnd (`imm-fix-add-*.png`) |
+| 2 | A double click often failed: the second press landed on the card the first click opened | `input.ts` times double clicks itself (320 ms, 24 px, mouse, pen and touch alike) and a second press on the HUD within that window still enters (and does not press the card); cards also no longer sit on the building (#5) | `town/input.test.ts` | `dblclick` on the Town Hall → interior; two separate clicks 150 ms apart → interior (before: neither) |
+| 3 | 1/2/3/4 inside an agent building moved the camera but left the interior open | `setMode` (when it moves the camera), `setOverlay('log'/'compare')` and `showInLog` leave the building first; the camera lets the mode's place win over the exit's restore | `world/reviewFixes.test.ts` | Inside Review House, 3 → level `district`, no banner, no strip, camera at the Commons Library |
+| 4 | Inside a building with a sheet open, the card's Trace sat under the minimap and the strip's buttons and the banner under the sheet | Cards stay above the minimap corner (`Viewport.corner`); the strip and the banner centre in the free area left of an open sheet (`stripBox`), the strip rises above the minimap when it would be under 560 px beside it, and its replay bar drops the speed buttons below 640 px (a container query; the sheet carries them) | `hud/reviewFixes.test.ts` | With the trace sheet open: strip at [16,558,544,660], banner [149,76,411,117], sheet from x 560; the card's Trace and Enter, the strip's Trace and Leave hit-test to themselves |
+| 5 | Cards covered the building they described | `TownApi.projectBounds(ref)` gives the screen box of a building, HQ, lot, resident or robot; `placeCard` stands the card beside it (or docks when nothing fits) | `hud/reviewFixes.test.ts` | Café interior with its card beside it (`imm-fix-cafe-interior-dark-1440.png`); the Add to World card beside Lot 1 and its HQ |
+| 6 | A pinch that started on the HUD zoomed the web page | The HUD's controls take no browser gestures (`touch-action: none`; reading areas `pan-y`); two fingers that land on the HUD are forwarded to the camera | (CSS and DOM wiring; browser-checked) | 390×844 touch: a pinch on the hotbar zoomed the town 2.52 → 5.20 px/cell with `visualViewport.scale` 1 |
+| 7 | Every clean session end left "⚠ 1 need you" and an "is offline" popup | `agent_offline` after the session closed is notable and bell-only; lost mid-task stays critical | `attention.test.ts` (one expectation changed on purpose), `hud/reviewFixes.test.ts` | After the fixture's SessionEnd: bell "0 need you, 9 in all", no offline popup |
+| 8 | The HQ diorama took the HUD theme (black in dark, white in light) | `hqDioramaPalette()`: fixed town materials lit by the town's sun and sky, rooms tinted by zone; the theme no longer reaches it | `town/hqPalette.test.ts` | Harness at 10:30 and the runtime at 19:50: grey HQ greys with tinted rooms (`imm-fix-hq-interior-day.png`, `imm-fix-inside-dark-1440.png`) |
+| 9 | "Is live" popped 11 s late, after the failure | A cue's fact (live, incident, approval, task done) pops at once, outside the 4 s pacing; a queued notable overtaken by newer facts about the same agent never pops | `hud/reviewFixes.test.ts` | `agentLive` played at 41.2 s and "Review House is live" was on screen at 41.6 s |
+| 10 | Night stars were never visible | Stars fade in from just above the haze line on a finer grid, so the ~4° of sky at the lowest tilt holds them | (shader; looked at) | Night horizon at 23:30 (`imm-fix-night-horizon.png`) |
+| 11 | The first seconds were an empty haze under a "Live" HUD, and the hint expired unseen | `townReady` in the store; a loading veil (the town's name, "Drawing the town…", a progress line; static under reduced motion) until the first frames; the hint starts and is marked seen only then | (browser-checked) | Veil from 1.4 s to ready at 11.2 s; the hint appeared at ready and was gone 7 s later; the storage key was written at ready |
+| 12 | On phones the strip covered the agent card's provenance, health and actions | Inside a building the phone card stands above the strip (its measured height) | (CSS; browser-checked) | 390×844: card [8,359,382,586] above strip [8,594,382,772]; provenance, "Live · last event 1 min ago", the attention line and the actions visible |
+| 13 | The strip said "Live" with the health pulse for a quiet session | `stripMode`: "Live" only when the agent is live, else "Open · idle 12m" with the idle icon; the picker says Open/Recorded; the strip's replay bar says "Latest" without the live dot when the agent is not live | `overlays/stripMode.test.ts` | Session idle 5 min: strip "Open · idle 5m", "● Latest" grey, card "Idle · last event 5 min ago" |
+| 14 | A compact agent label showed an incident by its red dot alone | `labelText`: the compact form keeps a warning's or failure's status word | `town/status.test.ts` | (unit; at 390 the label read "Agent · Claude Code · Review House · Incident") |
+| 15 | Focus fell to `<body>` when the directory, a card or the strip closed | `useReturnFocus` (OverlayHost's pattern) in `Sheet`, `CardFrame` and the strip, with the entity's label or the card's Enter button as fallbacks | (browser-checked) | Keyboard only: directory Esc and × → "List L"; card × → the agent's label; strip Leave → "Enter building" |
+| 16 | Without WebGL a critical notification covered "Inside … · Esc to leave" | Notifications start below the guide banner while it shows | (browser-checked) | WebGL off, inside: banner [589,76,851,117] on top, the notification from y 127 |
+| 17 | `?overlay=add&lot=lot_bogus` opened a "free" card for a lot that does not exist | `pickLot` takes only a free agent lot of this town (`lotRefusal`), else stays in picking with the reason; the link waits for the town and its agents; the card's own check requires an agent lot | `world/reviewFixes.test.ts` | `lot_bogus` and a taken lot → "Lot not available: …" in the banner, no card; a free lot → its card |
+
+Also fixed on the way: the session strip was 280 px wide beside the minimap with a wide sheet open (now it rises above it, #4).
+
+### Checks (final tree)
+
+| Command | Result |
+|---|---|
+| `pnpm -r typecheck` | 10 projects, all pass |
+| `pnpm test` | 114 files, 1289 tests passed (23 new) |
+| `pnpm build` | static export: `/`, `/experiments`, `/integrations`, `/overview`, `/settings`, `/traces`, `/world`, 404 |
+| `claude plugin validate --strict integrations/claude-code-plugin` | Validation passed |
+| `RUNLOOP_DATA_DIR=<fresh> pnpm demo -- --speed 0 --port 0` | 10 passed / 2 failed at #36, 12/12 at #55, `run.completed` succeeded (#58), exit 0 |
+| `node scripts/perf-town.mjs --port 3095` | 12/12 views within budget, exit 0; the agent HQ interior 232 draw calls (227 in §9, budget 250), the rest as in §9 |
+
+### Screenshots
+
+`node scripts/screenshots.mjs --studio http://127.0.0.1:3093 --api http://127.0.0.1:4633 --widths 1440,390 --themes dark,light` on the final build: **186 images, no page errors or capture notes** (`scratchpad/shots/imm-fix-final/<theme>-<width>/`), with the agent holding an open, idle session with an incident (the second fixture session, no SessionEnd) and two scripted demo runs for the executed and compare states. I looked at the town, the Add to World card beside its lot, the agent card and the building with its strip ("Open · idle 26m", "● Latest" without the live dot) in both themes at 1440 and 390 (the phone card above the strip), the café interior with its card beside it, the World Log and trace sheets, the resident's Why and the menus. The HQ diorama is the same town materials in both themes (dark-1440 and light-1440 `agent-interior.png`). The journey shots are `scratchpad/shots/imm-fix-*.png` (the lifted strip beside a wide trace sheet: `imm-fix-inside-trace-light-1440.png`). `docs/assets/agent-interior.png` was retaken at 10:08 with a live fixture session (Claude and two Explore subagents, `s2-subagents` through the real hook): it showed the old black diorama.
+
+### Deviations
+
+- **Add to World's last step** follows the review's second option: on the first real event the card hands over to the agent's own card (which is where honest health, the attention line and the actions live) rather than growing an "is live · first event" variant; a card opened when the agent already had events (an Arrival) shows the live status with Done.
+- **The session strip** rises above the minimap when it would be narrower than 560 px beside it, instead of only narrowing (at 1440 with a wide trace sheet it would have been 280 px wide).
+- **Supersession** (#9) covers any queued notable about an agent once a newer popup about it exists, not only connection facts ("started a session" no longer pops after "reported a failure").
+
+### Not verified
+
+- Real-GPU and real-phone timings (the double-click window, the strip's height under real fonts); touch on real hardware (CDP touch events only).
+- The trace sheet's own replay bar still reads "Live" while it follows an open but quiet run (its header beside it says "running · idle 53m"); that is the tracer's run view and was not part of these findings.
+- An axe or screen-reader pass.

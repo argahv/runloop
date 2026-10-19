@@ -1,0 +1,77 @@
+{
+  "id": "office_small",
+  "kind": "grid",
+  "label": "Data hall",
+  "archetype": "office",
+  "grid": [
+    "##########",
+    "#........#",
+    "#........#",
+    "w........w",
+    "#........#",
+    "w........w",
+    "#........#",
+    "####D#####"
+  ],
+  "furniture": [
+    {"id": "racks_a", "kind": "server_rack", "cells": [[1, 1], [2, 1]], "uses": [], "tags": []},
+    {"id": "racks_b", "kind": "server_rack", "cells": [[4, 1], [5, 1]], "uses": [], "tags": []},
+    {"id": "racks_c", "kind": "server_rack", "cells": [[7, 1], [8, 1]], "uses": [], "tags": []},
+    {
+      "id": "desk_1",
+      "kind": "desk",
+      "cells": [[2, 3]],
+      "uses": [{"cell": [2, 4], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_2",
+      "kind": "desk",
+      "cells": [[4, 3]],
+      "uses": [{"cell": [4, 4], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_3",
+      "kind": "desk",
+      "cells": [[6, 3]],
+      "uses": [{"cell": [6, 4], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_4",
+      "kind": "desk",
+      "cells": [[8, 3]],
+      "uses": [{"cell": [8, 4], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_5",
+      "kind": "desk",
+      "cells": [[2, 5]],
+      "uses": [{"cell": [2, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_6",
+      "kind": "desk",
+      "cells": [[4, 5]],
+      "uses": [{"cell": [4, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_7",
+      "kind": "desk",
+      "cells": [[6, 5]],
+      "uses": [{"cell": [6, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    },
+    {
+      "id": "desk_8",
+      "kind": "desk",
+      "cells": [[8, 5]],
+      "uses": [{"cell": [8, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["work", "desk"]
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 # Architecture overview
 
-> Updated 2026-10-18 (run compare and baselines). Paths are relative to the repo root.
+> Updated 2026-10-18 (the town: world simulation, agents as buildings, dispatch). Paths are relative to the repo root. The plan of record for the town is [world-simulation.md](world-simulation.md).
 
-Runloop records agent runs as an append-only event log on the local machine. It derives a world simulation from that log and draws it in a browser Studio. Everything runs on loopback; nothing leaves the machine.
+Runloop is a persistent town where simulated residents and real AI agents coexist (DL-009). Underneath, it records agent runs as an append-only event log on the local machine, derives a run diorama from that log, and keeps a second append-only log for the town itself. The Studio draws both in the browser. Everything runs on loopback and Runloop sends nothing off the machine; a task you dispatch is Claude Code itself talking to Anthropic, after you approve it.
 
 ## Three layers
 
@@ -13,6 +13,31 @@ Runloop records agent runs as an append-only event log on the local machine. It 
 | 3. Presentation | The Studio: 3D scene, Network graph, timeline, inspector, metrics, run compare | `apps/studio` | Reads layers 1 and 2. Never writes back to them (pinning a baseline is run metadata, not an event). |
 
 `packages/replay` combines layers 1 and 2. `ReplayIndex.stateAt(seq)` is identical to the live fold, so live view and replay cannot disagree.
+
+## The world layer (the town)
+
+The town sits beside the three layers, with its own log and the same discipline:
+
+| Part | What it is | Where | Rule |
+|---|---|---|---|
+| Contracts | World commands, 15 world event types, provenance, snapshot, HTTP/SSE types | `packages/events/src/world.ts`, `world-protocol.ts` | Every event has a provenance: `simulation`, `user`, `external-agent`, `system` or `inferred`. |
+| Town | The Commons' map: districts, roads, lots, 28 buildings with interiors, spots, agent lots; compiled to a raster with one BFS field per door | `packages/town`, `worlds/runloop-commons/` | Pure (no clock, no randomness); a content hash pins the town a world was created with. |
+| Simulation | Residents with needs, schedules and traits deciding by integer scoring; `applyEvent` is the only mutator; `explain`, `WorldReplay` | `packages/sim` | Pure and deterministic: same seed and commands, same log hash, across processes and restarts. |
+| Host | Ticks the sim (1 tick = 1 sim minute, speeds 0/1/4/16), applies commands, commits then publishes, checkpoints, resumes | `packages/runtime/src/world/` | The only clock reader. While Runloop is off, the town does not live; it resumes with `world.resumed_after_offline`. |
+| Agents | Real Claude Code agents as buildings: registry, session binding, health, the projector from run events to world commands | `packages/runtime/src/agents/`, `world/projector.ts` | Agent events cite the run events behind them (`cause`); the world never runs or changes an agent. |
+| Dispatch | Assign a task to a real agent: preview, approve, spawn `claude -p`, follow, cancel | `packages/runtime/src/dispatch/` | Nothing runs without the user's approval of the exact command (single-use nonce). |
+| Studio | `/` is the town: 3D renderer, panels, Why, World Log, Add to World, Assign task | `apps/studio/src/{world,town,components/world,components/panels,components/agents}` | Folds the same events with the same `applyEvent`; commands are never optimistic. |
+
+```
+Claude Code hooks ─► tracer (unchanged) ─► run log ─► projector ─► world commands (external-agent / system)
+Studio (you)     ─► POST /api/world/commands (always user) ──────────────────────┐
+                                                                                  ▼
+                              WorldHost: validate (ALLOWED_SOURCES) ─► sim step ─► commit (world_events) ─► SSE
+                                                                                  ▼
+                              Studio: snapshot + event batches ─► applyEvent ─► town, panels, World Log
+```
+
+Simulated residents are labelled ◇ Simulated, and their Why is built only from the recorded `resident.decided`. "Real" appears only on external-agent entities. The workspace folder's absolute path is stored once (`workspace_roots`) and never appears in the world, its events or any API response (P8). The truth rules P1–P11 of the plan are each a test.
 
 ## Packages
 
@@ -27,7 +52,9 @@ Runloop records agent runs as an append-only event log on the local machine. It 
         ▲
 apps/studio                  Next.js static export, zustand store, React Three Fiber scene, SVG Network graph
 
-@runloop-world/runtime       Recorder (SQLite), RunManager, tool sandbox, Claude Code tracer, Hono HTTP + SSE, CLI
+@runloop-world/town          town schema, compile, raster, navigation fields, lots, decoration (pure)
+@runloop-world/sim           needs, schedules, decisions, step, applyEvent, explain, WorldReplay (pure)
+@runloop-world/runtime       Recorder (SQLite), RunManager, tool sandbox, Claude Code tracer, WorldHost, agents, dispatch, Hono HTTP + SSE, CLI
 integrations/claude-code-plugin   self-contained Node script for Claude Code hooks (no workspace imports)
 @runloop-world/testkit       canonical demo fixture and builders for tests
 ```
@@ -91,6 +118,8 @@ SQLite through `node:sqlite` (`packages/runtime/src/store/`), with WAL, `synchro
 | `events` | The log: one row per event, unique by `(run_id, sequence)` |
 | `artifacts` | Artifact metadata. Bytes live in `<data>/artifacts/<runId>/<artifactId>`, checked against their sha256 when served. |
 | `trace_ingest` | Dedupe keys per Claude Code session (`pre:<id>`, `post:<id>`, `prompt:<id>`, `delivery:<id>`…), inserted in the same transaction as the events they produced |
+| `worlds`, `world_events`, `world_checkpoints` | The town (migration 3): the world row (town JSON, seed, tick, speed), its event log (unique `cmd_id`, so a command applies once) and gzipped checkpoints (latest 24 plus one a day for 14 days; ambient events kept 3 sim days) |
+| `agents`, `workspaces`, `workspace_roots`, `agent_connections`, `session_bindings`, `org_policies`, `audit_log`, `dispatches` | Real agents (migration 4). Absolute paths live only in `workspace_roots`, read only by `agents/local-roots.ts`. Every Add to World, binding and dispatch step is in `audit_log`. |
 
 The recorder's order is redact → sequence → validate → persist → publish. Nothing is published before it is durable. Migrations are append-only (`MIGRATIONS[n]`).
 
@@ -103,6 +132,9 @@ The contract is `packages/events/src/protocol.ts`, and the route table is in `pa
 - **Control:** `POST /api/runs` starts a scripted run. `POST /api/runs/:id/{stop,pause,resume}` controls it; traced runs answer 409.
 - **Baselines:** `POST /api/runs/:id/baseline` pins a run (idempotent; it keeps its first `pinnedAt`), `DELETE` unpins it. Both need JSON and an allowed Origin, like every write. `RunSummary.pinnedAt` carries the pin.
 - **Ingest:** `POST /api/ingest/claude-code` takes hook envelopes and needs the ingest token.
+- **World:** `GET /api/world`, `/api/world/town`, `/api/world/snapshot`, `/api/world/events`, `/api/world/explain`; `GET /api/world/stream` (SSE: a snapshot, then event batches with `id` = world seq, a clock frame every second; a client more than 5 000 events behind gets a fresh snapshot); `POST /api/world/commands` (`{id, command}`, always `user`). `RUNLOOP_WORLD=off` answers 404 on every world, agent and dispatch route.
+- **Agents:** `GET|POST /api/agents`, `GET /api/agents/:id`, `GET /api/agents/arrivals`, `POST /api/agents/:id/claim`.
+- **Dispatch:** `GET /api/dispatches/policy`, `POST /api/agents/:id/dispatches/preview`, `POST /api/dispatches` (approve: needs an allowed Origin and the nonce), `GET /api/dispatches[/:id[/stream]]`, `POST /api/dispatches/:id/cancel`. `RUNLOOP_DISPATCH=off` turns them off.
 
 ## Adapters and integrations
 
@@ -123,3 +155,4 @@ There are two ways to get a run into Runloop:
 - **Reads:** unauthenticated for local processes (known limitation).
 - **Secrets:** redacted before persistence. The plugin redacts first (well-known token shapes, credential `key=value` and headers, URL passwords, shell flags such as `-p`/`--password`, and the literal values of those secrets wherever else they appear), the trace manager again on arrival, the recorder again. A redacted event's visibility becomes `redacted`. Shell commands are stored as `sensitive`. Bare positional passwords (e.g. `tool login hunter2`) are not recognised.
 - **Sandbox:** `run_command` in executed runs is not isolated (known limitation; see `packages/runtime/README.md`).
+- **Dispatch:** a task runs only after the user approves the exact argv, cwd, executable and environment variable names (a single-use nonce, 5 minutes, bound to their hash), from an allowed Origin. `claude -p` runs with `--permission-mode dontAsk` and the preset's allowlist (Read-only: `Read Grep Glob`; Edit+test adds `Edit Write "Bash(pnpm test:*)"`), a budget Claude Code enforces, a timeout Runloop enforces, `shell: false`, its own process group, and only `PATH`, `HOME`, `ANTHROPIC_API_KEY`, `RUNLOOP_URL`, `RUNLOOP_INGEST_TOKEN_FILE` and names listed in `RUNLOOP_DISPATCH_ENV`. Edits land in your working tree; cost is billed to your Anthropic account.

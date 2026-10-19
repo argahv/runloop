@@ -14,8 +14,9 @@ import { GlyphIcon, Icon } from '../ui/Icon';
 import { Sidebar, type NavItem } from '../ui/Sidebar';
 import styles from './StudioSidebar.module.css';
 
-/** Areas that work today; Evaluations stays hidden until it does. */
+/** Areas that work today (the town first); Evaluations stays hidden until it does. */
 const AREAS = [
+  { href: '/', label: 'Town', icon: 'map' },
   { href: ROUTES.overview, label: 'Overview', icon: 'overview' },
   { href: ROUTES.world, label: 'Live World', icon: 'world' },
   { href: ROUTES.traces, label: 'Traces', icon: 'traces' },

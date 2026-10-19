@@ -1,0 +1,19 @@
+{
+  "name": "@runloop-world/sim",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "fixtures": "node --import tsx test/fixtures/generate.ts --write",
+    "bench": "node --import tsx bench/tick.bench.ts"
+  },
+  "dependencies": {
+    "@runloop-world/events": "workspace:*",
+    "@runloop-world/town": "workspace:*"
+  }
+}

@@ -57,6 +57,17 @@ export interface ListRunsResponse {
 export interface RunDetailResponse {
   run: RunSummary;
   world: unknown;
+  /** The task dispatch that started this run's session (null = none, or dispatch is off). */
+  dispatch?: RunDispatchInfo | null;
+}
+
+/** A dispatched run's source report: what Claude Code's final `result` said for the session. */
+export interface RunDispatchInfo {
+  dispatchId: string;
+  /** total_cost_usd for the whole session as Claude Code reported it (null = not reported yet, or never). */
+  reportedCostUsd: number | null;
+  /** Runs the session was recorded as: the cost covers all of them, so it is one run's cost only when this is 1. */
+  sessionRuns: number;
 }
 
 /** `events` are RunEvent JSON objects; parse them with parseEvent(). */

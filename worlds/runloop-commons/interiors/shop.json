@@ -1,0 +1,36 @@
+{
+  "id": "shop",
+  "kind": "grid",
+  "label": "Shop",
+  "archetype": "shop",
+  "grid": ["#w####w#", "#......#", "#......#", "w......w", "#......#", "#......#", "###D####"],
+  "furniture": [
+    {
+      "id": "shelves",
+      "kind": "shelf",
+      "cells": [[1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [6, 1]],
+      "uses": [
+        {"cell": [2, 2], "pose": "stand", "facing": "n"},
+        {"cell": [4, 2], "pose": "stand", "facing": "n"},
+        {"cell": [6, 2], "pose": "stand", "facing": "n"}
+      ],
+      "tags": ["stroll"]
+    },
+    {"id": "display_a", "kind": "display", "cells": [[2, 3]], "uses": [], "tags": []},
+    {
+      "id": "display_b",
+      "kind": "display",
+      "cells": [[5, 3]],
+      "uses": [{"cell": [5, 4], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "shopkeeper"]
+    },
+    {
+      "id": "register",
+      "kind": "register",
+      "cells": [[1, 5], [2, 5]],
+      "uses": [{"cell": [1, 4], "pose": "stand", "facing": "s"}, {"cell": [2, 4], "pose": "stand", "facing": "s"}],
+      "tags": ["work", "shopkeeper"]
+    },
+    {"id": "plant", "kind": "plant", "cells": [[6, 5]], "uses": [], "tags": []}
+  ]
+}

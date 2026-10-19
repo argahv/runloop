@@ -1,0 +1,55 @@
+{
+  "id": "lab",
+  "kind": "grid",
+  "label": "Laboratory",
+  "archetype": "lab",
+  "grid": [
+    "##ww#ww#ww##",
+    "#..........#",
+    "#..........#",
+    "w..........w",
+    "#..........#",
+    "#..........#",
+    "#..........#",
+    "#####D######"
+  ],
+  "furniture": [
+    {
+      "id": "bench_a",
+      "kind": "lab_bench",
+      "cells": [[2, 2], [3, 2], [4, 2]],
+      "uses": [
+        {"cell": [2, 3], "pose": "stand", "facing": "n"},
+        {"cell": [3, 3], "pose": "stand", "facing": "n"},
+        {"cell": [4, 3], "pose": "stand", "facing": "n"}
+      ],
+      "tags": ["work", "research"]
+    },
+    {
+      "id": "bench_b",
+      "kind": "lab_bench",
+      "cells": [[7, 2], [8, 2], [9, 2]],
+      "uses": [
+        {"cell": [7, 3], "pose": "stand", "facing": "n"},
+        {"cell": [8, 3], "pose": "stand", "facing": "n"},
+        {"cell": [9, 3], "pose": "stand", "facing": "n"}
+      ],
+      "tags": ["work", "research"]
+    },
+    {
+      "id": "microscope",
+      "kind": "desk",
+      "cells": [[1, 4]],
+      "uses": [{"cell": [2, 4], "pose": "sit", "facing": "w"}],
+      "tags": ["work", "research"]
+    },
+    {
+      "id": "whiteboard",
+      "kind": "whiteboard",
+      "cells": [[9, 6], [10, 6]],
+      "uses": [{"cell": [9, 5], "pose": "stand", "facing": "s"}, {"cell": [10, 5], "pose": "stand", "facing": "s"}],
+      "tags": ["work", "research"]
+    },
+    {"id": "fume_hood", "kind": "shelf", "cells": [[1, 6], [2, 6]], "uses": [], "tags": []}
+  ]
+}

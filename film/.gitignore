@@ -1,0 +1,4 @@
+node_modules/
+out/
+# generated audio (score.py, sfx.mjs and mix.mjs rewrite these)
+*.wav

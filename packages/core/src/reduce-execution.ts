@@ -22,6 +22,8 @@ export function initialExecState(): ExecState {
       startedAt: null,
       endedAt: null,
       summary: null,
+      pausedMs: 0,
+      pausedAt: null,
     },
     agents: {},
     agentOrder: [],
@@ -227,6 +229,12 @@ function hasCycle(tasks: Record<string, TaskExec>, taskId: string): boolean {
 }
 
 const TERMINAL_RUN = new Set(['succeeded', 'failed', 'stopped', 'interrupted']);
+
+/** A pause's length from its recorded timestamps (0 when either is missing or out of order). */
+function pauseMs(from: string | null, to: string): number {
+  const d = from ? Date.parse(to) - Date.parse(from) : NaN;
+  return Number.isFinite(d) && d > 0 ? d : 0;
+}
 const TERMINAL_TASK = new Set(['completed', 'failed']);
 
 // ── handlers (one per known event type) ────────────────────────────────
@@ -256,12 +264,12 @@ const handlers: { [T in EventType]: Handler<T> } = {
 
   'run.paused': (s, e) => {
     if (s.run.status !== 'running') return anomaly(s, e.sequence, 'invalid_transition', `run.paused while ${s.run.status}`);
-    return { ...s, run: { ...s.run, status: 'paused' } };
+    return { ...s, run: { ...s.run, status: 'paused', pausedAt: e.timestamp } };
   },
 
   'run.resumed': (s, e) => {
     if (s.run.status !== 'paused') return anomaly(s, e.sequence, 'invalid_transition', `run.resumed while ${s.run.status}`);
-    return { ...s, run: { ...s.run, status: 'running' } };
+    return { ...s, run: { ...s.run, status: 'running', pausedMs: s.run.pausedMs + pauseMs(s.run.pausedAt, e.timestamp), pausedAt: null } };
   },
 
   'run.completed': (s, e) => {
@@ -269,9 +277,10 @@ const handlers: { [T in EventType]: Handler<T> } = {
       return anomaly(s, e.sequence, 'invalid_transition', `run.completed while ${s.run.status}`);
     }
     const p = e.payload;
+    // A run that ends while paused was paused until its end.
     const next: ExecState = {
       ...s,
-      run: { ...s.run, status: p.outcome, endedAt: e.timestamp, summary: p.summary ?? null },
+      run: { ...s.run, status: p.outcome, endedAt: e.timestamp, summary: p.summary ?? null, pausedMs: s.run.pausedMs + pauseMs(s.run.pausedAt, e.timestamp), pausedAt: null },
     };
     if (p.outcome !== 'failed') return next;
     return addIncident(next, {

@@ -1,17 +1,19 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { ApiError, startRun } from '../lib/api';
 import { DEMO_MISSION_ID } from '../lib/config';
 import { useStudio, useStudioStore } from '../state/context';
-import { ROUTES } from '../state/deeplink';
-import { selectRun } from '../state/hooks';
 import { toast } from '../ui/Toast';
+import { useStudioNav } from './overlays/nav';
 
-/** Start the scripted demo mission, open it in the Live World, and report what happened. */
+/**
+ * Start the scripted demo mission, open its Live World, and report what
+ * happened. In the world that is the trace sheet's World tab beside the
+ * town; on the pages it is /world, as before.
+ */
 export function useStartDemo(): { start: () => Promise<void>; starting: boolean; disabledReason: string | null } {
   const store = useStudioStore();
-  const router = useRouter();
+  const nav = useStudioNav();
   const runtime = useStudio((s) => s.runtime);
   const [starting, setStarting] = useState(false);
 
@@ -22,14 +24,12 @@ export function useStartDemo(): { start: () => Promise<void>; starting: boolean;
     setStarting(true);
     try {
       const { runId } = await startRun(DEMO_MISSION_ID);
-      selectRun(store, runId);
-      router.push(ROUTES.world);
+      nav.openRunWorld(runId);
       toast({ tone: 'ok', title: 'Demo mission started', description: 'Scripted agent, real tools: the runtime edits files and runs tests.' });
     } catch (err) {
       const active = store.getState().runtime.activeRunId;
       if (err instanceof ApiError && err.status === 409 && active) {
-        selectRun(store, active);
-        router.push(ROUTES.world);
+        nav.openRunWorld(active);
         toast({ tone: 'warn', title: 'A run is already in progress', description: 'Opened it instead.' });
       } else {
         toast({
@@ -41,7 +41,7 @@ export function useStartDemo(): { start: () => Promise<void>; starting: boolean;
     } finally {
       setStarting(false);
     }
-  }, [store, router]);
+  }, [store, nav]);
 
   return { start, starting, disabledReason };
 }

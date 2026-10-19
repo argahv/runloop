@@ -14,6 +14,8 @@ const nextConfig: NextConfig = {
     '@runloop-world/core',
     '@runloop-world/events',
     '@runloop-world/replay',
+    '@runloop-world/sim',
+    '@runloop-world/town',
     '@runloop-world/world-engine',
   ],
   turbopack: {

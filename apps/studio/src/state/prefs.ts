@@ -12,7 +12,7 @@ export interface Prefs {
   apiBase: string | null;
 }
 
-export const DEFAULT_PREFS: Prefs = { theme: 'system', motion: 'system', quality: 'high', apiBase: null };
+export const DEFAULT_PREFS: Prefs = { theme: 'system', motion: 'system', quality: 'auto', apiBase: null };
 
 export const PREFS_KEY = 'runloop.prefs.v1';
 
@@ -31,7 +31,7 @@ export function parsePrefs(raw: string | null): Prefs {
   return {
     theme: pick(v.theme, ['system', 'dark', 'light'], DEFAULT_PREFS.theme),
     motion: pick(v.motion, ['system', 'reduce', 'full'], DEFAULT_PREFS.motion),
-    quality: pick(v.quality, ['high', 'low'], DEFAULT_PREFS.quality),
+    quality: pick(v.quality, ['auto', 'high', 'low'], DEFAULT_PREFS.quality),
     apiBase: typeof v.apiBase === 'string' && v.apiBase ? v.apiBase : null,
   };
 }

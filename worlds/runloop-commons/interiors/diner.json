@@ -1,0 +1,74 @@
+{
+  "id": "diner",
+  "kind": "grid",
+  "label": "Diner",
+  "archetype": "diner",
+  "grid": [
+    "##w####w##",
+    "#........#",
+    "#........#",
+    "w........w",
+    "#........#",
+    "w........w",
+    "#........#",
+    "####D#####"
+  ],
+  "furniture": [
+    {
+      "id": "stove",
+      "kind": "stove",
+      "cells": [[1, 1], [2, 1]],
+      "uses": [{"cell": [1, 2], "pose": "stand", "facing": "n"}, {"cell": [2, 2], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "cook"]
+    },
+    {
+      "id": "grill",
+      "kind": "stove",
+      "cells": [[3, 1]],
+      "uses": [{"cell": [3, 2], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "cook"]
+    },
+    {
+      "id": "prep",
+      "kind": "counter",
+      "cells": [[6, 1], [7, 1]],
+      "uses": [{"cell": [6, 2], "pose": "stand", "facing": "n"}],
+      "tags": ["work", "cook"]
+    },
+    {
+      "id": "counter",
+      "kind": "counter",
+      "cells": [[2, 3], [3, 3], [4, 3]],
+      "uses": [{"cell": [4, 2], "pose": "stand", "facing": "s"}],
+      "tags": ["work", "cook"]
+    },
+    {
+      "id": "bar",
+      "kind": "bar",
+      "cells": [[5, 3], [6, 3]],
+      "uses": [{"cell": [5, 4], "pose": "sit", "facing": "n"}, {"cell": [6, 4], "pose": "sit", "facing": "n"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "booth_1",
+      "kind": "booth",
+      "cells": [[1, 5]],
+      "uses": [{"cell": [1, 4], "pose": "sit", "facing": "s"}, {"cell": [1, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "booth_2",
+      "kind": "booth",
+      "cells": [[3, 5]],
+      "uses": [{"cell": [3, 4], "pose": "sit", "facing": "s"}, {"cell": [3, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "booth_3",
+      "kind": "booth",
+      "cells": [[8, 5]],
+      "uses": [{"cell": [8, 4], "pose": "sit", "facing": "s"}, {"cell": [8, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["eat", "socialize"]
+    }
+  ]
+}

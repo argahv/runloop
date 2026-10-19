@@ -4,7 +4,101 @@ Short records of consequential decisions. Newest first. Each entry gives the pro
 
 ---
 
-## DL-009 · The light theme keeps a light world, styled as an architectural model (2026-10-18)
+## DL-014 · The town is a game you stay in: full screen, free camera, a HUD, everything in place (2026-10-18)
+
+**Problem.** The founder: "the simulation looks good but still looks like a webapp. I want it to look like an immersive game, fully scrollable and movable … the user should be able to do everything while being inside the simulation." The town sat as a slab on a void inside a boxed stage, beside a mode rail, a context panel and a top bar; most actions (Traces, compare, Add to World, settings) left for a page.
+
+**Options.**
+- Keep the app shell and enlarge the stage.
+- Make `/` the world edge to edge with a game HUD, a free perspective camera and land to the horizon, and bring every page and action into it; keep the pages as full pages for old links and long reading.
+
+**Choice.** The second, per the experience contract written for it (immersive contract, 2026-10-18):
+- **One place.** `/` is the canvas at 100vw × 100dvh: no sidebar, no top bar, no boxed stage. The land goes on past the town (outskirts, farms, fields, the Brook, a lake, forest, hills, mountains) into haze and a sky that follows sim time. The theme changes the HUD and labels only, no longer the backdrop (a note on DL-011 and DL-013).
+- **Camera.** A perspective camera with a narrow field of view (20° at the default 37° tilt), so the default view keeps the isometric look; free rotation, tilt 10°–62°, zoom to the cursor, inertia, soft bounds, WASD/QE/ZX, follow, fly-in with the roof lifting. `cam=x,z,zoom` keeps its px-per-cell meaning; `az,tilt` are optional fourth and fifth parts.
+- **HUD.** Glass controls (world chip, Find, bell, clock and speed with the sound toggle, minimap, hotbar) and opaque cards anchored next to their entity; notifications; an Esc menu that holds Settings, Sound, Controls, Runtime, Connections and Pages. It fades while you drag and hides with H; a needs-you dot never hides.
+- **Everything in place.** Add to World picks a lot in 3D and collects name and workspace in a card on the lot; Assign task keeps its exact-command review; Intelligence is the World Log at the Commons Library and the full trace inspector in a sheet; Lab is compare at the Lattice Lab; Sessions and Connections are sheets; an agent's building shows its diorama and a session strip (scrub = replay inside). Run links go through one navigation (`useStudioNav`): sheets on `/`, the pages elsewhere. The legacy routes stay full pages with "Open in the world"; `/?run=` without `overlay=` still redirects; `/?overlay=…` opens a sheet.
+- **Phones** get a light 3D town (low quality, lighter surroundings, 12 labels) instead of the 2D map; the map stays for WebGL off and as a setting. The design-system rule "never a desktop-sized 3D scene" holds.
+- **Ambient decorative life.** Cars on the roads out, bird flocks, drifting clouds and a windmill are decoration and say so: never pickable, never in the directory, minimap, log or ⌘K, never within 12 cells of an agent lot, still when the world is paused, and gone under reduced motion. They never stand for activity, simulated or real (rule zero of the design system, applied).
+- **Sound.** Synthesized with the Web Audio API (no files, no dependencies): an ambient bed that follows the camera and sim time, UI sounds, and four event cues that play only for live, real agent events (`classifyCue`: never for `simulation` provenance), rate-limited, each repeated by a notification with icon and text. No sound before the first gesture; a hidden tab is silent; settings per viewer.
+- **Approval moved to the runtime** (from the second review pass, §8 of the verification report): the Studio shows the exact command, then opens the runtime's own approval page; it never holds the nonce.
+
+**Why.** The world is the product (DL-009); a page shell around it undercut that. With the pages inside the world as sheets, the utility layers (why did this fail, did this change help, give an agent work) stay one key away without leaving the place.
+
+**Trade-off.** More GPU work on `/` (the land adds ≤ 16 draw calls and ≤ 70k triangles; every budget still holds under SwiftShader) and no real-GPU frame time yet; in the software renderer camera moves and held keys run at its frame rate. Two places show the same pages (sheets and full pages), held together by one set of components. Nobody has listened to the sound yet; levels are set by measurement.
+
+**Reverse.** The pieces are separable: `AppShell` can give `/` its old layout back, `TownCanvas` takes `surroundings="off"`, `ambientLife={false}` and a fixed camera, the sheets are the page components, and `getAudio().update({ enabled: false })` (or the speaker toggle) silences sound.
+
+## DL-012 · Real agents in the town: observe by default, dispatch only with approval (2026-10-18)
+
+**Problem.** The town must show real Claude Code agents next to simulated residents without blurring the two, and may let the user hand an agent a task without giving Runloop a way to run code silently.
+
+**Options.**
+- Bind sessions to agents with pairing codes, or by the session's working directory.
+- Dispatch with `--permission-mode bypassPermissions`, or with `dontAsk` and an allowlist of tools.
+- Dispatch on request, or only after the user approves the exact command.
+
+**Choice.**
+- An agent is a building in the Agent District, added by the user ("Add to World") with one workspace folder. A session binds to it by dispatch session id, else by the longest `realpath(cwd)` prefix, else it waits in **Arrivals** for a manual claim (which backfills its earlier runs). The folder's absolute path is stored once (`workspace_roots`) and never returned, logged or put in the world.
+- The world shows only what the hooks reported: `external-agent` events (observed) or `inferred` ones, each citing the run events behind it. Health has six states (`not_connected`, `awaiting_first_event`, `live`, `idle`, `offline`, `unknown`); an agent with no events is never live and a restart reads offline.
+- **Dispatch** previews the exact `claude -p` argv, environment variable names and budget; nothing runs until the user approves with a single-use nonce bound to that argv, cwd and executable. `dontAsk` with the preset's tool allowlist, haiku by default, a budget Claude Code enforces, a timeout Runloop enforces, its own process group, an audit row per step. `--plugin-dir` is added unless `claude plugin list` reports the tracer installed.
+
+**Why.** The working directory is already in every hook, so binding needs no setup; Arrivals cover the rest. Dispatch spends the user's money and edits their working tree, so the user sees and approves the exact command; `bypassPermissions` would let a task do anything.
+
+**Trade-off.** Two folders that nest bind to the deeper one; a session from a moved folder becomes an Arrival. Claude Code offers no message or pause channel, so "message" and "control" read *unsupported*, with the reason. A cancelled or timed-out dispatch sends no SessionEnd; the tracer closes its run as interrupted (inferred).
+
+**Reverse.** `RUNLOOP_DISPATCH=off` removes dispatch; `RUNLOOP_WORLD=off` removes agents and the town. Bindings live in `session_bindings` and can be recomputed.
+
+## DL-011 · Town lighting follows the simulated clock (2026-10-18)
+
+**Problem.** The town has a day. It needs light that reads in both themes, lit windows at night, and no lime (lime marks active execution only).
+
+**Options.** A fixed studio light for both themes; light from the viewer's wall clock; light from the world's sim time.
+
+**Choice.** Sim time drives the sun or moon, the hemisphere and ambient light (`apps/studio/src/town/sky.ts`, pure). Windows light up when a building is occupied, signs and street lamps glow at night, shadows are variance shadow maps updated only when the sun moves. Bloom is not used town-wide. A colour-distance test keeps the renderer's own materials away from lime.
+
+**Why.** The clock is the world's most visible fact; if the sky disagreed with "Day 2 · 22:40" the town would be lying. Occupancy-driven windows make the simulation visible from the town view.
+
+**Trade-off.** At night the town is darker; labels and chips carry the information. Some `town.json` palette colours sit near the warning and failure colours; only the renderer's materials are checked.
+
+**Reverse.** `sky.ts` is the single input; a fixed light is a constant there.
+
+## DL-010 · World simulation architecture (2026-10-18)
+
+**Problem.** Build a persistent town (residents with needs and schedules, buildings, a clock) that is deterministic, replayable and honest, next to the existing run log and diorama.
+
+**Options.**
+- One merged world package, or new pure packages beside `world-engine`.
+- Delta frames over SSE, or raw events folded by one `applyEvent` on both sides.
+- Navigation by Dijkstra over anchor nodes, or one BFS field per door on a raster.
+
+**Choice.** The plan of record, `docs/architecture/world-simulation.md`: contracts in `packages/events/src/world.ts`; `packages/town` (schema, compile, raster, nav) and `packages/sim` (needs, schedules, decisions, `applyEvent`, `explain`, `WorldReplay`) are pure, with no `Date`, `Math.random` or timers (a purity test enforces it); one tick is one sim minute, speeds `0|1|4|16`; `WorldHost` in the runtime is the only clock reader, commits batches before publishing, checkpoints and resumes; the Studio folds the same events with the same `applyEvent`. Every world event carries a provenance (`simulation`, `user`, `external-agent`, `system`, `inferred`); commands are checked against `ALLOWED_SOURCES`; HTTP commands are always `user`.
+
+**Why.** The run log, recorder and replay already prove the pattern (one fold for live and replay). Keeping `world-engine` as the per-session diorama keeps `ReplayIndex.stateAt == live` for runs.
+
+**Trade-off.** Event volume is above the plan's budget (~4.8k events and 1.6 MB per sim day at 120 residents); retention bounds what is stored. While Runloop is off the town does not live; it resumes and says so (`world.resumed_after_offline`).
+
+**Reverse.** `RUNLOOP_WORLD=off` restores the previous runtime; migrations 3 and 4 only add tables.
+
+## DL-009 · A world, not a dashboard (2026-10-18)
+
+**Problem.** Runloop recorded and compared runs well, but as a set of pages. The founder brief (`docs/product/world-vision.md`) asks for a place: a persistent, populated town where real agents live and work, so the product is something people return to.
+
+**Options.**
+- Keep the run pages as the product and add the town as a view.
+- Make the town the home (`/`), with the run pages one step away.
+
+**Choice.** The town is the home. Simulated residents give it life; real agents are buildings in the Agent District; tracing, replay, Traces and Experiments stay and open from a building. "Real" appears only on external-agent entities, and a simulated resident's reasons come only from recorded decision events.
+
+**Why.** A living place makes agent activity legible at a glance and gives a reason to come back; the existing capabilities lose nothing.
+
+**Trade-off.** More to build and render before it pays off; novelty must not replace utility (buildings are one step from Traces and Compare).
+
+**Reverse.** The run pages still work on their own (`/overview`, `/world?run=`, `/traces`, `/experiments`); `/` could point back to Overview.
+
+## DL-013 · The light theme keeps a light world, styled as an architectural model (2026-10-18)
+
+> Numbered DL-009 until the world-simulation integration (2026-10-18); renumbered so that the plan of record's DL-009–012 stay valid. Older notes that cite "DL-009" for the light theme mean this entry.
+
 
 **Problem.** Task D10 made the world richer (key and rim light, tinted rooms, chibi robots). In the light theme the world had to stay readable without breaking the light interface around it.
 

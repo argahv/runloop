@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Runloop sound board</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #101114;
+        --surface: #1b1d22;
+        --surface-2: #292c33;
+        --line: rgba(232, 235, 240, 0.1);
+        --text: #e8ebf0;
+        --muted: #9297a2;
+        --lime: #b8f36a;
+        --fail: #ff6b76;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px 16px 48px;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 24px;
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        margin: 28px 0 8px;
+        font-size: 16px;
+      }
+      p {
+        margin: 0 0 8px;
+        color: var(--muted);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      button {
+        height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface-2);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+      }
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--lime);
+        outline-offset: 2px;
+      }
+      label {
+        display: grid;
+        grid-template-columns: 140px 1fr 56px;
+        gap: 12px;
+        align-items: center;
+        max-width: 520px;
+      }
+      input[type='range'] {
+        accent-color: var(--lime);
+      }
+      .panel {
+        padding: 16px;
+        border-radius: 12px;
+        background: var(--surface);
+      }
+      pre {
+        overflow: auto;
+        max-height: 280px;
+        padding: 12px;
+        border-radius: 8px;
+        background: #0c0d10;
+        color: var(--muted);
+        font: 12px/1.5 ui-monospace, monospace;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      td,
+      th {
+        padding: 4px 8px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+      }
+      .ok {
+        color: var(--lime);
+      }
+      .bad {
+        color: var(--fail);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Runloop sound board</h1>
+      <p>
+        Every sound in Studio, synthesized live with the Web Audio API (the same code as the town). Sound starts with your first click. Event cue
+        buttons are previews: in the town they play only for real agent events.
+      </p>
+      <div id="app"></div>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

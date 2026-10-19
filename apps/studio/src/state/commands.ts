@@ -10,8 +10,13 @@ export interface Command {
   /** Keys shown as a shortcut hint, e.g. ['⌘', 'K']. */
   shortcut?: readonly string[];
   disabled?: boolean;
+  /** Only listed for a query (e.g. the town's many entities), at most SEARCH_ONLY_LIMIT of them. */
+  searchOnly?: boolean;
   run: () => void;
 }
+
+/** How many search-only matches a query shows (UX: ⌘K finds at most 20 entities). */
+export const SEARCH_ONLY_LIMIT = 20;
 
 /**
  * Commands matching `query`: every term must appear in the label, group or
@@ -20,7 +25,7 @@ export interface Command {
  */
 export function rankCommands(commands: readonly Command[], query: string): Command[] {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return [...commands];
+  if (terms.length === 0) return commands.filter((c) => !c.searchOnly);
   const scored: { c: Command; score: number; i: number }[] = [];
   commands.forEach((c, i) => {
     const label = c.label.toLowerCase();
@@ -30,7 +35,11 @@ export function rankCommands(commands: readonly Command[], query: string): Comma
     const score = label.startsWith(first) ? 0 : new RegExp(`(^|[\\s·#/-])${escapeRe(first)}`).test(label) ? 1 : 2;
     scored.push({ c, score, i });
   });
-  return scored.sort((a, b) => a.score - b.score || a.i - b.i).map((x) => x.c);
+  let searchOnly = 0;
+  return scored
+    .sort((a, b) => a.score - b.score || a.i - b.i)
+    .map((x) => x.c)
+    .filter((c) => !c.searchOnly || ++searchOnly <= SEARCH_ONLY_LIMIT);
 }
 
 function escapeRe(s: string): string {

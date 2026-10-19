@@ -1,0 +1,96 @@
+{
+  "id": "flats",
+  "kind": "grid",
+  "label": "Flats (one floor)",
+  "archetype": "flats",
+  "grid": [
+    "##w#ww#w##",
+    "#........#",
+    "#........#",
+    "w........w",
+    "#........#",
+    "#........#",
+    "#........#",
+    "####D#####"
+  ],
+  "furniture": [
+    {
+      "id": "bed_1",
+      "kind": "bed",
+      "cells": [[1, 1], [1, 2]],
+      "uses": [{"cell": [1, 1], "pose": "sleep", "facing": "s"}],
+      "tags": ["sleep"]
+    },
+    {
+      "id": "bed_2",
+      "kind": "bed",
+      "cells": [[2, 1], [2, 2]],
+      "uses": [{"cell": [2, 1], "pose": "sleep", "facing": "s"}],
+      "tags": ["sleep"]
+    },
+    {
+      "id": "bed_3",
+      "kind": "bed",
+      "cells": [[4, 1], [4, 2]],
+      "uses": [{"cell": [4, 1], "pose": "sleep", "facing": "s"}],
+      "tags": ["sleep"]
+    },
+    {
+      "id": "bed_4",
+      "kind": "bed",
+      "cells": [[5, 1], [5, 2]],
+      "uses": [{"cell": [5, 1], "pose": "sleep", "facing": "s"}],
+      "tags": ["sleep"]
+    },
+    {
+      "id": "bed_5",
+      "kind": "bed",
+      "cells": [[7, 1], [7, 2]],
+      "uses": [{"cell": [7, 1], "pose": "sleep", "facing": "s"}],
+      "tags": ["sleep"]
+    },
+    {
+      "id": "bed_6",
+      "kind": "bed",
+      "cells": [[8, 1], [8, 2]],
+      "uses": [{"cell": [8, 1], "pose": "sleep", "facing": "s"}],
+      "tags": ["sleep"]
+    },
+    {
+      "id": "bed_7",
+      "kind": "bed",
+      "cells": [[1, 4], [1, 5]],
+      "uses": [{"cell": [1, 4], "pose": "sleep", "facing": "s"}],
+      "tags": ["sleep"]
+    },
+    {
+      "id": "bed_8",
+      "kind": "bed",
+      "cells": [[8, 4], [8, 5]],
+      "uses": [{"cell": [8, 4], "pose": "sleep", "facing": "s"}],
+      "tags": ["sleep"]
+    },
+    {
+      "id": "table",
+      "kind": "table",
+      "cells": [[3, 4], [4, 4], [5, 4], [3, 5], [4, 5], [5, 5]],
+      "uses": [
+        {"cell": [3, 3], "pose": "sit", "facing": "s"},
+        {"cell": [4, 3], "pose": "sit", "facing": "s"},
+        {"cell": [5, 3], "pose": "sit", "facing": "s"},
+        {"cell": [6, 4], "pose": "sit", "facing": "w"},
+        {"cell": [6, 5], "pose": "sit", "facing": "w"},
+        {"cell": [2, 5], "pose": "sit", "facing": "e"}
+      ],
+      "tags": ["eat", "socialize"]
+    },
+    {
+      "id": "sofa",
+      "kind": "sofa",
+      "cells": [[1, 6], [2, 6]],
+      "uses": [{"cell": [1, 6], "pose": "sit", "facing": "n"}, {"cell": [2, 6], "pose": "sit", "facing": "n"}],
+      "tags": ["rest", "socialize"]
+    },
+    {"id": "kitchen", "kind": "stove", "cells": [[7, 6], [8, 6]], "uses": [], "tags": []}
+  ]
+}

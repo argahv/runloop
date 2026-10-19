@@ -1,5 +1,16 @@
 import type { Cell } from './definition';
-import type { CompiledWorld } from './types';
+
+/**
+ * What a path search needs from a map: its bounds and which cells can be
+ * walked. A CompiledWorld is one; so is the town's outdoor grid
+ * (@runloop-world/town), which the world simulation routes residents on.
+ * isWalkable must return false outside the bounds.
+ */
+export interface Grid {
+  readonly width: number;
+  readonly height: number;
+  isWalkable(x: number, y: number): boolean;
+}
 
 /** Fixed neighbour order N, E, S, W keeps paths deterministic. */
 const DIRS: readonly Cell[] = [
@@ -9,15 +20,15 @@ const DIRS: readonly Cell[] = [
   [-1, 0],
 ];
 
-const cache = new WeakMap<CompiledWorld, Map<string, readonly Cell[] | null>>();
+const cache = new WeakMap<Grid, Map<string, readonly Cell[] | null>>();
 
 /**
  * Shortest 4-connected path from `from` to `to`, both inclusive, or null when
  * unreachable. `to` must be walkable; `from` may be any in-bounds cell (the
- * character's current cell). Results are memoized per world and frozen —
+ * character's current cell). Results are memoized per grid and frozen —
  * copy before mutating.
  */
-export function bfs(world: CompiledWorld, from: Cell, to: Cell): Cell[] | null {
+export function bfs(world: Grid, from: Cell, to: Cell): Cell[] | null {
   let memo = cache.get(world);
   if (!memo) {
     memo = new Map();
@@ -31,7 +42,7 @@ export function bfs(world: CompiledWorld, from: Cell, to: Cell): Cell[] | null {
   return frozen as Cell[] | null;
 }
 
-function search(world: CompiledWorld, from: Cell, to: Cell): Cell[] | null {
+function search(world: Grid, from: Cell, to: Cell): Cell[] | null {
   const { width, height } = world;
   const inBounds = ([x, y]: Cell) => x >= 0 && y >= 0 && x < width && y < height;
   if (!inBounds(from) || !world.isWalkable(to[0], to[1])) return null;

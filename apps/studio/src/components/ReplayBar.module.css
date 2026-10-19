@@ -221,3 +221,10 @@
     margin-left: auto;
   }
 }
+
+/* Narrow containers that ask for it (the session strip beside a wide sheet): the speeds go, the transport, scrubber and Live stay. */
+@container (max-width: 640px) {
+  .speeds {
+    display: none;
+  }
+}

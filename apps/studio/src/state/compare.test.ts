@@ -3,7 +3,7 @@ import type { RunSummary } from '@runloop-world/events';
 import { codingMissionFixture } from '@runloop-world/testkit';
 import { describe, expect, it } from 'vitest';
 import { baselineFor, compareHref, isPinned, parseComparePair, pinnedRuns, resolvePair } from './baselines';
-import { CHANGE, changeView, foldRaw, noteText, outcomeChange, outcomeText } from './compare';
+import { caveatText, CHANGE, changeView, foldRaw, noteText, outcomeChange, outcomeText } from './compare';
 import { tracedFixture } from './test-utils';
 
 const run = (runId: string, createdAt: string, pinnedAt: string | null = null): RunSummary => ({
@@ -155,5 +155,24 @@ describe('foldRaw (loading a run to compare)', () => {
     const d = diffRuns(exec, traced);
     expect(d.sameMode).toBe(false);
     expect(d.tokens).toMatchObject({ a: null, comparable: false, note: 'not_reported_a' });
+  });
+});
+
+describe('compare caveats (core withholds the verdict)', () => {
+  it('words every caveat and shows it as the chip detail', () => {
+    expect(caveatText('incomplete_b')).toBe('the candidate did not run to completion');
+    expect(caveatText('outcome_differs')).toBe('one run failed, the other did not');
+    expect(caveatText('scope_differs')).toBe('the latest test runs covered different numbers of tests');
+    const v = changeView({ a: 1000, b: 400, delta: null, comparable: false, note: null, caveat: 'incomplete_b' }, CHANGE.duration);
+    expect(v).toMatchObject({ tone: 'muted', text: 'not comparable', detail: 'the candidate did not run to completion' });
+  });
+
+  it('a run that finished, then one that did not, is a warning', () => {
+    const o = (a: 'succeeded' | 'stopped', b: 'stopped' | 'interrupted') => ({ a, b, delta: null, comparable: true, note: null, changed: true });
+    expect(outcomeChange(o('succeeded', 'interrupted'), [false, false])).toMatchObject({ tone: 'warn', text: 'did not finish' });
+    expect(outcomeChange(o('succeeded', 'stopped'), [false, false])).toMatchObject({ tone: 'warn', text: 'did not finish' });
+    // A traced session that ended normally is "ended", not unfinished.
+    expect(outcomeChange(o('stopped', 'interrupted'), [true, true])).toMatchObject({ tone: 'warn', text: 'did not finish' });
+    expect(outcomeChange(o('succeeded', 'stopped'), [false, true])).toMatchObject({ tone: 'info', text: 'now ended' });
   });
 });

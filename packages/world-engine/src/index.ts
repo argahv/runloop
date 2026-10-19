@@ -1,7 +1,7 @@
 export * from './definition';
 export * from './types';
 export { compileWorld, loadWorld, destinationCells } from './compile';
-export { bfs } from './grid';
+export { bfs, type Grid } from './grid';
 export {
   positionAt,
   enteringCell,

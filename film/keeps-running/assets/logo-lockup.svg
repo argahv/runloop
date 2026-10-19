@@ -1,0 +1,12 @@
+<!-- Mark + wordmark as the Studio sidebar sets them: the mark in a slate (#292C33) tile, radius 9 on 30,
+     then "Runloop" in Geist 600, tracking -0.01em, Ice on Obsidian. The wordmark is live text in the film
+     (fonts/display.ttf), so this file is a layout reference only. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 48" width="660" height="144">
+  <rect width="220" height="48" fill="#101114"/>
+  <rect x="9" y="9" width="30" height="30" rx="9" fill="#292C33"/>
+  <g transform="translate(13,13) scale(0.9167)">
+    <path d="M12 3a9 9 0 1 1-8.5 6" fill="none" stroke="#B8F36A" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="5.2" cy="5.6" r="2.1" fill="#B8F36A"/>
+  </g>
+  <text x="50" y="31" font-family="Geist, sans-serif" font-weight="600" font-size="20" letter-spacing="-0.2" fill="#E8EBF0">Runloop</text>
+</svg>

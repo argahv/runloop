@@ -20,6 +20,7 @@ export {
   type AgentDigest,
   type CallCategory,
   type CountEntry,
+  type DiffCaveat,
   type DiffNote,
   type DigestCall,
   type Divergence,

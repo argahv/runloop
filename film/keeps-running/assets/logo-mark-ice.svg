@@ -1,0 +1,5 @@
+<!-- The same loop mark in Ice (#E8EBF0), for the end card's road-network trace before it takes the brand lime. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="240" height="240">
+  <path d="M12 3a9 9 0 1 1-8.5 6" fill="none" stroke="#E8EBF0" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="5.2" cy="5.6" r="2.1" fill="#E8EBF0"/>
+</svg>
