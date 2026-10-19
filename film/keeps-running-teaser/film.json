@@ -1,0 +1,10 @@
+{
+ "title": "Runloop teaser",
+ "duration": 30,
+ "formats": [
+  "16x9"
+ ],
+ "poster": 29.0,
+ "fps": 30,
+ "note": "30 s teaser of keeps-running (docs/shotlist.md '30 s teaser'). Render with --fps 30 --workers 3. C shots are real screenshots from docs/assets."
+}
